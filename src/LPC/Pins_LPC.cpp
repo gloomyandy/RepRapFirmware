@@ -38,6 +38,9 @@ Pin DiagPin = NoPin;
 Pin ENABLE_PINS[NumDirectDrivers] =     {NoPin, NoPin, NoPin, NoPin, NoPin};
 Pin STEP_PINS[NumDirectDrivers] =       {NoPin, NoPin, NoPin, NoPin, NoPin};
 Pin DIRECTION_PINS[NumDirectDrivers] =  {NoPin, NoPin, NoPin, NoPin, NoPin};
+#if LPC_TMC_SOFT_UART
+    Pin TMC_UART_PINS[NumDirectDrivers] = {NoPin, NoPin, NoPin, NoPin, NoPin};
+#endif
 uint32_t STEP_DRIVER_MASK = 0;                          //SD: mask of the step pins on Port 2 used for writing to step pins in parallel
 bool hasStepPinsOnDifferentPorts = false;               //for boards that don't have all step pins on port2
 bool hasDriverCurrentControl = false;                   //Supports digipots to set stepper current

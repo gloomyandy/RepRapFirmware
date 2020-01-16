@@ -86,7 +86,14 @@
 
 // The physical capabilities of the machine
 constexpr size_t NumDirectDrivers = 5;               // The maximum number of drives supported by the electronics
-constexpr size_t MaxSmartDrivers = 0;                // The maximum number of smart drivers
+#if defined(SUPPORT_TMC22xx)
+    constexpr size_t MaxSmartDrivers = 5;            // The maximum number of smart drivers
+    constexpr size_t NumTmcDriversSenseChannels = 2;
+    #define LPC_TMC_SOFT_UART 1
+#else
+    constexpr size_t MaxSmartDrivers = 0;            // The maximum number of smart drivers
+    #define LPC_TMC_SOFT_UART 0
+#endif
 
 constexpr size_t MaxSensors = 32;
 
@@ -123,6 +130,14 @@ constexpr unsigned int MaxTriggers = 16;            // Must be <= 32 because we 
 extern Pin ENABLE_PINS[NumDirectDrivers];
 extern Pin STEP_PINS[NumDirectDrivers];
 extern Pin DIRECTION_PINS[NumDirectDrivers];
+#if LPC_TMC_SOFT_UART
+    extern Pin TMC_UART_PINS[NumDirectDrivers];
+    constexpr Pin GlobalTmc22xxEnablePin = NoPin;			// The pin that drives ENN of all drivers
+    constexpr uint32_t DriversBaudRate = 9600;
+    constexpr uint32_t TransferTimeout = 100;				// any transfer should complete within 100 ticks @ 1ms/tick
+
+#endif
+
 extern uint32_t STEP_DRIVER_MASK; // Mask for parallel write to all steppers on port 2 (calculated in after loading board.txt)
 extern bool hasStepPinsOnDifferentPorts;
 extern bool hasDriverCurrentControl;

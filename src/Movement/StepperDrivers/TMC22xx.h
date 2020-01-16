@@ -12,8 +12,8 @@
 
 #if SUPPORT_TMC22xx
 
-#ifndef TMC22xx_HAS_MUX
-# error TMC22xx_HAS_MUX not defined
+#if !defined(TMC22xx_HAS_MUX) && !defined(LPC_TMC_SOFT_UART)
+# error TMC22xx_HAS_MUX/LPC_TMC_SOFT_UART not defined
 #endif
 
 #include "RepRapFirmware.h"

@@ -74,6 +74,10 @@ static const boardConfigEntry_t boardConfigs[]=
     {"lpc.adcPreFilterNumberSamples", &ADCPreFilterNumberSamples, nullptr, cvUint8Type},
     {"lpc.adcPreFilterSampleRate", &ADCPreFilterSampleRate, nullptr, cvUint32Type},
 
+    
+#if LPC_TMC_SOFT_UART
+    {"stepper.TmcUartPins", TMC_UART_PINS, &MaxTotalDrivers, cvPinType},
+#endif
 };
 
 
