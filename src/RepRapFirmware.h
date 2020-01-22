@@ -508,7 +508,7 @@ const uint32_t NvicPriorityNetworkTick = 8;		// priority for network tick interr
 const uint32_t NvicPriorityEthernet = 8;		// priority for Ethernet interface
 # endif
 
-const uint32_t NvicPrioritySpi = 8;				// SPI is used for network transfers on Duet WiFi/Duet vEthernet
+const uint32_t NvicPrioritySpi = 5;				// SPI is used for network transfers on Duet WiFi/Duet vEthernet
 const uint32_t NvicPriorityTwi = 9;				// TWI is used to read endstop and other inputs on the DueXn
 
 #endif

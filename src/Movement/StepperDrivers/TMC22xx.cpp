@@ -15,7 +15,9 @@
 #include "Movement/StepTimer.h"
 #include "Hardware/Cache.h"
 
-#if !LPC_TMC_SOFT_UART
+#if LPC_TMC_SOFT_UART
+#include "TMCSoftUART.h"
+#else
 #include "sam/drivers/pdc/pdc.h"
 #include "sam/drivers/uart/uart.h"
 #endif
@@ -368,213 +370,7 @@ Uart * const TmcDriverState::uart = UART_TMC22xx;
 TmcDriverState * volatile TmcDriverState::currentDriver = nullptr;	// volatile because the ISR changes it
 uint32_t TmcDriverState::transferStartedTime;
 
-// Soft UART implementation
 #if LPC_TMC_SOFT_UART
-constexpr uint32_t SU_BAUD_RATE = DriversBaudRate;
-enum class SUStates
-{
-	idle,
-	writeSync,
-	writing,
-	readSync,
-	reading,
-	complete,
-	error
-};
-static uint32_t SUPeriod;
-static volatile uint32_t SUWriteCnt = 0;
-static volatile uint32_t SUReadCnt = 0;
-static volatile uint8_t *SUWritePtr;
-static volatile uint8_t *SUReadPtr;
-static volatile int SUBitCnt;
-static volatile uint32_t SUData;
-static volatile Pin SUPin;
-static LPC_GPIO_T *SUPort;
-static uint8_t SUPinNo;
-static volatile int SUOffset;
-static volatile int SUBaseOffset;
-static volatile SUStates SUState = SUStates::idle;
-
-
-
-
-extern "C" void RIT_IRQHandler() noexcept __attribute__ ((hot));
-
-void RIT_IRQHandler() noexcept
-{
-	Chip_RIT_ClearInt(LPC_RITIMER);
-	switch(SUState)
-	{
-	case SUStates::idle:
-		break;
-	case SUStates::writeSync:
-		{
-			// First four bits of a write are used to establish the baud rate for the connection.
-			// We record the actual time that the bits are written and use this to adjust the timing of
-			// the rest of the write and read operations. This reduces framing errors.
-			// First write the data
-			util_UpdateBit(SUPort->PIN, SUPinNo, SUData & 1);
-			int offset = Chip_RIT_GetCounter(LPC_RITIMER);
-			SUData >>= 1;
-			if (++SUBitCnt == 1)
-				// record time offset of first bit
-				SUBaseOffset = offset;
-			else if (SUBitCnt == 5)
-			{
-				// caclculate per bit timing offset for sync sequence 
-				SUOffset = (offset - SUBaseOffset)/4;
-				// adjust timing for rest of write operation
-				Chip_RIT_SetCOMPVAL(LPC_RITIMER, SUPeriod + SUOffset);
-				// Sync complete
-				SUState = SUStates::writing;	
-			}
-			break;
-		}
-
-	case SUStates::writing:
-    	if (++SUBitCnt <= 10 ) 
-		{
-			// send data 
-			util_UpdateBit(SUPort->PIN, SUPinNo, SUData & 1);
-			SUData >>= 1;
-    	}
-    	else if (--SUWriteCnt > 0)
-		{
-			// send start bit of next byte
-			util_UpdateBit(SUPort->PIN, SUPinNo, 0);
-			// get data and add stop bit (but not start bit as we have already handled that)
-			SUData = 0x100 | *SUWritePtr++;
-			// Start bit has already been sent
-			SUBitCnt = 1;
-		}
-		else
-		{
-			// end of output, switch to input mode
-			util_UpdateBit(SUPort->DIR, SUPinNo, 0);
-			// TMC22XX will start sending data 8 bits after the write completes
-			Chip_RIT_SetCOMPVAL(LPC_RITIMER, (SUPeriod + SUOffset)*8);
-			SUState = SUStates::readSync;
-		}
-		break;
-	case SUStates::readSync:
-		{
-			uint8_t inbit = util_IsBitSet(SUPort->PIN, SUPinNo);
-			// Do we have the start bit?
-			if (!inbit) 
-			{
-				// got start bit, set timing for reading bits
-				Chip_RIT_SetCOMPVAL(LPC_RITIMER, SUPeriod + SUOffset);
-				SUBitCnt = 1;
-				SUData = 0;
-				SUState = SUStates::reading;
-			}
-			else
-				// no start bit, give up
-				SUState = SUStates::error;
-			break;
-		}
-	case SUStates::reading:
-		if (++SUBitCnt <= 9)
-		{
-			// data bits, read data
-			uint8_t inbit = util_IsBitSet(SUPort->PIN, SUPinNo);
-      		SUData >>= 1;
-      		if (inbit)
-        		SUData |= 0x80;
-		}
-		else
-		{
-			// Stop bit read, store data byte in buffer
-			*SUReadPtr++ =  static_cast<uint8_t>(SUData);
-			if (--SUReadCnt <= 0)
-				SUState = SUStates::complete;
-			else
-				SUState = SUStates::readSync;		
-		}
-		break;
-	case SUStates::complete:
-	case SUStates::error:		
-		Chip_RIT_Disable(LPC_RITIMER);
-		break;			
-	}
-}	
-
-static void LPCSoftUARTAbort() noexcept
-{
-	Chip_RIT_Disable(LPC_RITIMER);
-	SUReadCnt = 0;
-	SUWriteCnt = 0;
-	SUState = SUStates::idle;
-	if (SUPin != NoPin)
-		pinMode(SUPin, INPUT_PULLUP);
-}
-
-static void LPCSoftUARTStartTransfer(uint8_t driver, volatile uint8_t *WritePtr, uint32_t WriteCnt, volatile uint8_t *ReadPtr, uint32_t ReadCnt) noexcept
-{
-	LPCSoftUARTAbort();
-	SUPin = TMC_UART_PINS[driver];
-	if (SUPin != NoPin)
-	{
-		// got valid Pin so set things up for transfer
-		LPC_RITIMER->COUNTER = 0;
-		Chip_RIT_SetCOMPVAL(LPC_RITIMER, SUPeriod);
-		SUWritePtr = WritePtr;
-		SUReadPtr = ReadPtr;
-		// Add start and stop bits to first byte
-		SUData = (static_cast<uint32_t>(*SUWritePtr) << 1) | 0x200;
-		SUWritePtr++;
-		SUBitCnt = 0;
-		SUOffset = 0;
-		pinMode(SUPin, OUTPUT_HIGH);
-		// use direct access to keep interupt handler as fast as possible
-		SUPort = (LPC_GPIO_T*)(LPC_GPIO0_BASE + ((SUPin) & ~0x1f));
-		SUPinNo = SUPin & 0x1f;
-		SUWriteCnt = WriteCnt;
-		SUReadCnt = ReadCnt;
-		SUState = SUStates::writeSync;
-		Chip_RIT_Enable(LPC_RITIMER);
-	}
-}
-
-
-static void LPCSoftUARTCheckComplete() noexcept
-{
-	if (SUState == SUStates::complete)
-	{
-		SUState = SUStates::idle;
-		// I/O complete
-		TmcDriverState *driver = TmcDriverState::currentDriver;	// capture volatile variable
-		if (driver != nullptr)
-		{
-			driver->UartTmcHandler();
-		}
-	}
-}
-
-static void LPCSoftUARTInit() noexcept
-{
-	Chip_RIT_Init(LPC_RITIMER);
-	SUPeriod = Chip_Clock_GetPeripheralClockRate(SYSCTL_PCLK_RIT)/(SU_BAUD_RATE);
-	Chip_RIT_SetCOMPVAL(LPC_RITIMER, SUPeriod);
-
-	Chip_RIT_EnableCTRL(LPC_RITIMER, RIT_CTRL_ENCLR);
-
-	for(size_t i = 0; i < NumDirectDrivers; i++)
-		if (TMC_UART_PINS[i] != NoPin)
-			pinMode(TMC_UART_PINS[i], INPUT_PULLUP);
-
-	SUPin = NoPin;
-	SUState = SUStates::idle;
-	NVIC_EnableIRQ(RITIMER_IRQn);
-}
-
-
-static void LPCSoftUARTShutdown() noexcept
-{
-	LPCSoftUARTAbort();
-	NVIC_DisableIRQ(RITIMER_IRQn);
-}
-
 // When using a soft UART other interrupts or disabling interrupts for a length of time can easily
 // create errors. Because of this it is likely that we will read corrupt data from time to time. 
 // We add an extra layer of data validation by always checking the CRC of the entire packet as
@@ -1145,14 +941,13 @@ inline void TmcDriverState::StartTransfer() noexcept
 #if TMC22xx_HAS_MUX
 	SetUartMux();
 #endif
-
 	// Find which register to send. The common case is when no registers need to be updated.
 	if (registersToUpdate == 0)
 	{
 		registerBeingUpdated = 0;
 
 		// Read a register
-		const irqflags_t flags = cpu_irq_save();		// avoid race condition
+		//const irqflags_t flags = cpu_irq_save();		// avoid race condition
 #if LPC_TMC_SOFT_UART
 		SetupDMAReceive(ReadRegNumbers[registerToRead], ReadRegCRCs[registerToRead]);	// set up the PDC
 #else
@@ -1162,7 +957,7 @@ inline void TmcDriverState::StartTransfer() noexcept
 		uart->UART_CR = UART_CR_RXEN | UART_CR_TXEN;	// enable transmitter and receiver
 #endif
 		transferStartedTime = millis();
-		cpu_irq_restore(flags);
+		//cpu_irq_restore(flags);
 	}
 	else
 	{
@@ -1170,7 +965,7 @@ inline void TmcDriverState::StartTransfer() noexcept
 		const size_t regNum = LowestSetBitNumber(registersToUpdate);
 
 		// Kick off a transfer for that register
-		const irqflags_t flags = cpu_irq_save();		// avoid race condition
+		//const irqflags_t flags = cpu_irq_save();		// avoid race condition
 		registerBeingUpdated = 1u << regNum;
 #if LPC_TMC_SOFT_UART
 		SetupDMASend(WriteRegNumbers[regNum], writeRegisters[regNum], writeRegCRCs[regNum]);	// set up the PDC
@@ -1181,7 +976,7 @@ inline void TmcDriverState::StartTransfer() noexcept
 		uart->UART_CR = UART_CR_RXEN | UART_CR_TXEN;	// enable transmitter and receiver
 #endif
 		transferStartedTime = millis();
-		cpu_irq_restore(flags);
+		//cpu_irq_restore(flags);
 	}
 }
 
@@ -1404,7 +1199,15 @@ namespace SmartDrivers
 	void Spin(bool powered) noexcept
 	{
 	#if LPC_TMC_SOFT_UART
-		LPCSoftUARTCheckComplete();
+		if (LPCSoftUARTCheckComplete())
+		{
+			TmcDriverState *driver = TmcDriverState::currentDriver;	// capture volatile variable
+			if (driver != nullptr)
+			{
+				driver->UartTmcHandler();
+			}
+
+		}
 	#endif
 		if (driversState == DriversState::noPower)
 		{
