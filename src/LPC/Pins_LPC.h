@@ -329,6 +329,9 @@ struct BoardDefaults
     const Pin enablePins[NumDirectDrivers];
     const Pin stepPins[NumDirectDrivers];
     const Pin dirPins[NumDirectDrivers];
+#if LPC_TMC_SOFT_UART
+    const Pin uartPins[NumDirectDrivers];
+#endif
     const bool hasDriverCurrentControl;
     const float digipotFactor;    
 };

@@ -116,6 +116,9 @@ constexpr BoardDefaults rearmDefaults = {
     {P0_10, P0_19, P0_21, P0_4, P4_29},     //enablePins
     {P2_1,  P2_2,  P2_3,  P2_0, P2_8},      //stepPins
     {P0_11, P0_20, P0_22, P0_5, P2_13},     //dirPins
+#if LPC_TMC_SOFT_UART
+    {NoPin, NoPin, NoPin, NoPin, NoPin},    //uartPins
+#endif
     false,                                  //currentControl
     113.33,                                 //digiPot Factor
 };

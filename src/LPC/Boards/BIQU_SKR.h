@@ -67,6 +67,10 @@ constexpr BoardDefaults biquskr_1_1_Defaults = {
     {P4_28, P2_0, P0_19, P2_12, P0_10},     //enablePins
     {P0_4,  P2_1, P0_20, P0_11, P0_1},      //stepPins
     {P0_5,  P2_2, P0_21, P2_13, P0_0},      //dirPins
+#if LPC_TMC_SOFT_UART
+    {NoPin, NoPin, NoPin, NoPin, NoPin},    //uartPins
+#endif
+
     false,                                  //currentControl
     113.33,                                 //digiPot Factor
 //    {P2_5, NoPin, NoPin},                   //slowPWM
@@ -157,6 +161,10 @@ constexpr BoardDefaults biquskr_1_3_Defaults = {
     {P2_1, P2_8,  P0_21, P2_12,  P0_10},    //enablePins
     {P2_2, P0_19, P0_22, P2_13,  P0_1},   //stepPins
     {P2_6, P0_20, P2_11, P0_11,  P0_0},    //dirPins
+#if LPC_TMC_SOFT_UART
+    {P1_17, P1_15, P1_10, P1_8, P1_1},     //uartPins
+#endif
+
     false,                                  //currentControl
     113.33                                 //digiPot Factor
 };
@@ -238,6 +246,9 @@ constexpr BoardDefaults biquskr_1_4_Defaults = {
     {P2_1, P2_8,  P0_21, P2_12,  P1_16},    //enablePins
     {P2_2, P0_19, P0_22, P2_13,  P1_15},   //stepPins
     {P2_6, P0_20, P2_11, P0_11,  P1_14},    //dirPins
+#if LPC_TMC_SOFT_UART
+    {P1_10, P1_9, P1_8, P1_4, P1_1},       //uartPins
+#endif
     false,                                  //currentControl
     113.33                                 //digiPot Factor
 };

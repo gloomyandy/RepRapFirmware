@@ -190,6 +190,9 @@ constexpr BoardDefaults genericDefaults = {
     {NoPin, NoPin, NoPin, NoPin, NoPin},    //enablePins
     {NoPin, NoPin, NoPin, NoPin, NoPin},    //stepPins
     {NoPin, NoPin, NoPin, NoPin, NoPin},    //dirPins
+#if LPC_TMC_SOFT_UART
+    {NoPin, NoPin, NoPin, NoPin, NoPin},    //uartPins
+#endif
     false,                                  //currentControl
     113.33,                                 //digiPot Factor    
 };
