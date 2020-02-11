@@ -34,7 +34,8 @@
 #endif
 
 #if SUPPORT_CAN_EXPANSION
-# include "CAN/CanInterface.h"
+# include <CAN/CanInterface.h>
+# include <CAN/ExpansionManager.h>
 #endif
 
 #include "Wire.h"
@@ -458,94 +459,80 @@ GCodeResult GCodes::WaitForPin(GCodeBuffer& gb, const StringRef &reply)
 // Handle M581
 GCodeResult GCodes::ConfigureTrigger(GCodeBuffer& gb, const StringRef& reply, int code)
 {
-	if (gb.Seen('T'))
+	gb.MustSee('T');
+	const unsigned int triggerNumber = gb.GetUIValue();
+	if (triggerNumber < MaxTriggers)
 	{
-		const unsigned int triggerNumber = gb.GetIValue();
-		if (triggerNumber < MaxTriggers)
+		Trigger& tr = triggers[triggerNumber];
+		bool seen = false;
+		if (gb.Seen('C'))
 		{
-			Trigger& tr = triggers[triggerNumber];
-			bool seen = false;
-			if (gb.Seen('C'))
-			{
-				seen = true;
-				tr.condition = gb.GetIValue();
-			}
-			else if (tr.IsUnused())
-			{
-				tr.condition = 0;					// this is a new trigger, so set no condition
-			}
+			seen = true;
+			tr.condition = gb.GetIValue();
+		}
+		else if (tr.IsUnused())
+		{
+			tr.condition = 0;					// this is a new trigger, so set no condition
+		}
 
-			if (gb.Seen('P'))
+		if (gb.Seen('P'))
+		{
+			seen = true;
+			IoPort *portAddrs[ARRAY_SIZE(tr.ports)];
+			PinAccess access[ARRAY_SIZE(tr.ports)];
+			for (size_t i = 0; i < ARRAY_SIZE(tr.ports); ++i)
 			{
-				seen = true;
-				IoPort *portAddrs[ARRAY_SIZE(tr.ports)];
-				PinAccess access[ARRAY_SIZE(tr.ports)];
-				for (size_t i = 0; i < ARRAY_SIZE(tr.ports); ++i)
-				{
-					portAddrs[i] = &tr.ports[i];
-					access[i] = PinAccess::read;
-				}
-				const unsigned int numPortsUsed = IoPort::AssignPorts(gb, reply, PinUsedBy::temporaryInput, ARRAY_SIZE(tr.ports), portAddrs, access);
-				if (numPortsUsed == 0)
-				{
-					return GCodeResult::error;
-				}
-
-				tr.inputStates.Clear();
-				(void)tr.Check();					// set up initial input states
-				return GCodeResult::ok;
+				portAddrs[i] = &tr.ports[i];
+				access[i] = PinAccess::read;
+			}
+			const unsigned int numPortsUsed = IoPort::AssignPorts(gb, reply, PinUsedBy::temporaryInput, ARRAY_SIZE(tr.ports), portAddrs, access);
+			if (numPortsUsed == 0)
+			{
+				return GCodeResult::error;
 			}
 
-			if (!seen)
+			tr.inputStates.Clear();
+			(void)tr.Check();					// set up initial input states
+		}
+
+		if (!seen)
+		{
+			IoPort *portAddrs[ARRAY_SIZE(tr.ports)];
+			for (size_t i = 0; i < ARRAY_SIZE(tr.ports); ++i)
 			{
-				IoPort *portAddrs[ARRAY_SIZE(tr.ports)];
-				for (size_t i = 0; i < ARRAY_SIZE(tr.ports); ++i)
-				{
-					portAddrs[i] = &tr.ports[i];
-				}
-				reply.printf("Trigger %u fires on an edge on pin(s) ", triggerNumber);
-				IoPort::AppendPinNames(reply, ARRAY_SIZE(tr.ports), portAddrs);
-				if (triggers[triggerNumber].condition == 1)
-				{
-					reply.cat(" when printing from SD card");
-				}
+				portAddrs[i] = &tr.ports[i];
+			}
+			reply.printf("Trigger %u fires on an edge on pin(s) ", triggerNumber);
+			IoPort::AppendPinNames(reply, ARRAY_SIZE(tr.ports), portAddrs);
+			if (triggers[triggerNumber].condition == 1)
+			{
+				reply.cat(" when printing from SD card");
 			}
 		}
-		else
-		{
-			reply.copy("Trigger number out of range");
-			return GCodeResult::error;
-		}
+		return GCodeResult::ok;
 	}
 
-	reply.copy("Missing T parameter");
+	reply.copy("Trigger number out of range");
 	return GCodeResult::error;
 }
 
 // Handle M582
 GCodeResult GCodes::CheckTrigger(GCodeBuffer& gb, const StringRef& reply, int code)
 {
-	if (gb.Seen('T'))
+	gb.MustSee('T');
+	const unsigned int triggerNumber = gb.GetUIValue();
+	if (triggerNumber < MaxTriggers)
 	{
-		const unsigned int triggerNumber = gb.GetIValue();
-		if (triggerNumber < MaxTriggers)
+		Trigger& tr = triggers[triggerNumber];
+		tr.inputStates.Clear();
+		if (tr.Check())
 		{
-			Trigger& tr = triggers[triggerNumber];
-			tr.inputStates.Clear();
-			if (tr.Check())
-			{
-				triggersPending.SetBit(triggerNumber);
-			}
-			return GCodeResult::ok;
+			triggersPending.SetBit(triggerNumber);
 		}
-		else
-		{
-			reply.copy("Trigger number out of range");
-			return GCodeResult::error;
-		}
+		return GCodeResult::ok;
 	}
 
-	reply.copy("Missing T parameter");
+	reply.copy("Trigger number out of range");
 	return GCodeResult::error;
 }
 
@@ -993,7 +980,7 @@ GCodeResult GCodes::UpdateFirmware(GCodeBuffer& gb, const StringRef &reply)
 		const uint32_t boardNumber = gb.GetUIValue();
 		if (boardNumber != CanId::MasterAddress)
 		{
-			return CanInterface::UpdateRemoteFirmware((CanAddress)boardNumber, gb, reply);
+			return reprap.GetExpansion().UpdateRemoteFirmware(boardNumber, gb, reply);
 		}
 	}
 #endif

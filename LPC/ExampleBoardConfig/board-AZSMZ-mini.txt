@@ -1,0 +1,44 @@
+//Config file to define Hardware Pins LPC Boards.
+//Note: Each line should be less than 120 characters.
+//    : Unwanted options can be commented out or set to NoPin. Lines commented out will get default values
+//    : for pins the default is NoPin.
+//    : Values for Arrays need to be contained within { and }
+//    : Comments can be defined with // or # (comments are not supported inside arrays)
+//    : Each config entry must be all on a single line.
+
+// Original Config settings by RepRap User AlexY
+// LCD config by RepRap User Dot_Bob
+
+lpc.board = azsmzmini
+
+
+//LED blinks to indicate Platform is spinning or other diagnostic 
+//Comment out or set to NoPin if not wanted.
+leds.diagnostic = 1.18; //RRF Diagnostics Pin (LED1)
+
+
+//                    Bed   E0
+heat.tempSensePins = {0.25, 0.23}; //Max of 3 entries
+heat.spiTempSensorCSPins = { }
+        
+
+atxPowerPin = NoPin;
+        
+        
+//**SPI Devices**
+
+//Only supports 1 External SDCard
+externalSDCard.csPin         = 0.16;
+externalSDCard.cardDetectPin = 3.25;
+lpc.externalSDCard.spiFrequencyHz  = 4000000;
+
+
+//LCD Pins (only ST9720 SPI currently supported)
+lcd.lcdCSPin =       1.22; //LCD Chip Select
+lcd.lcdBeepPin =     1.30;
+lcd.encoderPinA =    4.28;
+lcd.encoderPinB =    1.27;
+lcd.encoderPinSw =   3.26; //click
+lcd.lcdDCPin =       2.6;  //DataControl Pin (A0) if none used set to NoPin
+lcd.panelButtonPin = NoPin; //Extra button RRD Panels
+    

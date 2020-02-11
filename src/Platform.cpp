@@ -213,6 +213,9 @@ constexpr ObjectModelArrayDescriptor Platform::workplaceOffsetsArrayDescriptor =
 constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 {
 	// 0. boards[] members
+#if SUPPORT_CAN_EXPANSION
+	{ "canAddress",			OBJECT_MODEL_FUNC_NOSELF((int32_t)0),																ObjectModelEntryFlags::none },
+#endif
 	{ "firmwareFileName",	OBJECT_MODEL_FUNC_NOSELF(IAP_FIRMWARE_FILE),														ObjectModelEntryFlags::none },
 	{ "firmwareVersion",	OBJECT_MODEL_FUNC_NOSELF(VERSION),																	ObjectModelEntryFlags::none },
 #if HAS_LINUX_INTERFACE
@@ -230,7 +233,7 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 	{ "shortName",			OBJECT_MODEL_FUNC_NOSELF(BOARD_SHORT_NAME),															ObjectModelEntryFlags::none },
 # endif
 #if HAS_12V_MONITOR
-	{ "v12",				OBJECT_MODEL_FUNC(self, 6),																			ObjectModelEntryFlags::live },
+	{ "v12",				OBJECT_MODEL_FUNC(self, 7),																			ObjectModelEntryFlags::live },
 #endif
 	{ "vIn",				OBJECT_MODEL_FUNC(self, 2),																			ObjectModelEntryFlags::live },
 
@@ -246,6 +249,7 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 
 	// 3. move.axes[] members
 	{ "acceleration",		OBJECT_MODEL_FUNC(self->Acceleration(context.GetLastIndex()), 1),									ObjectModelEntryFlags::none },
+	{ "babystep",			OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetTotalBabyStepOffset(context.GetLastIndex()), 3),		ObjectModelEntryFlags::none },
 	{ "drivers",			OBJECT_MODEL_FUNC_NOSELF(&axisDriversArrayDescriptor),												ObjectModelEntryFlags::none },
 	{ "homed",				OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().IsAxisHomed(context.GetLastIndex())),					ObjectModelEntryFlags::live },
 	{ "jerk",				OBJECT_MODEL_FUNC(MinutesToSeconds * self->GetInstantDv(context.GetLastIndex()), 1),				ObjectModelEntryFlags::none },
@@ -263,14 +267,22 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 	{ "factor",				OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetExtrusionFactor(context.GetLastIndex()), 1),			ObjectModelEntryFlags::none },
 	{ "nonlinear",			OBJECT_MODEL_FUNC(self, 5),																			ObjectModelEntryFlags::none },
 	{ "pressureAdvance",	OBJECT_MODEL_FUNC(self->GetPressureAdvance(context.GetLastIndex()), 2),								ObjectModelEntryFlags::none },
+	{ "retraction",			OBJECT_MODEL_FUNC(self, 6),																			ObjectModelEntryFlags::none },
 
 	// 5. move.extruders[].nonlinear members
 	{ "a",					OBJECT_MODEL_FUNC(self->nonlinearExtrusionA[context.GetLastIndex()], 3),							ObjectModelEntryFlags::none },
 	{ "b",					OBJECT_MODEL_FUNC(self->nonlinearExtrusionB[context.GetLastIndex()], 3),							ObjectModelEntryFlags::none },
 	{ "upperLimit",			OBJECT_MODEL_FUNC(self->nonlinearExtrusionLimit[context.GetLastIndex()], 2),						ObjectModelEntryFlags::none },
 
+	// 6. move.retraction members
+	{ "extraRestart",		OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetRetractExtraRestart(context.GetLastIndex()), 1),		ObjectModelEntryFlags::none },
+	{ "length",				OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetRetractLength(context.GetLastIndex()), 1),			ObjectModelEntryFlags::none },
+	{ "speed" ,				OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetRetractSpeed(context.GetLastIndex()), 1),			ObjectModelEntryFlags::none },
+	{ "unretractSpeed",		OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetUnretractSpeed(context.GetLastIndex()), 1),			ObjectModelEntryFlags::none },
+	{ "zHop",				OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetZHop(context.GetLastIndex()), 2),					ObjectModelEntryFlags::none },
+
 #if HAS_12V_MONITOR
-	// 6. v12 members
+	// 7. v12 members
 	{ "current",			OBJECT_MODEL_FUNC(self->GetV12Voltages().current, 1),												ObjectModelEntryFlags::live },
 	{ "max",				OBJECT_MODEL_FUNC(self->GetV12Voltages().max, 1),													ObjectModelEntryFlags::none },
 	{ "min",				OBJECT_MODEL_FUNC(self->GetV12Voltages().min, 1),													ObjectModelEntryFlags::none },
@@ -280,15 +292,16 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 
 constexpr uint8_t Platform::objectModelTableDescriptor[] =
 {
-	6 + HAS_12V_MONITOR,							// number of sections
-	9 + HAS_LINUX_INTERFACE + HAS_12V_MONITOR,		// section 0: boards[]
-	3,												// section 1: mcuTemp
-	3,												// section 2: vIn
-	12,												// section 3: move.axes[]
-	4,												// section 4: move.extruders[]
-	3,												// section 5: move.extruders[].nonlinear
+	7 + HAS_12V_MONITOR,													// number of sections
+	9 + HAS_LINUX_INTERFACE + HAS_12V_MONITOR + SUPPORT_CAN_EXPANSION,		// section 0: boards[]
+	3,																		// section 1: mcuTemp
+	3,																		// section 2: vIn
+	13,																		// section 3: move.axes[]
+	5,																		// section 4: move.extruders[]
+	3,																		// section 5: move.extruders[].nonlinear
+	5,																		// section 6: move.extruders[].retraction
 #if HAS_12V_MONITOR
-	3												// section 6: v12
+	3																		// section 7: v12
 #endif
 };
 
@@ -311,7 +324,7 @@ Platform::Platform() noexcept :
 #if HAS_SMART_DRIVERS
 	nextDriveToPoll(0),
 #endif
-	lastFanCheckTime(0), auxGCodeReply(nullptr),
+	lastFanCheckTime(0),
 #if HAS_MASS_STORAGE
 	sysDir(nullptr),
 #endif
@@ -816,11 +829,12 @@ void Platform::Exit() noexcept
 	SmartDrivers::Exit();
 #endif
 
-	// Release the aux output stack (should release the others too!)
-	while (auxGCodeReply != nullptr)
-	{
-		auxGCodeReply = OutputBuffer::Release(auxGCodeReply);
-	}
+	// Release all output buffers
+	usbOutput.ReleaseAll();
+	auxGCodeReply.ReleaseAll();
+#ifdef SERIAL_AUX2_DEVICE
+	aux2Output.ReleaseAll();
+#endif
 
 	// Stop processing data. Don't try to send a message because it will probably never get there.
 	active = false;
@@ -970,6 +984,9 @@ void Platform::Spin() noexcept
 
 	// Try to flush messages to serial ports
 	(void)FlushMessages();
+
+	// Time out any stale PanelDue messages
+	auxGCodeReply.ApplyTimeout(AuxTimeout);
 
 	// Check the MCU max and min temperatures
 #if HAS_CPU_TEMP_SENSOR
@@ -2923,23 +2940,20 @@ void Platform::AppendAuxReply(const char *msg, bool rawMessage) noexcept
 	if (msg[0] != 0 && HaveAux())
 	{
 		MutexLocker lock(auxMutex);
-		if (rawMessage)
+		OutputBuffer *buf;
+		if (OutputBuffer::Allocate(buf))
 		{
-			// Raw responses are sent directly to the AUX device
-			OutputBuffer *buf;
-			if (OutputBuffer::Allocate(buf))
+			buf->copy(msg);
+			if (rawMessage)
 			{
-				buf->copy(msg);
+				// Raw responses are sent directly to the AUX device
 				auxOutput.Push(buf);
 			}
-		}
-		else
-		{
-			// Regular text-based responses for AUX are currently stored and processed by M105/M408
-			if (auxGCodeReply != nullptr || OutputBuffer::Allocate(auxGCodeReply))
+			else
 			{
+				// Regular text-based responses for AUX are currently stored and processed by M105/M408
 				auxSeq++;
-				auxGCodeReply->cat(msg);
+				auxGCodeReply.Push(buf);
 			}
 		}
 	}
@@ -2967,14 +2981,7 @@ void Platform::AppendAuxReply(OutputBuffer *reply, bool rawMessage) noexcept
 		{
 			// Other responses are stored for M105/M408
 			auxSeq++;
-			if (auxGCodeReply == nullptr)
-			{
-				auxGCodeReply = reply;
-			}
-			else
-			{
-				auxGCodeReply->Append(reply);
-			}
+			auxGCodeReply.Push(reply);
 		}
 	}
 #else

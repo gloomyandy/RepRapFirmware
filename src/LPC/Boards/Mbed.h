@@ -63,10 +63,9 @@ constexpr BoardDefaults mbedDefaults =
     {P2_11,  P2_12, P2_10, P2_3,   P2_8},    //stepPins
     {P3_26,  P4_28, P0_20, P0_22,  P2_13},   //dirPins
 #if LPC_TMC_SOFT_UART
-    {NoPin, NoPin, NoPin, NoPin, NoPin},    //uartPins
+    {NoPin, NoPin, NoPin, NoPin, NoPin},     //uartPins
 #endif
-    false,                                   //currentControl
-    113.33,                                 //digiPot Factor
+    0,                                       //digiPot Factor
 };
 
 #endif

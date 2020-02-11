@@ -1,0 +1,67 @@
+//Config file to define Hardware Pins LPC Boards.
+
+
+//
+//****  Alter this to match the pin layout for your board ****
+//****  Values are example only based on Smoothieboard    ****
+//
+
+
+
+//Note: Each line should be less than 120 characters.
+//    : Unwanted options can be commented out or set to NoPin. Lines commented out will get default values
+//    : for pins the default is NoPin.
+//    : Values for Arrays need to be contained within { and }
+//    : Comments can be defined with // or # (comments are not supported inside arrays)
+//    : Each config entry must be all on a single line.
+
+
+//select the Generic board definitions. 
+lpc.board = generic
+
+
+
+
+//LED blinks to indicate Platform is spinning or other diagnostic 
+//Comment out or set to NoPin if not wanted.
+leds.diagnostic = 1.18; //RRF Diagnostics Pin (LED1 on Smoothie)
+
+	
+//                      Drive       0     1     2     3      4 
+//                    Typically     X     Y     Z     E0     E1
+stepper.enablePins =             { 0.4,  0.10, 0.19, 0.21,  4.29};
+stepper.stepPins =               { 2.0,  2.1,  2.2,  2.3,   2.8}; 
+stepper.directionPins =          { 0.5,  0.11, 0.20, 0.22,  2.13};
+stepper.digipotFactor = 113.33; //factor for converting current to digipot value
+	
+
+//                    Bed   E0    E1
+heat.tempSensePins = {0.24, 0.23, 0.25}; //Max of 3 entries
+
+//Chip Select pins for SPI Temperature Sensors
+// SPI Temperature sensor connected to SSP0 
+heat.spiTempSensorCSPins = { } // max of 2 entries
+        
+
+atxPowerPin = NoPin;
+        
+
+//**SPI Devices**
+
+//Only supports 1 External SDCard
+externalSDCard.csPin         = 0.28;
+externalSDCard.cardDetectPin = 0.27;
+lpc.externalSDCard.spiFrequencyHz  = 4000000;
+lpc.externalSDCard.spiChannel = 0; 
+
+
+//LCD Pins (only ST9720 SPI currently supported)
+lcd.lcdCSPin =       0.16; //LCD Chip Select
+lcd.lcdBeepPin =     1.31;
+lcd.encoderPinA =    3.25;
+lcd.encoderPinB =    3.26;
+lcd.encoderPinSw =   1.30; //click
+lcd.lcdDCPin =       NoPin;  //DataControl Pin (A0) if none used set to NoPin
+lcd.panelButtonPin = 2.11; //Extra button on RRD Panels
+    
+

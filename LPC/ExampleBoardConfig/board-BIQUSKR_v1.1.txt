@@ -1,0 +1,48 @@
+//Config file to define Hardware Pins LPC Boards.
+//Note: Each line should be less than 120 characters.
+//    : Unwanted options can be commented out or set to NoPin. Lines commented out will get default values
+//    : for pins the default is NoPin.
+//    : Values for Arrays need to be contained within { and }
+//    : Comments can be defined with // or # (comments are not supported inside arrays)
+//    : Each config entry must be all on a single line.
+
+//Config for BIQU SKR v1.1 (using config setting from Rob Mendon)
+
+lpc.board = biquskr_1.1
+
+
+
+//LED blinks to indicate Platform is spinning or other diagnostic
+//Comment out or set to NoPin if not wanted.
+leds.diagnostic = NoPin; //RRF Diagnostics Pin
+ 
+    
+//                    Bed   E0    E1
+heat.tempSensePins = {0.23, 0.24, 0.25}; //Max of 3 entries
+heat.spiTempSensorCSPins = { }
+        
+ 
+atxPowerPin = NoPin;
+        
+
+//**SPI Devices**
+    
+//Only supports 1 External SDCard
+externalSDCard.csPin         = 1.23;
+externalSDCard.cardDetectPin = 1.31;
+lpc.externalSDCard.spiFrequencyHz  = 4000000;
+
+
+//LCD Pins (only ST9720 SPI currently supported)
+lcd.lcdCSPin =       0.16; //LCD Chip Select
+lcd.lcdBeepPin =     1.30;
+lcd.encoderPinA =    3.26;
+lcd.encoderPinB =    3.25;
+lcd.encoderPinSw =   2.11; //click
+lcd.lcdDCPin =       0.18;  //DataControl Pin (A0) if none used set to NoPin
+lcd.panelButtonPin = NoPin; //Extra button on RRD Panels
+
+
+
+
+

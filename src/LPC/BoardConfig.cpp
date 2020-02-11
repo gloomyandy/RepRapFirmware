@@ -37,7 +37,6 @@ static const boardConfigEntry_t boardConfigs[]=
     {"stepper.enablePins", ENABLE_PINS, &MaxTotalDrivers, cvPinType},
     {"stepper.stepPins", STEP_PINS, &MaxTotalDrivers, cvPinType},
     {"stepper.directionPins", DIRECTION_PINS, &MaxTotalDrivers, cvPinType},
-    {"stepper.hasDriverCurrentControl", &hasDriverCurrentControl, nullptr, cvBoolType},
     {"stepper.digipotFactor", &digipotFactor, nullptr, cvFloatType},
 
     {"heat.tempSensePins", TEMP_SENSE_PINS, &NumThermistorInputs, cvPinType},
@@ -170,6 +169,12 @@ void BoardConfig::Init() noexcept
                     reprap.GetPlatform().MessageF(UsbMessage, "Step pins are on different ports. Pins will not be written in parallel.\n" );
                 }
             }
+        }
+        
+        //Does board have build in current control via digipots?
+        if(digipotFactor > 1)
+        {
+            hasDriverCurrentControl = true;
         }
         
         //Setup the Software SPI Pins

@@ -63,7 +63,6 @@ constexpr BoardDefaults smoothieBoardDefaults = {
 #if LPC_TMC_SOFT_UART
     {NoPin, NoPin, NoPin, NoPin, NoPin},    //uartPins
 #endif
-    true,                                   //currentControl
     113.33,                                 //digiPot Factor    
 };
 

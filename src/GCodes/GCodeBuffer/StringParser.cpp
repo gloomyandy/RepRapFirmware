@@ -459,12 +459,16 @@ bool StringParser::ProcessConditionalGCode(const StringRef& reply, BlockType ski
 			}
 			break;
 
-		case 9:
+		case 8:
 			if (doingFile && StringStartsWith(command, "continue"))
 			{
 				ProcessContinueCommand();
 				return true;
 			}
+			break;
+
+		default:
+			break;
 		}
 	}
 
@@ -616,7 +620,7 @@ void StringParser::ProcessAbortCommand(const StringRef& reply) noexcept
 		reply.copy("'abort' command executed");
 	}
 
-	gb.AbortFile(true);
+	reprap.GetGCodes().AbortPrint(gb);
 }
 
 void StringParser::ProcessEchoCommand(const StringRef& reply)
@@ -1712,6 +1716,12 @@ void StringParser::AppendAsString(ExpressionValue val, const StringRef& str)
 					(unsigned int)(val.param & 0xFF), (unsigned int)((val.param >> 8) & 0xFF));
 		break;
 
+#if SUPPORT_CAN_EXPANSION
+	case TYPE_OF(CanExpansionBoardDetails):
+		val.ExtractRequestedPart(str);
+		break;
+#endif
+
 	default:
 		throw ConstructParseException("string value expected");
 	}
@@ -2042,6 +2052,16 @@ ExpressionValue StringParser::ParseExpression(StringBuffer& stringBuffer, uint8_
 					BalanceTypes(val, val2, evaluate);
 					switch (val.type)
 					{
+					case TYPE_OF(const ObjectModel*):
+						{
+							const bool v1Null = (val.omVal == nullptr),
+										v2Null = (val2.omVal == nullptr);
+							val.bVal = (v1Null) ? v2Null
+										: (v2Null) ? false
+											: throw ConstructParseException("cannot compare objects");
+						}
+						break;
+
 					case TYPE_OF(int32_t):
 						val.bVal = (val.iVal == val2.iVal);
 						break;
@@ -2370,6 +2390,11 @@ ExpressionValue StringParser::ParseIdentifierExpression(StringBuffer& stringBuff
 	if (id.Equals("false"))
 	{
 		return ExpressionValue(false);
+	}
+
+	if (id.Equals("null"))
+	{
+		return ExpressionValue((const ObjectModel *)nullptr);
 	}
 
 	if (id.Equals("pi"))

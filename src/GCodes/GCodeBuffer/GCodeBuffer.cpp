@@ -618,7 +618,7 @@ bool GCodeBuffer::PopState(bool withinSameFile) noexcept
 }
 
 
-// Abort execution of any files or macros being executed, returning true if any files were closed
+// Abort execution of any files or macros being executed
 // We now avoid popping the state if we were not executing from a file, so that if DWC or PanelDue is used to jog the axes before they are homed, we don't report stack underflow.
 void GCodeBuffer::AbortFile(bool abortAll, bool requestAbort) noexcept
 {
@@ -629,11 +629,16 @@ void GCodeBuffer::AbortFile(bool abortAll, bool requestAbort) noexcept
 			if (machineState->DoingFile())
 			{
 #if HAS_MASS_STORAGE
-				fileInput->Reset(machineState->fileState);
+# if HAS_LINUX_INTERFACE
+				if (!reprap.UsingLinuxInterface())
+# endif
+				{
+					fileInput->Reset(machineState->fileState);
+				}
 #endif
 				machineState->CloseFile();
 			}
-		} while (PopState(false) && (!machineState->DoingFile() || abortAll));
+		} while (PopState(false) && (abortAll || !machineState->DoingFile()));
 	}
 
 #if HAS_LINUX_INTERFACE

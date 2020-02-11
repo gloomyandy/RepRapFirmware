@@ -42,7 +42,8 @@
 #endif
 
 #if SUPPORT_CAN_EXPANSION
-# include "CAN/CanInterface.h"
+# include <CAN/CanInterface.h>
+# include <CAN/ExpansionManager.h>
 #endif
 
 #include <utility>			// for std::swap
@@ -4314,11 +4315,11 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply)
 
 #if SUPPORT_CAN_EXPANSION
 		case 952:	// set CAN-FD data rate
-			result = CanInterface::SetFastDataRate(gb, reply);
+			result = CanInterface::ChangeAddressAndNormalTiming(gb, reply);
 			break;
 
 		case 953:	// change expansion board CAN address
-			result = CanInterface::ChangeExpansionBoardAddress(gb, reply);
+			result = CanInterface::ChangeFastTiming(gb, reply);
 			break;
 #endif
 
@@ -4340,6 +4341,17 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply)
 			break;
 
 		case 999:
+#if SUPPORT_CAN_EXPANSION
+			if (gb.Seen('B'))
+			{
+				const uint32_t address = gb.GetUIValue();
+				if (address != CanId::MasterAddress)
+				{
+					result = reprap.GetExpansion().ResetRemote(address, gb, reply);
+					break;
+				}
+			}
+#endif
 			if (!gb.DoDwellTime(1000))		// wait a second to allow the response to be sent back to the web server, otherwise it may retry
 			{
 				return false;

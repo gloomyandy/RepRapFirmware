@@ -44,14 +44,10 @@ Pin DIRECTION_PINS[NumDirectDrivers] =  {NoPin, NoPin, NoPin, NoPin, NoPin};
 uint32_t STEP_DRIVER_MASK = 0;                          //SD: mask of the step pins on Port 2 used for writing to step pins in parallel
 bool hasStepPinsOnDifferentPorts = false;               //for boards that don't have all step pins on port2
 bool hasDriverCurrentControl = false;                   //Supports digipots to set stepper current
-float digipotFactor = 113.33;                           //defualt factor for converting current to digipot value
+float digipotFactor = 0.0;                              //defualt factor for converting current to digipot value
 
 
 Pin SoftwareSPIPins[3] = {NoPin, NoPin, NoPin};         //GPIO pins for softwareSPI (used with SharedSPI)
-
-#if defined(HAS_LINUX_INTERFACE)
-    Pin LinuxTfrReadyPin = NoPin;
-#endif
 
 #if defined(ESP8266WIFI)
     Pin EspDataReadyPin = NoPin;
@@ -114,7 +110,6 @@ bool SetBoard(const char* bn) noexcept
 #endif
 
 
-            hasDriverCurrentControl = LPC_Boards[i].defaults.hasDriverCurrentControl;
             digipotFactor = LPC_Boards[i].defaults.digipotFactor;
                         
             return true;

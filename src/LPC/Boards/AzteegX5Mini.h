@@ -70,10 +70,9 @@ constexpr BoardDefaults azteegX5Mini1_1Defaults = {
     {P2_1,  P2_2,  P2_3,  P2_0, NoPin},   //stepPins
     {P0_11, P0_20, P0_22, P0_5, NoPin},   //dirPins
 #if LPC_TMC_SOFT_UART
-    {NoPin, NoPin, NoPin, NoPin, NoPin},    //uartPins
+    {NoPin, NoPin, NoPin, NoPin, NoPin},  //uartPins
 #endif
-    true,                          //currentControl
-    106.0,                         //digiPot Factor
+    106.0,                                //digiPot Factor
 };
 
 

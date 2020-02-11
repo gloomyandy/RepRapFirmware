@@ -1,10 +1,15 @@
 Summary of LPC specific changes
 ===============================================
 
+Version 3.01 Beta2
+=================
+
+* Removed board.txt entry: stepper.hasDriverCurrentControl. Now relies on stepper.digipotFactor being set to enable current control.
+
 Version 3.01 beta1
 =================
 
-* Added new board.txt entry "lpc.adcEnablePreFilter" to enable/disable a ADC prefilter. It stores 8 samples for each channel. When reading the channel value with prefiltering on, it sorts the 8 values from low to high, and averages the middle 4 values.
+* Added new board.txt entry "lpc.adcEnablePreFilter" to enable/disable the ADC prefilter. [Experimental]
 
 
 Version 3.0 beta13
