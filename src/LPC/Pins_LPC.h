@@ -240,7 +240,7 @@ extern Pin SoftwareSPIPins[3]; //GPIO pins for softwareSPI (used with SharedSPI)
 
 #else
     #define SERIAL_MAIN_DEVICE  Serial  //USB
-    #if defined(ESP8266WIFI)
+    #if defined(ESP8266WIFI_SERIAL)
         //No AUX Serial, Serial0 is connected to the ESP8266
         constexpr size_t NUM_SERIAL_CHANNELS = 1;
         #define SERIAL_WIFI_DEVICE Serial0
