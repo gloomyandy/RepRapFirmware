@@ -29,8 +29,6 @@
 
 // Soft UART implementation
 #if LPC_TMC_SOFT_UART
-#define DMA_UART
-#ifdef DMA_UART
 
 #define SU_READ_OVERSAMPLE 4
 #define SU_WRITE_OVERSAMPLE 4
@@ -45,11 +43,11 @@ static constexpr uint32_t SU_FRAME_LENGTH = 10;
 
 // Select sample rates, ensure that one is always an exact multiple of the other
 #if (READ_OVERSAMPLE >= WRITE_OVERSAMPLE)
-    static const uint32_t SU_READ_PERIOD = (getPclk(PCLK_TIMER1)/(SU_BAUD_RATE*SU_READ_OVERSAMPLE)) - 1;
-    static const uint32_t SU_WRITE_PERIOD = (getPclk(PCLK_TIMER1)/(SU_BAUD_RATE*SU_READ_OVERSAMPLE))*(SU_READ_OVERSAMPLE/SU_WRITE_OVERSAMPLE) - 1;
+    static const uint32_t SU_READ_PERIOD = (getPclk(PCLK_TIMER3)/(SU_BAUD_RATE*SU_READ_OVERSAMPLE)) - 1;
+    static const uint32_t SU_WRITE_PERIOD = (getPclk(PCLK_TIMER3)/(SU_BAUD_RATE*SU_READ_OVERSAMPLE))*(SU_READ_OVERSAMPLE/SU_WRITE_OVERSAMPLE) - 1;
 #else
-    static const uint32_t SU_READ_PERIOD = (getPclk(PCLK_TIMER1)/(SU_BAUD_RATE*SU_WRITE_OVERSAMPLE))*(SU_WRITE_OVERSAMPLE/SU_READ_OVERSAMPLE) - 1;
-    static const uint32_t SU_WRITE_PERIOD = (getPclk(PCLK_TIMER1)/(SU_BAUD_RATE*SU_WRITE_OVERSAMPLE)) - 1;
+    static const uint32_t SU_READ_PERIOD = (getPclk(PCLK_TIMER3)/(SU_BAUD_RATE*SU_WRITE_OVERSAMPLE))*(SU_WRITE_OVERSAMPLE/SU_READ_OVERSAMPLE) - 1;
+    static const uint32_t SU_WRITE_PERIOD = (getPclk(PCLK_TIMER3)/(SU_BAUD_RATE*SU_WRITE_OVERSAMPLE)) - 1;
 #endif
 
 enum class SUStates
@@ -257,8 +255,8 @@ static void DmaInterrupt()
     case SUStates::readsync2:
         // sync is in progress switch pin direction
 		pinMode(SUPin, INPUT_PULLUP);
-        LPC_TIMER1->MR[0] = SU_READ_PERIOD;
-        LPC_TIMER1->TC  = 0x00;  // Reset the Timer Count to 0
+        LPC_TIMER3->MR[0] = SU_READ_PERIOD;
+        LPC_TIMER3->TC  = 0x00;  // Reset the Timer Count to 0
         SUState = SUStates::reading;
         break;
     case SUStates::reading:
@@ -275,9 +273,9 @@ static void DmaInterrupt()
 static void DmaStart()
 {
     // Prepare the DMA hardware for the write/read operation
-    LPC_SYSCTL->DMAREQSEL |= (1 << (GPDMA_CONN_MAT1_0 - 16));
+    LPC_SYSCTL->DMAREQSEL |= (1 << (GPDMA_CONN_MAT3_0 - 16));
 
-    const uint8_t channelNumber = DMAGetChannelNumber(DMA_TIMER_MAT1_0);
+    const uint8_t channelNumber = DMAGetChannelNumber(DMA_TIMER_MAT3_0);
     GPDMA_CH_T *pDMAch = (GPDMA_CH_T *) &(LPC_GPDMA->CH[channelNumber]);
 
     pDMAch->CONFIG = GPDMA_DMACCxConfig_H;                        //halt the DMA channel - Clears DMA FIFO
@@ -302,7 +300,7 @@ static void DmaStart()
 
     pDMAch->CONFIG = // GPDMA_DMACCxConfig_E   
                         0                                                          //Enable
-                            | GPDMA_DMACCxConfig_SrcPeripheral((GPDMA_CONN_MAT1_0 - 8))                       
+                            | GPDMA_DMACCxConfig_SrcPeripheral((GPDMA_CONN_MAT3_0 - 8))                       
                             | GPDMA_DMACCxConfig_TransferType(GPDMA_TRANSFERTYPE_P2M_CONTROLLER_DMA)
                             | GPDMA_DMACCxConfig_IE                         //Interrupt Error Mask
                             | GPDMA_DMACCxConfig_ITC;                       //Terminal count interrupt mask
@@ -310,8 +308,8 @@ static void DmaStart()
 
 
     SUState = SUStates::writing;
-    LPC_TIMER1->MR[0] = SU_WRITE_PERIOD;
-    LPC_TIMER1->TC  = 0x00;  // Reset the Timer Count to 0
+    LPC_TIMER3->MR[0] = SU_WRITE_PERIOD;
+    LPC_TIMER3->TC  = 0x00;  // Reset the Timer Count to 0
 
 	Chip_GPDMA_ChannelCmd(LPC_GPDMA, channelNumber, ENABLE);
 }
@@ -365,13 +363,13 @@ bool LPCSoftUARTCheckComplete() noexcept
 void LPCSoftUARTInit() noexcept
 {
 	InitialiseDMA();
-    AttachDMAChannelInterruptHandler(DmaInterrupt, DMA_TIMER_MAT1_0);
-    Chip_Clock_EnablePeriphClock(SYSCTL_CLOCK_TIMER1); //enable power and clocking
-    LPC_TIMER1->PR   =  0;
-    LPC_TIMER1->MR[0] = SU_WRITE_PERIOD;
-    LPC_TIMER1->TC  = 0x00;  // Reset the Timer Count to 0
-    LPC_TIMER1->MCR = ((1<<SBIT_MR0R));     // Int on MR0 match and Reset Timer on MR0 match
-    LPC_TIMER1->TCR  = (1 <<SBIT_CNTEN); //Start Timer
+    AttachDMAChannelInterruptHandler(DmaInterrupt, DMA_TIMER_MAT3_0);
+    Chip_Clock_EnablePeriphClock(SYSCTL_CLOCK_TIMER3); //enable power and clocking
+    LPC_TIMER3->PR   =  0;
+    LPC_TIMER3->MR[0] = SU_WRITE_PERIOD;
+    LPC_TIMER3->TC  = 0x00;  // Reset the Timer Count to 0
+    LPC_TIMER3->MCR = ((1<<SBIT_MR0R));     // Int on MR0 match and Reset Timer on MR0 match
+    LPC_TIMER3->TCR  = (1 <<SBIT_CNTEN); //Start Timer
 
 	for(size_t i = 0; i < NumDirectDrivers; i++)
 		if (TMC_UART_PINS[i] != NoPin)
@@ -386,217 +384,5 @@ void LPCSoftUARTShutdown() noexcept
 	LPCSoftUARTAbort();
 }
 
-#else
-
-constexpr uint32_t SU_BAUD_RATE = DriversBaudRate;
-enum class SUStates
-{
-	idle,
-	writeSync,
-	writing,
-	readSync,
-	reading,
-	complete,
-	error
-};
-static uint32_t SUPeriod;
-static volatile uint32_t SUWriteCnt = 0;
-static volatile uint32_t SUReadCnt = 0;
-static volatile uint8_t *SUWritePtr;
-static volatile uint8_t *SUReadPtr;
-static volatile int SUBitCnt;
-static volatile uint32_t SUData;
-static volatile Pin SUPin;
-static LPC_GPIO_T *SUPort;
-static uint8_t SUPinNo;
-static uint32_t SUPinBit;
-static volatile int SUOffset;
-static volatile int SUBaseOffset;
-static volatile SUStates SUState = SUStates::idle;
-
-
-
-
-extern "C" void RIT_IRQHandler() noexcept __attribute__ ((hot));
-
-void RIT_IRQHandler() noexcept
-{
-	Chip_RIT_ClearInt(LPC_RITIMER);
-	switch(SUState)
-	{
-	case SUStates::idle:
-		break;
-	case SUStates::writeSync:
-		{
-			// First four bits of a write are used to establish the baud rate for the connection.
-			// We record the actual time that the bits are written and use this to adjust the timing of
-			// the rest of the write and read operations. This reduces framing errors.
-			// First write the data
-            if (SUData & 0x1)
-                SUPort->SET = SUPinBit;
-            else
-                SUPort->CLR = SUPinBit;
-			int offset = Chip_RIT_GetCounter(LPC_RITIMER);
-			SUData >>= 1;
-			if (++SUBitCnt == 1)
-				// record time offset of first bit
-				SUBaseOffset = offset;
-			else if (SUBitCnt == 5)
-			{
-				// caclculate per bit timing offset for sync sequence 
-				SUOffset = (offset - SUBaseOffset)/4;
-				// adjust timing for rest of write operation
-				Chip_RIT_SetCOMPVAL(LPC_RITIMER, SUPeriod + SUOffset);
-				// Sync complete
-				SUState = SUStates::writing;	
-			}
-			break;
-		}
-
-	case SUStates::writing:
-    	if (++SUBitCnt <= 10 ) 
-		{
-			// send data 
-            if (SUData & 0x1)
-                SUPort->SET = SUPinBit;
-            else
-                SUPort->CLR = SUPinBit;
-			SUData >>= 1;
-    	}
-    	else if (--SUWriteCnt > 0)
-		{
-			// send start bit of next byte
-            SUPort->CLR = SUPinBit;
-			// get data and add stop bit (but not start bit as we have already handled that)
-			SUData = 0x100 | *SUWritePtr++;
-			// Start bit has already been sent
-			SUBitCnt = 1;
-		}
-		else
-		{
-			// end of output, switch to input mode
-			util_UpdateBit(SUPort->DIR, SUPinNo, 0);
-			// TMC22XX will start sending data 8 bits after the write completes
-			Chip_RIT_SetCOMPVAL(LPC_RITIMER, (SUPeriod + SUOffset)*8);
-			SUState = SUStates::readSync;
-		}
-		break;
-	case SUStates::readSync:
-		{
-			uint8_t inbit = util_IsBitSet(SUPort->PIN, SUPinNo);
-			// Do we have the start bit?
-			if (!inbit) 
-			{
-				// got start bit, set timing for reading bits
-				Chip_RIT_SetCOMPVAL(LPC_RITIMER, SUPeriod + SUOffset);
-				SUBitCnt = 1;
-				SUData = 0;
-				SUState = SUStates::reading;
-			}
-			else
-				// no start bit, give up
-				SUState = SUStates::error;
-			break;
-		}
-	case SUStates::reading:
-		if (++SUBitCnt <= 9)
-		{
-			// data bits, read data
-			uint8_t inbit = util_IsBitSet(SUPort->PIN, SUPinNo);
-      		SUData >>= 1;
-      		if (inbit)
-        		SUData |= 0x80;
-		}
-		else
-		{
-			// Stop bit read, store data byte in buffer
-			*SUReadPtr++ =  static_cast<uint8_t>(SUData);
-			if (--SUReadCnt <= 0)
-				SUState = SUStates::complete;
-			else
-				SUState = SUStates::readSync;		
-		}
-		break;
-	case SUStates::complete:
-	case SUStates::error:		
-		Chip_RIT_Disable(LPC_RITIMER);
-		break;			
-	}
-}	
-
-void LPCSoftUARTAbort() noexcept
-{
-	Chip_RIT_Disable(LPC_RITIMER);
-	SUReadCnt = 0;
-	SUWriteCnt = 0;
-	SUState = SUStates::idle;
-	if (SUPin != NoPin)
-		pinMode(SUPin, OUTPUT_HIGH);
-}
-
-void LPCSoftUARTStartTransfer(uint8_t driver, volatile uint8_t *WritePtr, uint32_t WriteCnt, volatile uint8_t *ReadPtr, uint32_t ReadCnt) noexcept
-{
-	LPCSoftUARTAbort();
-	SUPin = TMC_UART_PINS[driver];
-	if (SUPin != NoPin)
-	{
-		// got valid Pin so set things up for transfer
-		LPC_RITIMER->COUNTER = 0;
-		Chip_RIT_SetCOMPVAL(LPC_RITIMER, SUPeriod);
-		SUWritePtr = WritePtr;
-		SUReadPtr = ReadPtr;
-		// Add start and stop bits to first byte
-		SUData = (static_cast<uint32_t>(*SUWritePtr) << 1) | 0x200;
-		SUWritePtr++;
-		SUBitCnt = 0;
-		SUOffset = 0;
-		pinMode(SUPin, OUTPUT_HIGH);
-		// use direct access to keep interupt handler as fast as possible
-		SUPort = (LPC_GPIO_T*)(LPC_GPIO0_BASE + ((SUPin) & ~0x1f));
-		SUPinNo = SUPin & 0x1f;
-        SUPinBit = 1 << SUPinNo;
-		SUWriteCnt = WriteCnt;
-		SUReadCnt = ReadCnt;
-		SUState = SUStates::writeSync;
-		Chip_RIT_Enable(LPC_RITIMER);
-	}
-}
-
-
-bool LPCSoftUARTCheckComplete() noexcept
-{
-	if (SUState == SUStates::complete)
-	{
-		SUState = SUStates::idle;
-		// I/O complete
-        return true;
-	}
-    return false;
-}
-
-void LPCSoftUARTInit() noexcept
-{
-	Chip_RIT_Init(LPC_RITIMER);
-	SUPeriod = Chip_Clock_GetPeripheralClockRate(SYSCTL_PCLK_RIT)/(SU_BAUD_RATE);
-	Chip_RIT_SetCOMPVAL(LPC_RITIMER, SUPeriod);
-
-	Chip_RIT_EnableCTRL(LPC_RITIMER, RIT_CTRL_ENCLR);
-
-	for(size_t i = 0; i < NumDirectDrivers; i++)
-		if (TMC_UART_PINS[i] != NoPin)
-			pinMode(TMC_UART_PINS[i], OUTPUT_HIGH);
-
-	SUPin = NoPin;
-	SUState = SUStates::idle;
-	NVIC_EnableIRQ(RITIMER_IRQn);
-}
-
-
-void LPCSoftUARTShutdown() noexcept
-{
-	LPCSoftUARTAbort();
-	NVIC_DisableIRQ(RITIMER_IRQn);
-}
-#endif
 #endif
 #endif

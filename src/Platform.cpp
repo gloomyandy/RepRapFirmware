@@ -1485,7 +1485,7 @@ void Platform::InitialiseInterrupts() noexcept
 
 #if SUPPORT_TMC22xx
 # if LPC_TMC_SOFT_UART
-	NVIC_SetPriority(RITIMER_IRQn, NvicPriorityDriversSerialTMC);		// set priority for Soft UART timer
+	// Nothing to do
 # elif TMC22xx_HAS_MUX
 	NVIC_SetPriority(TMC22xx_UART_IRQn, NvicPriorityDriversSerialTMC);	// set priority for TMC2660 SPI interrupt
 # else
@@ -1547,10 +1547,11 @@ void Platform::InitialiseInterrupts() noexcept
 #if defined(__LPC17xx__)
 	// set rest of the Timer Interrupt priorities
 	// Timer 0 is used for step generation (set elsewhere)
-	NVIC_SetPriority(TIMER1_IRQn, 8);                       //Timer 1 is currently unused
+	NVIC_SetPriority(TIMER1_IRQn, 8);                       //Timer 1 and Timer 3 are optionally used for ADC pre-filtering and for
+	NVIC_SetPriority(TIMER3_IRQn, 8);                       //TMC22XX UART emulation. Both are DMA based and do not use the timer interrupt.
 	NVIC_SetPriority(TIMER2_IRQn, NvicPriorityTimerServo);  //Timer 2 runs the PWM for Servos at 50hz
-	NVIC_SetPriority(TIMER3_IRQn, NvicPriorityTimerPWM);    //Timer 3 runs the microsecond free running timer to generate heater/fan PWM
-    NVIC_SetPriority(ADC_IRQn, NvicPriorityADC);       //ADC interrupt priority when using burst with pre-filtering
+	NVIC_SetPriority(RITIMER_IRQn, NvicPriorityTimerPWM);   //RIT runs the microsecond free running timer to generate heater/fan PWM
+	NVIC_SetPriority(ADC_IRQn, NvicPriorityADC);            //ADC interrupt priority when using burst with pre-filtering
 #endif
 
     // Tick interrupt for ADC conversions
