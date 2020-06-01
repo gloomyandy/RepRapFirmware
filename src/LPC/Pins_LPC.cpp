@@ -43,6 +43,9 @@ Pin DiagPin = NoPin;
 Pin ENABLE_PINS[NumDirectDrivers] =     {NoPin, NoPin, NoPin, NoPin, NoPin};
 Pin STEP_PINS[NumDirectDrivers] =       {NoPin, NoPin, NoPin, NoPin, NoPin};
 Pin DIRECTION_PINS[NumDirectDrivers] =  {NoPin, NoPin, NoPin, NoPin, NoPin};
+#if HAS_STALL_DETECT
+    Pin DIAG_PINS[NumDirectDrivers] =     {P1_29, NoPin, NoPin, NoPin, NoPin};
+#endif
 #if LPC_TMC_SOFT_UART
     Pin TMC_UART_PINS[NumDirectDrivers] = {NoPin, NoPin, NoPin, NoPin, NoPin};
     size_t lpcSmartDrivers;
