@@ -151,7 +151,7 @@ constexpr PinEntry PinTable_MKSSGenL2_0[] =
     
 };
 
-constexpr BoardDefaults mkssgenl1_0_Defaults = {
+constexpr BoardDefaults mkssgenl2_0_Defaults = {
     {P2_1,  P2_8, P0_21, P2_12,  P0_10},   //enablePins
     {P2_2,  P0_19,  P0_22,  P2_13,   P1_9},    //stepPins
     {P2_3,  P0_20, P2_11, P0_11,  P1_14},   //dirPins

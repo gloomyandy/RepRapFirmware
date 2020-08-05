@@ -33,7 +33,7 @@ constexpr PinEntry PinTable_BIQU_SKR_v1_1[] =
     //Exp1
     {P0_15, PinCapability::rwpwm, "P0.15"}, //SSP0 SCK
     {P0_16, PinCapability::rwpwm, "P0.16"},
-    {P0_18, PinCapability::rwpwmrw, "P0.18"}, //SSP0 MOSI
+    {P0_18, PinCapability::rwpwm, "P0.18"}, //SSP0 MOSI
     {P2_11, PinCapability::rwpwm, "P2.11"},
     {P1_30, PinCapability::rwpwm, "P1.30"},
 
