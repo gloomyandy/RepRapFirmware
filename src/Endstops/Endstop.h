@@ -33,6 +33,9 @@ public:
 	void SetNext(EndstopOrZProbe *e) noexcept { next = e; }
 
 	static void UpdateStalledDrivers(DriversBitmap drivers, bool isStalled) noexcept;
+#if SUPPORT_TMC22xx && HAS_STALL_DETECT
+	static void UpdateStalledDriversState(DriversBitmap drivers) noexcept;
+#endif
 
 protected:
 	static DriversBitmap GetStalledDrivers() noexcept { return stalledDrivers; }

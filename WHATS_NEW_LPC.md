@@ -5,6 +5,40 @@ Please note
 ============
 The sample board.txt files which are here: https://github.com/gloomyandy/RepRapFirmware/tree/v3.01-dev-lpc/LPC/ExampleBoardConfig are out of date and may contain invalid settings. In addition the current software is not very good at detecting errors in these files and providing feedback to the user. Hopefully this will be improved soon, but for now the best way to check if the settings are correct is to issue an M122 p200 and check that the configuration matches your board. The current best source for the available settings is the configuration source: https://github.com/gloomyandy/RepRapFirmware/blob/v3.01-dev-lpc/src/LPC/BoardConfig.cpp#L33
 
+Version 3.1.1-14
+=============
+This version contains only two change...
+* Fix for a bug that can result in changes to the PWM output used for Fans/Heaters not being made if the frequency of the output is changed at the same time. Often this willoccur the first time that the speed is set.
+* The Ethernet build no longer has support for LCD displays enabled due to memory limitations.
+
+Version 3.1.1-12
+=============
+This version contains a number of fixes and minor improvements following user testing.
+* Detect ADC problems and attempt to fix them. In some situations the ADC does not seem to start operation correctly after reboot. This results in very high (2000 degrees plus) temperature readings. This change attempts to detect this and restart the ADC.
+* UART 3 support is now enabled by default. This allows the WiFi UART interface and PanelDue to be used at the same time on some hardware (BTT SKR V1.4).
+* Fix firmware reset caused by division by zero when setting the PWM frequency to zero.
+* Added Azteeg X5 mini v2 and MKS SGen L (thanks to Jay_S).
+
+Version 3.1.1-9
+=============
+This version contains changes to allow the updating of ESP8266 WiFi firmware via the serial port interface. Note that to use this change may require hardware changes to any adaptor boards you are using. Also includes updates to the USB serial port implementation to reduce memory and improve performance.
+
+
+Version 3.1.1-8
+=============
+This version contains one major new feature, support for TMC2209 devices which includes stall detection and sensorless homing. However it also includes a number of other changes (some to support the TMC2209 feature, others to fix bugs or improve other features), these are detailed below:
+* New board.txt setting stepper.TmcDiagPins = {<pin 0>, <pin 2>, ...} This setting is used to provide details of the pins used for the TMC2209 DIAG output. This must be provided for the drivers which use stall detection/sensorless homing. By Default no pins are defined.
+* SerialUSB Writeable now returns the number of bytes that can be written. This will hopefully fix some of the watchdog timeouts caused by the firmware attempting to write data when no program was consuming the output. There may still be problems with debug output.
+* New software PWM implementation. This new implementation has a lower overhead then the original version and is more robust to situations in which the timer is set to times that have already passed. 
+* Fix watchdog timeout caused by PanelDue or other serial devices. This was caused by by the PanelDue output generating framing errors that were not cleared when enabling the UART.
+* DMA completion interrupts. These have been reworked to allow devices to use completion interrupts that are called at a different interrupt level to that used by the main DMA device. This in turn allows us to use a higher priority interrupt for the DMA devices itself while still allowing the use of DMA with devices that make use of RTOS scheduling.
+* Various build system changes. The new TMC2209 driver is now located in the LPC specific part of the tree, the build scripts have been updated for this and to preserve the map files for debug use.
+* Flash accelerator configuration. Previous builds used settings that are in theory invalid for the LPC1769 chip.
+* Zero allocated memory. Allocated memory was previously left uninitialised, this could cause unpredictable results in some situations.
+* Adjusted interrupt priorities. This allows the TMC2209 driver to run the serial communications (via the software UART) at a higher baud rate, which allows changes to stall detection, motor current etc. to propagate to the drivers more rapidly.
+* Increased GCode buffer size from 101 to 201 bytes to match Duet settings.
+* Various debug enhancements, allow better stack capture/display, pwm debug display, USBSerial display.
+
 Version 3.1.1
 =============
 * Updated to include bugfixes from DC42

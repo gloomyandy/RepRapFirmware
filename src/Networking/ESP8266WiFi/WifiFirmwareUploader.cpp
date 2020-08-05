@@ -333,6 +333,10 @@ WifiFirmwareUploader::EspUploadResult WifiFirmwareUploader::readPacket(uint8_t o
 					++bodyIdx;
 					if (bodyIdx >= bodyLen)
 					{
+#ifdef LPC_DEBUG
+						if (respBuf[0] != 0)
+							debugPrintf("ESP8266 Loader error, error code %d\n", respBuf[1]);
+#endif
 						needBytes = 1;
 						state = PacketState::end;
 					}
@@ -470,7 +474,7 @@ WifiFirmwareUploader::EspUploadResult WifiFirmwareUploader::Sync(uint16_t timeou
 WifiFirmwareUploader::EspUploadResult WifiFirmwareUploader::flashBegin(uint32_t addr, uint32_t size) noexcept
 {
 	// determine the number of blocks represented by the size
-	const uint32_t blkCnt = (size + EspFlashBlockSize - 1) / EspFlashBlockSize;
+	const uint32_t blkCnt = (fileSize + EspFlashBlockSize - 1) / EspFlashBlockSize;
 
 	// ensure that the address is on a block boundary
 	addr &= ~(EspFlashBlockSize - 1);
@@ -603,7 +607,9 @@ void WifiFirmwareUploader::Spin() noexcept
 				MessageF("Trying to connect at %u baud: ", baud);
 			}
 			uploadPort.begin(baud);
+#ifndef __LPC17XX__
 			uploadPort.setInterruptPriority(1);				// we are going to move data at seriously high speeds
+#endif
 			interface.ResetWiFiForUpload(false);
 			lastAttemptTime = lastResetTime = millis();
 			state = UploadState::connecting;

@@ -24,6 +24,9 @@ StallDetectionEndstop::StallDetectionEndstop() noexcept
 // Test whether we are at or near the stop
 EndStopHit StallDetectionEndstop::Stopped() const noexcept
 {
+#if SUPPORT_TMC22xx && HAS_STALL_DETECT
+	UpdateStalledDriversState(driversMonitored);
+#endif
 	return (GetStalledDrivers().Intersects(driversMonitored)) ? EndStopHit::atStop : EndStopHit::noStop;
 }
 
@@ -46,8 +49,12 @@ bool StallDetectionEndstop::Prime(const Kinematics& kin, const AxisDriversConfig
 // Note, the result will not necessarily be acted on because there may be a higher priority endstop!
 EndstopHitDetails StallDetectionEndstop::CheckTriggered(bool goingSlow) noexcept
 {
+#if SUPPORT_TMC22xx && HAS_STALL_DETECT
+	UpdateStalledDriversState(driversMonitored);
+#endif
 	EndstopHitDetails rslt;				// initialised by default constructor
 	const DriversBitmap relevantStalledDrivers = driversMonitored & GetStalledDrivers();
+
 	if (relevantStalledDrivers.IsNonEmpty())
 	{
 		rslt.axis = GetAxis();

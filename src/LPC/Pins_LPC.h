@@ -61,7 +61,7 @@
 #if defined(LPC_NETWORKING)
     //LPC Ethernet
     #define HAS_RTOSPLUSTCP_NETWORKING   1
-    #define SUPPORT_12864_LCD            1
+    #define SUPPORT_12864_LCD            0
     #define HAS_WIFI_NETWORKING          0
     #define HAS_MASS_STORAGE             1
     #define SUPPORT_TELNET               0
@@ -158,8 +158,8 @@ extern Pin DIAG_PINS[NumDirectDrivers];
 #if LPC_TMC_SOFT_UART
     extern Pin TMC_UART_PINS[NumDirectDrivers];
     constexpr Pin GlobalTmc22xxEnablePin = NoPin;			// The pin that drives ENN of all drivers
-    constexpr uint32_t DriversBaudRate = 9600;
-    constexpr uint32_t TransferTimeout = 100;				// any transfer should complete within 100 ticks @ 1ms/tick
+    constexpr uint32_t DriversBaudRate = 50000;
+    constexpr uint32_t TransferTimeout = 10;				// any transfer should complete within 100 ticks @ 1ms/tick
 
 #endif
 
@@ -375,6 +375,7 @@ struct BoardEntry
 #include "Boards/Mbed.h"
 #include "Boards/Smoothieboard.h"
 #include "Boards/MKSSBase.h"
+#include "Boards/MKSSGenL.h"
 #include "Boards/AzsmzMini.h"
 #include "Boards/BIQU_SKR.h"
 #include "Boards/Generic.h"
@@ -393,11 +394,14 @@ constexpr BoardEntry LPC_Boards[] =
     {"smoothieboard",    PinTable_Smoothieboard,    ARRAY_SIZE(PinTable_Smoothieboard),    smoothieBoardDefaults},
     {"rearm",            PinTable_Rearm,            ARRAY_SIZE(PinTable_Rearm),            rearmDefaults},
     {"mkssbase_1.3",     PinTable_MKSSbase1_3,      ARRAY_SIZE(PinTable_MKSSbase1_3),      mkssbase1_3_Defaults},
+	{"mkssgenl_1.0",     PinTable_MKSSGenL1_0,      ARRAY_SIZE(PinTable_MKSSGenL1_0),      mkssgenl1_0_Defaults},
+	{"mkssgenl_2.0",     PinTable_MKSSGenL2_0,      ARRAY_SIZE(PinTable_MKSSGenL2_0),      mkssgenl2_0_Defaults},
     {"azsmzmini",        PinTable_AZSMZ,            ARRAY_SIZE(PinTable_AZSMZ),            azsmzDefaults},
     {"biquskr_1.1",      PinTable_BIQU_SKR_v1_1,    ARRAY_SIZE(PinTable_BIQU_SKR_v1_1),    biquskr_1_1_Defaults},
     {"biquskr_1.3",      PinTable_BIQU_SKR_v1_3,    ARRAY_SIZE(PinTable_BIQU_SKR_v1_3),    biquskr_1_3_Defaults},
     {"biquskr_1.4",      PinTable_BIQU_SKR_v1_4,    ARRAY_SIZE(PinTable_BIQU_SKR_v1_4),    biquskr_1_4_Defaults},
     {"azteegx5mini_1.1", PinTable_AzteegX5MiniV1_1, ARRAY_SIZE(PinTable_AzteegX5MiniV1_1), azteegX5Mini1_1Defaults},
+	{"azteegx5mini_2",   PinTable_AzteegX5MiniV2,   ARRAY_SIZE(PinTable_AzteegX5MiniV2),   azteegX5Mini2Defaults},
     {"azteegx5mini_3",   PinTable_AzteegX5MiniV3,   ARRAY_SIZE(PinTable_AzteegX5MiniV3),   azteegX5Mini3Defaults},
 #endif
 };

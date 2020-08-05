@@ -43,6 +43,9 @@ static const boardConfigEntry_t boardConfigs[]=
     {"stepper.TmcUartPins", TMC_UART_PINS, &MaxTotalDrivers, cvPinType},
     {"stepper.numSmartDrivers", &lpcSmartDrivers, nullptr, cvUint32Type},
 #endif
+#if HAS_STALL_DETECT
+    {"stepper.TmcDiagPins", DIAG_PINS, &MaxTotalDrivers, cvPinType},
+#endif
 
     //Heater sensors
     {"heat.tempSensePins", TEMP_SENSE_PINS, &NumThermistorInputs, cvPinType},
@@ -145,12 +148,15 @@ void BoardConfig::Init() noexcept
     FIL configFile;
     FATFS fs;
     FRESULT rslt;
+
+    // We need to setup DMA and SPI devices before we can use File I/O
+    NVIC_SetPriority(DMA_IRQn, NvicPriorityDMA);
+    NVIC_SetPriority(SSP0_IRQn, NvicPrioritySpi);
+    NVIC_SetPriority(SSP1_IRQn, NvicPrioritySpi);
     
-    NVIC_SetPriority(DMA_IRQn, NvicPrioritySpi);
 #if !HAS_MASS_STORAGE
     sd_mmc_init(SdWriteProtectPins, SdSpiCSPins);
 #endif
-
     // Mount the internal SD card
     rslt = f_mount (&fs, "0:", 1);
     if (rslt == FR_OK)

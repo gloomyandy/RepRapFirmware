@@ -1696,11 +1696,13 @@ void Platform::InitialiseInterrupts() noexcept
 #if defined(__LPC17xx__)
 	// set rest of the Timer Interrupt priorities
 	// Timer 0 is used for step generation (set elsewhere)
-	NVIC_SetPriority(TIMER1_IRQn, 8);                       //Timer 1 and Timer 3 are optionally used for ADC pre-filtering and for
-	NVIC_SetPriority(TIMER3_IRQn, 8);                       //TMC22XX UART emulation. Both are DMA based and do not use the timer interrupt.
+	// DMA and SPI priorites are defined in BoardConfig as they are needed for File I/O
+	NVIC_SetPriority(TIMER1_IRQn, 8);                       //Timer 1 is optionally used for ADC pre-filtering.
+	NVIC_SetPriority(TIMER3_IRQn, 8);                       //Timer3 is optionally used for TMC22XX UART emulation. Both are DMA based and do not use the timer interrupt.
 	NVIC_SetPriority(TIMER2_IRQn, NvicPriorityTimerServo);  //Timer 2 runs the PWM for Servos at 50hz
 	NVIC_SetPriority(RITIMER_IRQn, NvicPriorityTimerPWM);   //RIT runs the microsecond free running timer to generate heater/fan PWM
 	NVIC_SetPriority(ADC_IRQn, NvicPriorityADC);            //ADC interrupt priority when using burst with pre-filtering
+
 #endif
 
     // Tick interrupt for ADC conversions
@@ -1920,7 +1922,9 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 	MessageF(mtype, "Watchdog timer: %" PRIu32 "/%" PRIu32 "\n", minWDTValue, SystemCoreClock / 16);
 	minWDTValue = 0xffffffff;
 	MessageF(mtype, "Step timer: target %" PRIu32 " count %" PRIu32 " delta %d late %d\n", STEP_TC->MR[0], STEP_TC->TC, (int)(STEP_TC->MR[0] - STEP_TC->TC), lateTimers);
-
+	MessageF(mtype, "USBSerial connected %d\n", (int)SERIAL_MAIN_DEVICE.IsConnected());
+	MessageF(mtype, "ADC not ready %" PRIu32 " ADC error threshold %" PRIu32 " ADC Init %" PRIu32 "\n", ADCNotReadyCnt, ADCErrorThreshold, ADCInitCnt);
+	ADCNotReadyCnt = 0;
 #endif
 
 #if 0
@@ -1929,9 +1933,10 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 	MessageF(mtype, "Vssa %" PRIu32 " Vref %" PRIu32 " Temp0 %" PRIu32 " Temp1 %" PRIu32 "\n",
 			adcFilters[VssaFilterIndex].GetSum()/div, adcFilters[VrefFilterIndex].GetSum()/div, adcFilters[0].GetSum()/div, adcFilters[1].GetSum()/div);
 #endif
-
-#ifdef LPC_DEBUG_HM
+#ifdef LPC_DEBUG
     softwarePWMTimer.Diagnostics(mtype);
+#endif
+#ifdef LPC_DEBUG_HM
 	reprap.GetMove().AccessHeightMap().Diagnostics(mtype);
 #endif
 
@@ -2282,7 +2287,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 	// is split into multiple responses. 
 #if 0
 	// Diagnostic for LPC board configuration
-	case (int)DiagnosticTestType::PrintBoardConfiguration:
+	case (unsigned int)DiagnosticTestType::PrintBoardConfiguration:
 		BoardConfig::Diagnostics(gb.GetResponseMessageType());
 		break;
 #endif

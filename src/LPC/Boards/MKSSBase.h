@@ -44,16 +44,15 @@ constexpr PinEntry PinTable_MKSSbase1_3[] =
     {P2_11, PinCapability::rwpwm, "P2.11"},
     {P4_28, PinCapability::rwpwm, "P4.28"},
     
-    //Aux-1
-    //P0.2
-    //P0.3
+    //aux-1
+	{P0_2,  PinCapability::rwpwm, "P0.2"},
+	{P0_3,  PinCapability::rwpwm, "P0.3"},
     
     //Exp1
     {P1_31, PinCapability::rwpwm, "P1.31"},
     {P0_18, PinCapability::rwpwm, "P0.18"},
     {P0_14, PinCapability::rwpwm, "P0.14"},
     {P1_30, PinCapability::rwpwm, "P1.30"},
-    {P0_16, PinCapability::rwpwm, "P0.16"},
     
     //Exp2
     {P0_8,  PinCapability::rwpwm, "P0.8"},

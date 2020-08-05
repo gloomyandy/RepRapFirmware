@@ -21,7 +21,7 @@ Information to support using this firmware can be found on the [wiki](https://gi
 The wiki also details different methods of connecting for different boards.
 
 ## Support
-For LPC specific questions (and general questions too), please get in touch over at the [RepRap Forum](https://reprap.org/forum/read.php?147,859857,page=1)  
+For LPC specific questions (and general questions too), please get in touch over at the [RepRap Forum](https://reprap.org/forum/read.php?147,874661)  
 There is also a [Discord Channel](https://discord.gg/uS97Qs7) where LPC support can also be found.  
 For generic RepRapFirmware questions, please use the [Duet Forum](forum.duet.com)  
 

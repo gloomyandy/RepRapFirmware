@@ -6,6 +6,21 @@
  */
 
 #include "Endstop.h"
+#if SUPPORT_TMC22xx && HAS_STALL_DETECT
+# include "Movement/StepperDrivers/TMC22xx.h"
+
+void EndstopOrZProbe::UpdateStalledDriversState(DriversBitmap drivers) noexcept
+{
+	// Poll all of the drivers we are interested in
+	while(drivers.IsNonEmpty())
+	{
+		const unsigned int index = drivers.LowestSetBit();
+		// calling GetLiveStatus will update the stalledDrivers bitmap
+		SmartDrivers::GetLiveStatus(index);
+		drivers.ClearBit(index);
+	}
+}
+#endif
 
 // Endstop base class
 DriversBitmap EndstopOrZProbe::stalledDrivers;			// used to track which drivers are reported as stalled, for stall detect endstops and stall detect Z probes

@@ -500,17 +500,27 @@ const uint32_t NvicPrioritySpi = 6;				// SPI is used for network transfers on D
 // We have at least 16 priority levels
 // Use priority 4 or lower for interrupts where low latency is critical and FreeRTOS calls are not needed.
 
-# if SAM4E || defined(__LPC17xx__)
+# if SAM4E
 const uint32_t NvicPriorityWatchdog = 0;		// the secondary watchdog has the highest priority
 # endif
-
-const uint32_t NvicPriorityPanelDueUart = 1;	// UART is highest to avoid character loss (it has only a 1-character receive buffer)
-const uint32_t NvicPriorityDriversSerialTMC = 2; // USART or UART used to control and monitor the smart drivers
-
 # if defined(__LPC17xx__)
-constexpr uint32_t NvicPriorityTimerPWM = 3;
+// Note all interrupts lower than 5 run above the RTOS code and will not be
+// blocked by RTOS operations. This also means they can not call RTOS APIs
+const uint32_t NvicPriorityWatchdog = 0;		// the secondary watchdog has the highest priority
+const uint32_t NvicPriorityDriversSerialTMC = 1;// LPC uses a software UART, make this a very high priority
+const uint32_t NvicPriorityTimerPWM = 2;		// Run PWM timing as high as we can to avoid jitter
+const uint32_t NvicPriorityPanelDueUart = 3;	// UART is next we have a 16 byte FIFO so less critical than the Duet
 constexpr uint32_t NvicPriorityADC = 4;
 constexpr uint32_t NvicPriorityTimerServo = 5;
+// decide what priority to run DMA operations at
+# if LPC_TMC_SOFT_UART
+   const uint32_t NvicPriorityDMA = NvicPriorityDriversSerialTMC;
+# else
+   const uint32_t NvicPriorityDMA = NvicPriorityADC;
+# endif
+#else
+const uint32_t NvicPriorityPanelDueUart = 1;	// UART is highest to avoid character loss (it has only a 1-character receive buffer)
+const uint32_t NvicPriorityDriversSerialTMC = 2; // USART or UART used to control and monitor the smart drivers
 # endif
 
 const uint32_t NvicPriorityPins = 5;			// priority for GPIO pin interrupts - filament sensors must be higher than step
@@ -524,7 +534,7 @@ const uint32_t NvicPriorityNetworkTick = 8;		// priority for network tick interr
 const uint32_t NvicPriorityEthernet = 8;		// priority for Ethernet interface
 # endif
 
-const uint32_t NvicPrioritySpi = 5;				// SPI is used for network transfers on Duet WiFi/Duet vEthernet
+const uint32_t NvicPrioritySpi = 8;				// SPI is used for network transfers on Duet WiFi/Duet vEthernet
 const uint32_t NvicPriorityTwi = 9;				// TWI is used to read endstop and other inputs on the DueXn
 
 #endif
