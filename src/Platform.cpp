@@ -3483,11 +3483,7 @@ bool Platform::AtxPower() const noexcept
 void Platform::AtxPowerOn() noexcept
 {
 	deferredPowerDown = false;
-#ifdef __LPC17xx__
-    IoPort::WriteDigital(ATX_POWER_PIN, ATX_POWER_INVERTED);
-#else
-    IoPort::WriteDigital(ATX_POWER_PIN, true);
-#endif
+	IoPort::WriteDigital(ATX_POWER_PIN, true);
 }
 
 void Platform::AtxPowerOff(bool defer) noexcept
@@ -3503,11 +3499,7 @@ void Platform::AtxPowerOff(bool defer) noexcept
 			// We don't call logger->Stop() here because we don't know whether turning off the power will work
 		}
 #endif
-#ifdef __LPC17xx__
-		IoPort::WriteDigital(ATX_POWER_PIN, !ATX_POWER_INVERTED);
-#else
 		IoPort::WriteDigital(ATX_POWER_PIN, false);
-#endif
 	}
 }
 
