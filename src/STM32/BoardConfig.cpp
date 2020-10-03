@@ -181,7 +181,7 @@ void BoardConfig::Init() noexcept
     rslt = f_mount (&fs, "0:", 1);
     if (rslt != FR_OK)
     {
-        debugPrintf("Failed to mount SKR Pro SD, trying GTR settings");
+        debugPrintf("Failed to mount SKR Pro SD, trying GTR settings\n");
         ((HardwareSPI *)(SPI::getSSPDevice(SSP1)))->disable();
         SPI::getSSPDevice(SSP1)->initPins(PA_5, PA_6, PA_7, PA_4);
         rslt = f_mount (&fs, "0:", 1);

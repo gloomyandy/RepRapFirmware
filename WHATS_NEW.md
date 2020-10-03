@@ -1,7 +1,7 @@
 Please Note
 ===========
-The information contained in this file is old and may be out of date, but is retained as it may contain useful information. For up to date details of the LPC RRF port V3 please see following links:
-https://github.com/gloomyandy/RepRapFirmware/blob/v3.01-dev-lpc/WHATS_NEW_LPC.md
+The information contained in this file is old and may be out of date, but is retained as it may contain useful information. For up to date details of the LPC/STM32F4 RRF port V3 please see following links:
+https://github.com/gloomyandy/RepRapFirmware/blob/v3.02-dev-unified/WHATS_NEW_UNIFIED.md
 https://github.com/gloomyandy/RepRapFirmware/wiki
 
 

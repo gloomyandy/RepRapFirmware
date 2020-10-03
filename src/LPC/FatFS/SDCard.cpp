@@ -58,7 +58,6 @@ constexpr uint32_t SCLK_INIT =  400000;     /* SCLK frequency under initializati
 
 
 
-
 #define SD_COMMAND_TIMEOUT 5000
 
 SDCard::SDCard(SSPChannel SSPSlot, Pin cs) {
@@ -103,7 +102,6 @@ void SDCard::ReInit(Pin cs, uint32_t freq)
             frequency = SCLK_SD12;
         }
     }
-    
     if(frequency > maxFrequency) frequency = maxFrequency; //dont set higher than the max speed user set in config.
 
     if (spi != nullptr)
@@ -236,7 +234,6 @@ int SDCard::rcvr_datablock (uint8_t *buff, uint32_t btr)/* 1:OK, 0:Error */
         
     } while ((token == 0xFF) && (millis() - now) < 200 );
     if(token != 0xFE) return 0;        /* Function fails if invalid DataStart token or timeout */
-    
     rcvr_spi_multi(buff, btr);        /* Store trailing data to the buffer */
     xchg_spi(0xFF); xchg_spi(0xFF);    /* Discard CRC */
     
@@ -287,8 +284,7 @@ uint8_t SDCard::send_cmd (uint8_t cmd, uint32_t arg)/* Return value: R1 resp (bi
     
     /* Select the card and wait for ready except to stop multiple block read */
     if (cmd != CMD12) {
-        //deselect();
-        //if (!select()) return 0xFF;
+        xchg_spi(0xff);
     }
     
     /* Send command packet */
@@ -303,12 +299,11 @@ uint8_t SDCard::send_cmd (uint8_t cmd, uint32_t arg)/* Return value: R1 resp (bi
     xchg_spi(n);
     
     /* Receive command resp */
-    if (cmd == CMD12) xchg_spi(0xFF);       /* Diacard following one byte when CMD12 */
+    if (cmd == CMD12) xchg_spi(0xFF);       /* Discard following one byte when CMD12 */
     n = 10;                                 /* Wait for response (10 bytes max) */
     do
         res = xchg_spi(0xFF);
     while ((res & 0x80) && --n);
-    
     return res;                            /* Return received response */
 }
 
@@ -350,6 +345,7 @@ uint8_t SDCard::disk_initialize ()
             } else {
                 ty = CT_MMC; cmd = CMD1;    /* MMCv3 (CMD1(0)) */
             }
+            now = millis();
             while ((millis() - now) < timeout && send_cmd(cmd, 0)) ;        /* Wait for the card leaves idle state */
             if ((millis() - now) > timeout || send_cmd(CMD16, 512) != 0){    /* Set block length: 512 */
                 ty = 0;
@@ -396,7 +392,6 @@ uint8_t SDCard::disk_initialize ()
             }
             deselect();
         }
-        
         if(frequency > maxFrequency) frequency = maxFrequency; //dont set higher than the max speed user set in config.
 
         spi->SetClockFrequency(frequency);
@@ -413,6 +408,10 @@ uint8_t SDCard::disk_initialize ()
 #endif
         
     } else {        /* Failed */
+#ifdef SD_DEBUG
+        debugPrintf("Failed to initialise SD card\n");
+#endif
+
         status = STA_NOINIT;
         return 1;
     }
@@ -450,7 +449,6 @@ CARD_TYPE SDCard::card_type()
 DRESULT SDCard::disk_read (uint8_t *buff, uint32_t sector, uint32_t count)
 {
     uint8_t cmd;
-    
     if (!count) return RES_PARERR;        /* Check parameter */
     if (status & STA_NOINIT) return RES_NOTRDY;    /* Check if drive is ready */
     if (!(cardtype & CT_BLOCK)) sector *= 512;    /* LBA ot BA conversion (byte addressing cards) */
@@ -464,7 +462,6 @@ DRESULT SDCard::disk_read (uint8_t *buff, uint32_t sector, uint32_t count)
         if (cmd == CMD18) send_cmd(CMD12, 0);    /* STOP_TRANSMISSION */
     }
     deselect();
-    
     return count ? RES_ERROR : RES_OK;    /* Return result */
 }
 
@@ -529,7 +526,6 @@ DRESULT SDCard::disk_ioctl (uint8_t cmd, void *buff)
     DRESULT res;
     uint8_t n, csd[16];
     uint32_t csize;
-
     if (status & STA_NOINIT) return RES_NOTRDY;    /* Check if drive is ready */
     
     res = RES_ERROR;

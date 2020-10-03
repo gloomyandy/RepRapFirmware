@@ -286,8 +286,7 @@ uint8_t SDCard::send_cmd (uint8_t cmd, uint32_t arg)/* Return value: R1 resp (bi
     
     /* Select the card and wait for ready except to stop multiple block read */
     if (cmd != CMD12) {
-        //deselect();
-        //if (!select()) return 0xFF;
+        xchg_spi(0xff);
     }
     
     /* Send command packet */
@@ -302,12 +301,11 @@ uint8_t SDCard::send_cmd (uint8_t cmd, uint32_t arg)/* Return value: R1 resp (bi
     xchg_spi(n);
     
     /* Receive command resp */
-    if (cmd == CMD12) xchg_spi(0xFF);       /* Diacard following one byte when CMD12 */
+    if (cmd == CMD12) xchg_spi(0xFF);       /* Discard following one byte when CMD12 */
     n = 10;                                 /* Wait for response (10 bytes max) */
     do
         res = xchg_spi(0xFF);
     while ((res & 0x80) && --n);
-    
     return res;                            /* Return received response */
 }
 
@@ -411,6 +409,10 @@ uint8_t SDCard::disk_initialize ()
 #endif
         
     } else {        /* Failed */
+#ifdef SD_DEBUG
+        debugPrintf("Failed to initialise SD card\n");
+#endif
+
         status = STA_NOINIT;
         return 1;
     }

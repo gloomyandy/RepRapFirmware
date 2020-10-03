@@ -1,7 +1,6 @@
-# LPC Port of RepRapFirmware v3
-==========================
+# LPC/STM32F4 Port of RepRapFirmware v3
 
-This is an experimental port of [RepRapFirmware](https://github.com/Duet3D/RepRapFirmware) for LPC1768/LPC1769 based boards.  
+This is aport of [RepRapFirmware](https://github.com/Duet3D/RepRapFirmware) for LPC1768/LPC1769 and STM32F4 based boards.  
 
 # What is it?
 It is a port of the [RepRapFirmware](https://github.com/Duet3D/RepRapFirmware) version 3 (RRF3) used on the Duet family of controllers.  
@@ -21,11 +20,11 @@ Information to support using this firmware can be found on the [wiki](https://gi
 The wiki also details different methods of connecting for different boards.
 
 ## Support
-For LPC specific questions (and general questions too), please get in touch over at the [RepRap Forum](https://reprap.org/forum/read.php?147,874661)  
-There is also a [Discord Channel](https://discord.gg/uS97Qs7) where LPC support can also be found.  
+For LPC/STM specific questions (and general questions too), please get in touch over at the [RepRap Forum](https://reprap.org/forum/read.php?147,874661)  
+There is also a [Discord Channel](https://discord.gg/uS97Qs7) where LPC/STM support can also be found.  
 For generic RepRapFirmware questions, please use the [Duet Forum](forum.duet.com)  
 
-**The LPC port is experimental and is likely to contain bugs - Use at your own risk**
+**The LPC/STM port is experimental and is likely to contain bugs - Use at your own risk**
 
 Licence
 =======
