@@ -119,10 +119,10 @@ constexpr uint32_t maxPidSpinDelay = 5000;			// Maximum elapsed time in millisec
 enum class BoardType : uint8_t
 {
 	Auto = 0,
-#if defined(DUET_5LC)
-	Duet5LC_Unknown,
-	Duet5LC_WiFi,
-	Duet5LC_Ethernet,
+#if defined(DUET3MINI)			// we use the same values for both v0.2 and v0.4
+	Duet3Mini_Unknown,
+	Duet3Mini_WiFi,
+	Duet3Mini_Ethernet,
 #elif defined(DUET3)
 	Duet3_v06_100 = 1,
 	Duet3_v101 = 2,
@@ -147,7 +147,7 @@ enum class BoardType : uint8_t
 	PCCB_v10 = 1
 #elif defined(PCCB_08) || defined(PCCB_08_X5)
 	PCCB_v08 = 1
-#elif defined(DUET_5LC)
+#elif defined(DUET3MINI)
 	Duet_5LC = 1
 #elif defined(__LPC17xx__)
 	Lpc = 1
@@ -156,6 +156,17 @@ enum class BoardType : uint8_t
 #else
 # error Unknown board
 #endif
+};
+
+// Type of an axis. The values must correspond to values of the R parameter in the M584 command.
+enum class AxisWrapType : uint8_t
+{
+	noWrap = 0,						// axis does not wrap
+	wrapAt360,						// axis wraps, actual position are modulo 360deg
+#if 0	// shortcut axes not implemented yet
+	wrapWithShortcut,				// axis wraps, G0 moves are allowed to take the shortest direction
+#endif
+	undefined						// this one must be last
 };
 
 /***************************************************************************************************/
@@ -175,7 +186,7 @@ enum class DiagnosticTestType : unsigned int
 	PrintObjectSizes = 105,			// print the sizes of various objects
 	PrintObjectAddresses = 106,		// print the addresses and sizes of various objects
 
-#if defined(__LPC17xx__) || defined(STM32F4)
+#if __LPC17xx__ || STM32F4
 	PrintBoardConfiguration = 200,	// Prints out all pin/values loaded from SDCard to configure board
 #endif
 
@@ -315,7 +326,7 @@ public:
 
 	void Diagnostics(MessageType mtype) noexcept;
 	GCodeResult DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, OutputBuffer*& buf, unsigned int d) THROWS(GCodeException);
-	bool WasDeliberateError() const noexcept { return deliberateError; }
+	static bool WasDeliberateError() noexcept { return deliberateError; }
 	void LogError(ErrorCode e) noexcept { errorCodeBits |= (uint32_t)e; }
 
 	bool AtxPower() const noexcept;
@@ -332,7 +343,7 @@ public:
 	size_t GetNumGpOutputsToReport() const noexcept;
 #endif
 
-#if defined(DUET_NG) || defined(DUET_5LC)
+#if defined(DUET_NG) || defined(DUET3MINI)
 	bool IsDuetWiFi() const noexcept;
 #endif
 
@@ -427,7 +438,7 @@ public:
 	void DisableOneLocalDriver(size_t driver) noexcept;
 	void EmergencyDisableDrivers() noexcept;
 	void SetDriversIdle() noexcept;
-	bool SetMotorCurrent(size_t axisOrExtruder, float current, int code, const StringRef& reply) noexcept;
+	GCodeResult SetMotorCurrent(size_t axisOrExtruder, float current, int code, const StringRef& reply) noexcept;
 	float GetMotorCurrent(size_t axisOrExtruder, int code) const noexcept;
 	void SetIdleCurrentFactor(float f) noexcept;
 	float GetIdleCurrentFactor() const noexcept { return idleCurrentFactor; }
@@ -457,6 +468,16 @@ public:
 	float AxisTotalLength(size_t axis) const noexcept;
 	float GetPressureAdvance(size_t extruder) const noexcept;
 	GCodeResult SetPressureAdvance(float advance, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
+
+	inline AxesBitmap GetLinearAxes() const noexcept { return linearAxes; }
+	inline AxesBitmap GetRotationalAxes() const noexcept { return rotationalAxes; }
+	inline bool IsAxisRotational(size_t axis) const noexcept { return rotationalAxes.IsBitSet(axis); }
+	inline bool IsAxisContinuous(size_t axis) const noexcept { return continuousAxes.IsBitSet(axis); }
+#if 0	// shortcut axes not implemented yet
+	inline bool IsAxisShortcutAllowed(size_t axis) const noexcept { return shortcutAxes.IsBitSet(axis); }
+#endif
+
+	void SetAxisType(size_t axis, AxisWrapType wrapType, bool isNistRotational) noexcept;
 
 	const AxisDriversConfig& GetAxisDriversConfig(size_t axis) const noexcept
 		pre(axis < MaxAxes)
@@ -527,7 +548,8 @@ public:
 	MinMaxCurrent GetMcuTemperatures() const noexcept;
 	void SetMcuTemperatureAdjust(float v) noexcept { mcuTemperatureAdjust = v; }
 	float GetMcuTemperatureAdjust() const noexcept { return mcuTemperatureAdjust; }
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
+// FIXME is this still needed
     //Temporary to keep object model happy (return 0's) when no CPU temp is supported
     MinMaxCurrent GetMcuTemperatures() const noexcept {MinMaxCurrent m={0.0}; return m;}
 #endif
@@ -540,7 +562,8 @@ public:
 	void DisableAutoSave() noexcept;
 	void EnableAutoSave(float saveVoltage, float resumeVoltage) noexcept;
 	bool GetAutoSaveSettings(float& saveVoltage, float&resumeVoltage) noexcept;
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
+// FIXME is this still needed
     //Temporary to keep object model happy (return 0's) when no voltage monitor supported
     MinMaxCurrent GetPowerVoltages() const noexcept {MinMaxCurrent m={0.0}; return m;}
     float GetCurrentPowerVoltage() const noexcept {return 0;}
@@ -552,7 +575,7 @@ public:
 #endif
 
 #if HAS_SMART_DRIVERS
-	float GetTmcDriversTemperature(unsigned int board) const noexcept;
+	float GetTmcDriversTemperature(unsigned int boardNumber) const noexcept;
 	void DriverCoolingFansOnOff(DriverChannelsBitmap driverChannelsMonitored, bool on) noexcept;
 	unsigned int GetNumSmartDrivers() const noexcept { return numSmartDrivers; }
 #endif
@@ -572,6 +595,7 @@ public:
 	GCodeResult ConfigureLogging(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 	const char *GetLogFileName() const noexcept;
 #endif
+	const char *GetLogLevel() const noexcept;
 
 	// Ancillary PWM
 	GCodeResult GetSetAncillaryPwm(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
@@ -603,6 +627,7 @@ public:
 
 #if SUPPORT_CAN_EXPANSION
 	void HandleRemoteGpInChange(CanAddress src, uint8_t handleMajor, uint8_t handleMinor, bool state) noexcept;
+	GCodeResult UpdateRemoteStepsPerMmAndMicrostepping(AxesBitmap axesAndExtruders, const StringRef& reply) noexcept;
 #endif
 
 #if VARIABLE_NUM_DRIVERS
@@ -623,7 +648,8 @@ private:
 
 #if SUPPORT_CAN_EXPANSION
 	void IterateDrivers(size_t axisOrExtruder, std::function<void(uint8_t) /*noexcept*/ > localFunc, std::function<void(DriverId) /*noexcept*/ > remoteFunc) noexcept;
-	void IterateLocalDrivers(size_t axisOrExtruder, std::function<void(uint8_t) /*noexcept*/ > func) noexcept { IterateDrivers(axisOrExtruder, func, [](DriverId){}); }
+	void IterateLocalDrivers(size_t axisOrExtruder, std::function<void(uint8_t) /*noexcept*/ > func) noexcept { IterateDrivers(axisOrExtruder, func, [](DriverId) noexcept {}); }
+	void IterateRemoteDrivers(size_t axisOrExtruder, std::function<void(DriverId) /*noexcept*/ > func) noexcept { IterateDrivers(axisOrExtruder, [](uint8_t) noexcept {}, func); }
 #else
 	void IterateDrivers(size_t axisOrExtruder, std::function<void(uint8_t) /*noexcept*/ > localFunc) noexcept;
 	void IterateLocalDrivers(size_t axisOrExtruder, std::function<void(uint8_t) /*noexcept*/ > func) noexcept { IterateDrivers(axisOrExtruder, func); }
@@ -687,6 +713,12 @@ private:
 	uint32_t driveDriverBits[MaxAxesPlusExtruders + NumDirectDrivers];
 															// the bitmap of local driver port bits for each axis or extruder, followed by the bitmaps for the individual Z motors
 	AxisDriversConfig axisDrivers[MaxAxes];					// the driver numbers assigned to each axis
+	AxesBitmap linearAxes;									// axes that behave like linear axes w.r.t. feedrate handling
+	AxesBitmap rotationalAxes;								// axes that behave like rotational axes w.r.t. feedrate handling
+	AxesBitmap continuousAxes;								// axes that wrap modulo 360
+#if 0	// shortcut axes not implemented yet
+	AxesBitmap shortcutAxes;								// axes that wrap modulo 360 and for which G0 may choose the shortest direction
+#endif
 
 	float pressureAdvance[MaxExtruders];
 #if SUPPORT_NONLINEAR_EXTRUSION
@@ -732,7 +764,7 @@ private:
 	Pin spiDacCS[MaxSpiDac];
 	DAC084S085 dacAlligator;
 	DAC084S085 dacPiggy;
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
 	MCP4461 mcp4451;// works for 5561 (only volatile setting commands)
 #endif
 
@@ -880,7 +912,7 @@ private:
 	bool deferredPowerDown;
 
 	// Misc
-	bool deliberateError;								// true if we deliberately caused an exception for testing purposes
+	static bool deliberateError;						// true if we deliberately caused an exception for testing purposes. Must be static in case of exception during startup.
 };
 
 #if HAS_MASS_STORAGE

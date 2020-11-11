@@ -10,6 +10,7 @@
 
 #include "RepRap.h"
 #include "Platform.h"
+#include <Tasks.h>
 
 #include <ctime>
 
@@ -29,12 +30,14 @@ Filament::Filament(int extr) noexcept : extruder(extr)
 
 void Filament::Load(const char *filamentName) noexcept
 {
+	MutexLocker locker(Tasks::GetFilamentsMutex());
 	SafeStrncpy(name, filamentName, ARRAY_SIZE(name));
 	Filament::SaveAssignments();
 }
 
 void Filament::Unload() noexcept
 {
+	MutexLocker locker(Tasks::GetFilamentsMutex());
 	strcpy(name, "");
 	Filament::SaveAssignments();
 }
@@ -50,7 +53,7 @@ void Filament::LoadAssignment() noexcept
 	}
 # endif
 
-	FileStore *file = reprap.GetPlatform().OpenSysFile(FilamentAssignmentFile, OpenMode::read);
+	FileStore * const file = reprap.GetPlatform().OpenSysFile(FilamentAssignmentFile, OpenMode::read);
 	if (file == nullptr)
 	{
 		// May happen, but not critical
@@ -148,11 +151,11 @@ void Filament::LoadAssignment() noexcept
 	return false;
 }
 
-/*static*/ Filament *Filament::GetFilamentByExtruder(const int drive) noexcept
+/*static*/ Filament *Filament::GetFilamentByExtruder(const int extr) noexcept
 {
 	for (Filament *f = filamentList; f != nullptr; f = f->next)
 	{
-		if (f->GetExtruder() == drive)
+		if (f->GetExtruder() == extr)
 		{
 			return f;
 		}

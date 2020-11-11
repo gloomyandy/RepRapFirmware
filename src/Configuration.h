@@ -107,7 +107,7 @@ constexpr float DefaultHotEndHeaterDeadTime = 5.5;
 constexpr unsigned int FirstExtraHeaterProtection = 100;	// Index of the first extra heater protection item
 
 // Default thermistor parameters
-#ifndef DUET3		// for Duet 3 these are defined in Duet3Common.h in project CANLib
+#if !defined(DUET3) && !defined(DUET3MINI)				// for Duet 3 these are defined in Duet3Common.h in project CANLib
 constexpr float DefaultThermistorR25 = 100000.0;
 constexpr float DefaultThermistorBeta = 4725.0;
 constexpr float DefaultThermistorC = 7.06e-8;
@@ -137,7 +137,7 @@ constexpr PwmFrequency DefaultPinWritePwmFreq = 500;	// default PWM frequency fo
 constexpr PwmFrequency ServoRefreshFrequency = 50;
 
 // Fan defaults
-#ifndef DUET3		// for Duet 3 these are defined in Duet3Common.h in project CANLib
+#if !defined(DUET3) && !defined(DUET3MINI)				// for Duet 3 these are defined in Duet3Common.h in project CANLib
 constexpr float DefaultMinFanPwm = 0.1;					// minimum fan PWM
 constexpr uint32_t DefaultFanBlipTime = 100;			// fan blip time in milliseconds
 #endif
@@ -153,7 +153,7 @@ constexpr unsigned int MaxBlockIndent = 10;				// maximum indentation of GCode. 
 //     Using single-precision maths and up to 9-factor calibration: (9 + 5) * 4 bytes per point
 //     Using double-precision maths and up to 9-factor calibration: (9 + 5) * 8 bytes per point
 //   So 32 points using double precision arithmetic need 3584 bytes of stack space.
-#if SAM4E || SAM4S || SAME70 || SAME5x || defined(STM32F4)
+#if SAM4E || SAM4S || SAME70 || SAME5x || STM32F4
 constexpr size_t MaxGridProbePoints = 441;				// 441 allows us to probe e.g. 400x400 at 20mm intervals
 constexpr size_t MaxXGridPoints = 41;					// Maximum number of grid points in one X row
 constexpr size_t MaxProbePoints = 32;					// Maximum number of G30 probe points
@@ -163,10 +163,10 @@ constexpr size_t MaxGridProbePoints = 121;				// 121 allows us to probe 200x200 
 constexpr size_t MaxXGridPoints = 21;					// Maximum number of grid points in one X row
 constexpr size_t MaxProbePoints = 32;					// Maximum number of G30 probe points
 constexpr size_t MaxCalibrationPoints = 32;				// Should a power of 2 for speed
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
 constexpr size_t MaxGridProbePoints = 121;    			// 121 allows us to probe 200x200 at 20mm intervals
 constexpr size_t MaxXGridPoints = 21;         			// Maximum number of grid points in one X row
-constexpr size_t MaxProbePoints = 32;       			// Maximum number of G30 probe points
+constexpr size_t MaxProbePoints = 16;       			// Maximum number of G30 probe points
 constexpr size_t MaxCalibrationPoints = 16; 			// Should a power of 2 for speed
 #else
 # error
@@ -189,7 +189,7 @@ constexpr float DefaultProbingSpeed = 2.0;				// Default Z probing speed mm/sec
 constexpr float DefaultZProbeTravelSpeed = 100.0;		// Default speed for travel to probe points
 constexpr float ZProbeMaxAcceleration = 250.0;			// Maximum Z acceleration to use at the start of a probing move
 
-#if !SAME70												// Using SAME70 as a proxy for Duet 3
+#if !defined(DUET3) && !defined(DUET3MINI)				// for Duet 3 these are defined in Duet3Common.h in project CANLib
 constexpr size_t MaxZProbeProgramBytes = 8;				// Maximum number of bytes in a Z probe program
 #endif
 
@@ -228,21 +228,23 @@ constexpr size_t MachineNameLength = StringLength50;
 constexpr size_t RepRapPasswordLength = StringLength20;
 constexpr size_t MediumStringLength = MaxFilenameLength;
 constexpr size_t StringBufferLength = StringLength256;	// Length of the string buffer used by the expression parser
+constexpr size_t StringLengthLoggedCommand = StringLength100;	// Length of a string buffer for a command to be logged
 
-#if SAM4E || SAM4S || SAME70 || SAME5x || defined(ESP_NETWORKING) || defined(__LPC17xx__)
+#if SAM4E || SAM4S || SAME70 || SAME5x || defined(ESP_NETWORKING)
 // Increased GCODE_LENGTH on the SAM4 because M587 and M589 commands on the Duet WiFi can get very long and GCode meta commands can get even longer
 constexpr size_t GCODE_LENGTH = 201;					// maximum number of non-comment characters in a line of GCode including the null terminator
-constexpr size_t SHORT_GCODE_LENGTH = 61;				// maximum length of a GCode that we can queue to synchronise it to a move
 #else
 constexpr size_t GCODE_LENGTH = 101;					// maximum number of non-comment characters in a line of GCode including the null terminator
-constexpr size_t SHORT_GCODE_LENGTH = 61;				// maximum length of a GCode that we can queue to synchronise it to a move
 #endif
+
+// Define the maximum length of a GCode that we can queue to synchronise it to a move. Long enough for M150 R255 U255 B255 P255 S255 F1 encoded in binary mode (64 bytes).
+constexpr size_t SHORT_GCODE_LENGTH = 64;
 
 // Output buffer length and number of buffers
 // When using RTOS, it is best if it is possible to fit an HTTP response header in a single buffer. Our headers are currently about 230 bytes long.
 // A note on reserved buffers: the worst case is when a GCode with a long response is processed. After string the response, there must be enough buffer space
 // for the HTTP responder to return a status response. Otherwise DWC never gets to know that it needs to make a rr_reply call and the system deadlocks.
-#if SAME70 || SAME5x || defined(STM32F4)
+#if SAME70 || SAME5x || STM32F4
 constexpr size_t OUTPUT_BUFFER_SIZE = 256;				// How many bytes does each OutputBuffer hold?
 constexpr size_t OUTPUT_BUFFER_COUNT = 40;				// How many OutputBuffer instances do we have?
 constexpr size_t RESERVED_OUTPUT_BUFFERS = 4;			// Number of reserved output buffers after long responses, enough to hold a status response
@@ -254,7 +256,7 @@ constexpr size_t RESERVED_OUTPUT_BUFFERS = 4;			// Number of reserved output buf
 constexpr size_t OUTPUT_BUFFER_SIZE = 256;				// How many bytes does each OutputBuffer hold?
 constexpr size_t OUTPUT_BUFFER_COUNT = 16;				// How many OutputBuffer instances do we have?
 constexpr size_t RESERVED_OUTPUT_BUFFERS = 2;			// Number of reserved output buffers after long responses
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
 constexpr uint16_t OUTPUT_BUFFER_SIZE = 256;            // How many bytes does each OutputBuffer hold?
 constexpr size_t OUTPUT_BUFFER_COUNT = 16;              // How many OutputBuffer instances do we have?
 constexpr size_t RESERVED_OUTPUT_BUFFERS = 2;           // Number of reserved output buffers after long responses. Must be enough for an HTTP header
@@ -315,7 +317,7 @@ constexpr uint32_t I2cClockFreq = 100000;				// clock frequency in Hz. 100kHz is
 constexpr size_t MaxI2cBytes = 32;						// max bytes in M260 or M261 command
 
 // File handling
-#if defined(__LPC17xx__)
+#if __LPC17xx__
 # if defined (ESP_NETWORKING)
 constexpr size_t MAX_FILES = 10;						// Must be large enough to handle the max number of concurrent web requests + file being printed + macros being executed + log file
 # else

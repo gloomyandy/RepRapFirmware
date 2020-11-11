@@ -32,7 +32,7 @@ protected:
 	void SendData() noexcept override;
 
 private:
-#ifdef __LPC17xx__
+#if __LPC17xx__
 	static const size_t MaxHttpSessions = 2;            // maximum number of simultaneous HTTP sessions
 #else
 	static const size_t MaxHttpSessions = 8;			// maximum number of simultaneous HTTP sessions

@@ -19,6 +19,8 @@ class IoPort
 {
 public:
 	IoPort() noexcept;
+	~IoPort() { Release(); }
+
 	bool SetMode(PinAccess access) noexcept;
 	void Release() noexcept;
 	void AppendDetails(const StringRef& str) const noexcept;
@@ -35,7 +37,7 @@ public:
 	void SetInvert(bool pInvert) noexcept;
 	void ToggleInvert(bool pInvert) noexcept;
 
-	bool Read() const noexcept;
+	bool ReadDigital() const noexcept;
 	bool AttachInterrupt(StandardCallbackFunction callback, InterruptMode mode, CallbackParameter param) const noexcept;
 	void DetachInterrupt() const noexcept;
 

@@ -186,7 +186,7 @@ void Move::Init() noexcept
 	SetIdentityTransform();
 	tanXY = tanYZ = tanXZ = 0.0;
 
-	usingMesh = useTaper = executeAllMoves = false;
+	usingMesh = useTaper = false;
 	zShift = 0.0;
 
 	idleTimeout = DefaultIdleTimeout;
@@ -297,7 +297,7 @@ void Move::Spin() noexcept
 		}
 	}
 
-	mainDDARing.Spin(simulationMode, executeAllMoves || idleCount > 10);	// let the DDA ring process moves. Better to have a few moves in the queue so that we can do lookahead, hence the test on idleCount.
+	mainDDARing.Spin(simulationMode, idleCount > 10);	// let the DDA ring process moves. Better to have a few moves in the queue so that we can do lookahead, hence the test on idleCount.
 
 #if SUPPORT_ASYNC_MOVES
 	if (auxMoveAvailable && auxDDARing.CanAddMove())
@@ -333,6 +333,12 @@ void Move::Spin() noexcept
 	{
 		moveState = MoveState::executing;
 	}
+}
+
+// Tell the lookahead ring we are waiting for it to empty and return true if it is
+bool Move::WaitingForAllMovesFinished() noexcept
+{
+	return mainDDARing.SetWaitingToEmpty();
 }
 
 // Return the number of currently used probe points
@@ -422,7 +428,6 @@ void Move::Diagnostics(MessageType mtype) noexcept
 						DriveMovement::NumFree(), DriveMovement::MinFree(), longestGcodeWaitInterval);
 	longestGcodeWaitInterval = 0;
 	DriveMovement::ResetMinFree();
-
 #if defined(__ALLIGATOR__)
 	// Motor Fault Diagnostic
 	reprap.GetPlatform().MessageF(mtype, "Motor Fault status: %s\n", digitalRead(MotorFaultDetectPin) ? "none" : "FAULT detected!" );

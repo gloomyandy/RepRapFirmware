@@ -207,6 +207,16 @@ struct DriverId
 		localDriver = (uint8_t)driver;
 	}
 
+	bool operator==(const DriverId other) const noexcept
+	{
+		return localDriver == other.localDriver;
+	}
+
+	bool operator!=(const DriverId other) const noexcept
+	{
+		return localDriver != other.localDriver;
+	}
+
 	void Clear() noexcept { localDriver = 0; }
 
 	bool IsLocal() const noexcept { return true; }
@@ -249,7 +259,8 @@ enum Module : uint8_t
 	moduleWiFi = 14,
 	moduleDisplay = 15,
 	moduleLinuxInterface = 16,
-	numModules = 17,				// make this one greater than the last real module number
+	moduleCan = 17,
+	numModules = 18,				// make this one greater than the last real module number
 	noModule = numModules
 };
 
@@ -303,7 +314,11 @@ typedef double floatc_t;						// type of matrix element used for calibration
 typedef float floatc_t;							// type of matrix element used for calibration
 #endif
 
-typedef Bitmap<uint16_t> AxesBitmap;			// Type of a bitmap representing a set of axes
+#ifdef DUET3
+typedef Bitmap<uint32_t> AxesBitmap;			// Type of a bitmap representing a set of axes, and sometimes extruders too
+#else
+typedef Bitmap<uint16_t> AxesBitmap;			// Type of a bitmap representing a set of axes, and sometimes extruders too
+#endif
 typedef Bitmap<uint32_t> ExtrudersBitmap;		// Type of a bitmap representing a set of extruder drive numbers
 typedef Bitmap<uint32_t> DriversBitmap;			// Type of a bitmap representing a set of local driver numbers
 typedef Bitmap<uint32_t> FansBitmap;			// Type of a bitmap representing a set of fan numbers
@@ -312,15 +327,13 @@ typedef Bitmap<uint16_t> DriverChannelsBitmap;	// Type of a bitmap representing 
 typedef Bitmap<uint16_t> InputPortsBitmap;		// Type of a bitmap representing a set of input ports
 typedef Bitmap<uint32_t> TriggerNumbersBitmap;	// Type of a bitmap representing a set of trigger numbers
 
-typedef uint16_t Pwm_t;							// Type of a PWM value when we don't want to use floats
-
-#if SUPPORT_CAN_EXPANSION
+#if defined(DUET3) || defined(DUET3MINI)
 typedef Bitmap<uint64_t> SensorsBitmap;
 #else
 typedef Bitmap<uint32_t> SensorsBitmap;
 #endif
 
-static_assert(MaxAxes <= AxesBitmap::MaxBits());
+static_assert(MaxAxesPlusExtruders <= AxesBitmap::MaxBits());
 static_assert(MaxExtruders <= ExtrudersBitmap::MaxBits());
 static_assert(MaxFans <= FansBitmap::MaxBits());
 static_assert(MaxHeaters <= HeatersBitmap::MaxBits());
@@ -329,8 +342,10 @@ static_assert(MaxSensors <= SensorsBitmap::MaxBits());
 static_assert(MaxGpInPorts <= InputPortsBitmap::MaxBits());
 static_assert(MaxTriggers <= TriggerNumbersBitmap::MaxBits());
 
+typedef uint16_t Pwm_t;							// Type of a PWM value when we don't want to use floats
+
 #if SUPPORT_IOBITS
-typedef uint16_t IoBits_t;					// Type of the port control bitmap (G1 P parameter)
+typedef uint16_t IoBits_t;						// Type of the port control bitmap (G1 P parameter)
 #endif
 
 #if SUPPORT_LASER || SUPPORT_IOBITS
@@ -483,12 +498,13 @@ const NvicPriority NvicPriorityPanelDueUartRx = 1;	// UART used to receive data 
 const NvicPriority NvicPriorityPanelDueUartTx = 3;	// the SAME5x driver makes FreeRTOS calls during transmission, so use a lower priority
 const NvicPriority NvicPriorityWiFiUartRx = 2;		// UART used to receive debug data from the WiFi module
 const NvicPriority NvicPriorityWiFiUartTx = 3;		// the SAME5x driver makes FreeRTOS calls during transmission, so use a lower priority
+const NvicPriority NvicPriorityDriverDiag = 4;
 #else
 const NvicPriority NvicPriorityPanelDueUart = 1;	// UART is highest to avoid character loss (it has only a 1-character receive buffer)
 const NvicPriority NvicPriorityWiFiUart = 2;		// UART used to receive debug data from the WiFi module
 #endif
 
-const NvicPriority NvicPriorityMCan = 3;			// CAN interface
+const NvicPriority NvicPriorityCan = 3;				// CAN interface
 const NvicPriority NvicPriorityPins = 3;			// priority for GPIO pin interrupts - filament sensors must be higher than step
 const NvicPriority NvicPriorityDriversSerialTMC = 3; // USART or UART used to control and monitor the smart drivers
 const NvicPriority NvicPriorityStep = 4;			// step interrupt is next highest, it can preempt most other interrupts
@@ -510,7 +526,7 @@ const NvicPriority NvicPrioritySpi = 6;				// SPI is used for network transfers 
 const NvicPriority NvicPriorityWatchdog = 0;		// the secondary watchdog has the highest priority
 # endif
 
-# if defined(__LPC17xx__)
+# if __LPC17xx__
 const NvicPriority NvicPriorityWatchdog = 0;		// the secondary watchdog has the highest priority
 const NvicPriority NvicPriorityDriversSerialTMC = 1;// LPC uses a software UART, make this a very high priority
 const NvicPriority NvicPriorityTimerPWM = 2;		// Run PWM timing as high as we can to avoid jitter
@@ -523,7 +539,7 @@ const NvicPriority NvicPriorityTimerServo = 5;
 #  else
     const NvicPriority NvicPriorityDMA = NvicPriorityADC;
 #  endif
-#elif defined(STM32F4)
+#elif STM32F4
 const NvicPriority NvicPriorityWatchdog = 0;		// the secondary watchdog has the highest priority
 const NvicPriority NvicPriorityDriversSerialTMC = 1;// STM uses a software UART, make this a very high priority
 const NvicPriority NvicPriorityTimerPWM = 2;		// Run PWM timing as high as we can to avoid jitter

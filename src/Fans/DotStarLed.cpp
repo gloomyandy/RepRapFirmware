@@ -7,7 +7,7 @@
 
 #include "DotStarLed.h"
 
-#if SUPPORT_DOTSTAR_LED
+#if SUPPORT_DOTSTAR_LED && !__LPC17xx__ && !STM32F4
 
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <Movement/StepTimer.h>
@@ -21,6 +21,7 @@
 # include <DmacManager.h>
 # if SAME5x
 #  include <Hardware/IoPorts.h>
+#  include <hri_mclk_e54.h>
 # elif SAME70
 #  include <sam/drivers/xdmac/xdmac.h>
 # endif
@@ -172,7 +173,7 @@ namespace DotStarLed
 #endif
 	}
 
-#ifndef DUET_5LC
+#ifndef DUET3MINI
 	// Send data to DotStar LEDs
 	static GCodeResult SendDotStarData(uint32_t data, uint32_t numLeds, bool following) noexcept
 	{
@@ -276,7 +277,7 @@ namespace DotStarLed
 		return GCodeResult::ok;
 	}
 
-#ifdef DUET_5LC
+#ifdef DUET3MINI
 	constexpr uint32_t NanosecondsToCycles(uint32_t ns) noexcept
 	{
 		return (ns * (uint64_t)SystemCoreClockFreq)/1000000000u;
@@ -391,7 +392,7 @@ GCodeResult DotStarLed::SetColours(GCodeBuffer& gb, const StringRef& reply) THRO
 	{
 		seen = true;
 		const uint32_t newType = gb.GetLimitedUIValue('X',
-#ifdef DUET_5LC
+#ifdef DUET3MINI
 				3, 1														// types 1 and 2 are supported
 #else
 				2, 0														// types 0 and 1 are supported
@@ -424,7 +425,7 @@ GCodeResult DotStarLed::SetColours(GCodeBuffer& gb, const StringRef& reply) THRO
 				DmaSendChunkBuffer(1);
 				return GCodeResult::notFinished;
 			}
-#ifdef DUET_5LC
+#ifdef DUET3MINI
 			else if (ledType == 2)
 			{
 				// Set the data output low to start a WS2812 reset sequence
@@ -474,7 +475,7 @@ GCodeResult DotStarLed::SetColours(GCodeBuffer& gb, const StringRef& reply) THRO
 
 	switch (ledType)
 	{
-#ifndef DUET_5LC
+#ifndef DUET3MINI
 	case 0:	// DotStar
 		{
 #if USE_16BIT_SPI
@@ -495,7 +496,7 @@ GCodeResult DotStarLed::SetColours(GCodeBuffer& gb, const StringRef& reply) THRO
 									numLeds, following
 							      );
 
-#ifdef DUET_5LC
+#ifdef DUET3MINI
 	case 2:
 		// Scale RGB by the brightness
 		return BitBangNeoPixelData(	(uint8_t)((red * brightness + 255) >> 8),

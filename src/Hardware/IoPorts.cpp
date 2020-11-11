@@ -144,7 +144,7 @@ void IoPort::Release() noexcept
 {
 	if (IsValid() && !isSharedInput)
 	{
-#if defined(__LPC17xx__)
+#if __LPC17xx__
 		// Release PWM/Servo from pin if needed
 		if (logicalPinModes[logicalPin] == OUTPUT_SERVO_HIGH || logicalPinModes[logicalPin] == OUTPUT_SERVO_LOW)
 		{
@@ -154,7 +154,7 @@ void IoPort::Release() noexcept
 		{
 			ReleasePWMPin(GetPinNoCheck());
 		}
-#elif defined(STM32F4)
+#elif STM32F4
 		if (logicalPinModes[logicalPin] == OUTPUT_PWM_HIGH || logicalPinModes[logicalPin] == OUTPUT_PWM_LOW)
 		{
 			ReleasePWMPin(GetPinNoCheck());
@@ -292,7 +292,7 @@ bool IoPort::SetMode(PinAccess access) noexcept
 	case PinAccess::write1:
 		desiredMode = (totalInvert) ? OUTPUT_LOW : OUTPUT_HIGH;
 		break;
-#ifdef __LPC17xx__
+#if __LPC17xx__
 	case PinAccess::pwm:
 		desiredMode = (totalInvert) ? OUTPUT_PWM_HIGH : OUTPUT_PWM_LOW;
 		break;
@@ -338,7 +338,7 @@ bool IoPort::SetMode(PinAccess access) noexcept
 		{
 			return false;
 		}
-#ifdef __LPC17xx__
+#if __LPC17xx__
 		if (access == PinAccess::servo)
 		{
 			if (!IsServoCapable(GetPinNoCheck())) //check that we have slots free to provide Servo
@@ -495,7 +495,7 @@ Pin IoPort::GetPin() const noexcept
 	return (IsValid()) ? GetPinNoCheck() : NoPin;
 }
 
-bool IoPort::Read() const noexcept
+bool IoPort::ReadDigital() const noexcept
 {
 	if (IsValid())
 	{

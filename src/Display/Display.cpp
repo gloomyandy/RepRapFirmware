@@ -28,6 +28,31 @@ constexpr size_t LargeFontNumber = 1;
 constexpr uint32_t NormalRefreshMillis = 250;
 constexpr uint32_t FastRefreshMillis = 50;
 
+#if SUPPORT_OBJECT_MODEL
+
+// Object model table and functions
+// Note: if using GCC version 7.3.1 20180622 and lambda functions are used in this table, you must compile this file with option -std=gnu++17.
+// Otherwise the table will be allocated in RAM instead of flash, which wastes too much RAM.
+
+// Macro to build a standard lambda function that includes the necessary type conversions
+#define OBJECT_MODEL_FUNC(...) OBJECT_MODEL_FUNC_BODY(Display, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC_IF(...) OBJECT_MODEL_FUNC_IF_BODY(Display, __VA_ARGS__)
+
+constexpr ObjectModelTableEntry Display::objectModelTable[] =
+{
+	// Within each group, these entries must be in alphabetical order
+	// 0. Display members
+	{ "pulsesPerClick",			OBJECT_MODEL_FUNC((int32_t)self->encoder->GetPulsesPerClick()), 	ObjectModelEntryFlags::none },
+	{ "spiFreq",				OBJECT_MODEL_FUNC((int32_t)self->lcd->GetSpiFrequency()), 			ObjectModelEntryFlags::none },
+	{ "typeName", 				OBJECT_MODEL_FUNC(self->lcd->GetDisplayTypeName()), 				ObjectModelEntryFlags::none },
+};
+
+constexpr uint8_t Display::objectModelTableDescriptor[] = { 1, 3 };
+
+DEFINE_GET_OBJECT_MODEL_TABLE(Display)
+
+#endif
+
 Display::Display() noexcept
 	: lcd(nullptr), menu(nullptr), encoder(nullptr), lastRefreshMillis(0),
 	  mboxSeq(0), mboxActive(false), beepActive(false), updatingFirmware(false)
@@ -143,11 +168,13 @@ void Display::ErrorBeep() noexcept
 	Beep(500, 1000);
 }
 
-void Display::InitDisplay(GCodeBuffer& gb, Lcd *newLcd, bool defaultCsPolarity) THROWS(GCodeException)
+void Display::InitDisplay(GCodeBuffer& gb, Lcd *newLcd, Pin csPin, Pin a0Pin, bool defaultCsPolarity) THROWS(GCodeException)
 {
-	newLcd->Init(LcdCSPin, LcdA0Pin, defaultCsPolarity, (gb.Seen('F')) ? gb.GetUIValue() : LcdSpiClockFrequency);
-	IoPort::SetPinMode(LcdBeepPin, OUTPUT_PWM_LOW);
-	newLcd->SetFont(SmallFontNumber);
+	// ST7567-based displays need a resistor ration setting and a contrast setting
+	// For now we always pass these as parameters toLcd::Init(). If we get any more, consider passing the GCodeBuffer and letting the display pick the parameters instead.
+	const uint32_t contrast = (gb.Seen('C')) ? gb.GetUIValue() : DefaultDisplayContrastRatio;
+	const uint32_t resistorRatio = (gb.Seen('R')) ? gb.GetUIValue() : DefaultDisplayResistorRatio;
+	newLcd->Init(csPin, a0Pin, defaultCsPolarity, (gb.Seen('F')) ? gb.GetUIValue() : LcdSpiClockFrequency, contrast, resistorRatio);
 	IoPort::SetPinMode(LcdBeepPin, OUTPUT_PWM_LOW);
 	newLcd->SetFont(SmallFontNumber);
 
@@ -177,11 +204,18 @@ GCodeResult Display::Configure(GCodeBuffer& gb, const StringRef& reply) THROWS(G
 		switch (gb.GetUIValue())
 		{
 		case 1:		// 12864 display, ST7920 controller
-			InitDisplay(gb, new Lcd7920(fonts, ARRAY_SIZE(fonts)), true);
+			InitDisplay(gb, new Lcd7920(fonts, ARRAY_SIZE(fonts)), LcdCSPin, NoPin, true);
 			break;
 
 		case 2:		// 12864 display, ST7567 controller
-			InitDisplay(gb, new Lcd7567(fonts, ARRAY_SIZE(fonts)), false);
+#ifdef DUET_M
+			// On the Duet Maestro only, the CS pin is active high and gates the clock signal.
+			// The ST7567 needs an active low CS signal, so we must use a different CS pin and set the original one high to let the clock through.
+			pinMode(LcdCSPin, OUTPUT_HIGH);
+			InitDisplay(gb, new Lcd7567(fonts, ARRAY_SIZE(fonts)), LcdCSAltPin, LcdA0Pin, false);
+#else
+			InitDisplay(gb, new Lcd7567(fonts, ARRAY_SIZE(fonts)), LcdCSPin, LcdA0Pin, false);
+#endif
 			break;
 
 		default:

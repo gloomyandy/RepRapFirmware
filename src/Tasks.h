@@ -15,9 +15,13 @@
 namespace Tasks
 {
 	void Diagnostics(MessageType mtype) noexcept;
-	uint32_t GetNeverUsedRam() noexcept;
+	TaskHandle GetMainTask() noexcept;
+	void TerminateMainTask() noexcept;
+	ptrdiff_t GetNeverUsedRam() noexcept;
+	const char* GetHeapTop() noexcept;
 	const Mutex *GetI2CMutex() noexcept;
 	const Mutex *GetSysDirMutex() noexcept;
+	const Mutex *GetFilamentsMutex() noexcept;
 }
 
 #endif /* SRC_TASKS_H_ */

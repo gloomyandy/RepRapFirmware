@@ -15,20 +15,21 @@
 #include "RepRapFirmware.h"
 #include "MessageType.h"
 
-constexpr uint8_t LinuxFormatCode = 0x5F;
+constexpr uint8_t LinuxFormatCode = 0x5F;			// standard format code for RRF SPI protocol
+constexpr uint8_t LiunxFormatCodeStandalone = 0x60;	// used to indicate that RRF is running in stand-alone mode
 constexpr uint8_t InvalidFormatCode = 0xC9;			// must be different from any other format code
 
-constexpr uint16_t LinuxProtocolVersion = 2;
+constexpr uint16_t LinuxProtocolVersion = 3;
 
-#ifndef __LPC17xx__
+#if !__LPC17xx__
 constexpr size_t LinuxTransferBufferSize = 8192;	// maximum length of a data transfer. Must be a multiple of 4 and kept in sync with Duet Control Server!
 #else
-constexpr size_t LinuxTransferBufferSize = 4096;    // maximum length of a data transfer. Must be a multiple of 4 and kept in sync with Duet Control Server!
+constexpr size_t LinuxTransferBufferSize = 3072;    // maximum length of a data transfer. Must be a multiple of 4 and kept in sync with Duet Control Server!
 #endif
 
 static_assert(LinuxTransferBufferSize % sizeof(uint32_t) == 0, "LinuxTransferBufferSize must be a whole number of dwords");
 
-#ifndef __LPC17xx__
+#if !__LPC17xx__
 constexpr size_t MaxCodeBufferSize = 256;			// maximum length of a G/M/T-code in binary encoding
 #else
 constexpr size_t MaxCodeBufferSize = 256;           // maximum length of a G/M/T-code in binary encoding
@@ -40,10 +41,10 @@ static_assert(MaxCodeBufferSize >= GCODE_LENGTH, "MaxCodeBufferSize must be at l
 constexpr uint32_t SpiTransferTimeout = 500;		// maximum allowed delay between data exchanges during a full transfer (in ms)
 constexpr uint32_t SpiConnectionTimeout = 8000;		// maximum time to wait for the next transfer (in ms)
 
-#ifndef __LPC17xx__
+#if !__LPC17xx__
 constexpr uint16_t SpiCodeBufferSize = 4096;		// number of bytes available for G-code caching
 #else
-constexpr uint16_t SpiCodeBufferSize = 4096/2;        // number of bytes available for G-code caching
+constexpr uint16_t SpiCodeBufferSize = 2048;        // number of bytes available for G-code caching
 #endif
 
 // Shared structures
@@ -164,7 +165,7 @@ struct EvaluationResultHeader
 struct ExecuteMacroHeader
 {
 	uint8_t channel;
-	bool reportMissing;
+	uint8_t dummy;
 	bool fromCode;
 	uint8_t length;
 };
@@ -184,14 +185,16 @@ enum class FirmwareRequest : uint16_t
 	Message = 3,						// Message from the firmware
 	ExecuteMacro = 4,					// Request execution of a macro file
 	AbortFile = 5,						// Request the current file to be closed
-	StackEvent_Obsolete = 6,			// Stack has been changed
+	StackEvent_Obsolete = 6,			// Stack has been changed (unused)
 	PrintPaused = 7,					// Print has been paused
 	HeightMap = 8,						// Response to a heightmap request
 	Locked = 9,							// Movement has been locked and machine is in standstill
 	FileChunk = 10,						// Request another chunk of a file
 	EvaluationResult = 11,				// Response to an expression evaluation request
 	DoCode = 12,						// Perform a G/M/T-code from a code input
-	WaitForMessageAcknowledgment = 13	// Wait for a message to be acknowledged
+	WaitForMessageAcknowledgment = 13,	// Wait for a message to be acknowledged
+	MacroFileClosed = 14,				// Last macro file has been closed
+	MessageAcknowledged = 15			// Pending message prompt has been acknowledged
 };
 
 enum class PrintPausedReason : uint8_t
@@ -201,7 +204,7 @@ enum class PrintPausedReason : uint8_t
 	filamentChange = 3,
 	trigger = 4,
 	heaterFault = 5,
-	filament = 6,
+	filamentError = 6,
 	stall = 7,
 	lowVoltage = 8
 };

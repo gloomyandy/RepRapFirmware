@@ -24,7 +24,7 @@
 # define USE_XDMAC			1		// use XDMA controller
 # define USE_DMAC_MANAGER	0		// use SAME5x DmacManager module
 
-#elif defined(DUET_5LC)
+#elif defined(DUET3MINI)
 
 # define USE_DMAC			0		// use general DMA controller
 # define USE_XDMAC			0		// use XDMA controller
@@ -32,7 +32,7 @@
 constexpr IRQn SBC_SPI_IRQn = SbcSpiSercomIRQn;
 #define USE_32BIT_TRANSFERS		1
 
-#elif defined(__LPC17xx__) || defined(STM32F4)
+#elif __LPC17xx__ || STM32F4
 # define USE_DMAC           0
 # define USE_XDMAC          0
 #else
@@ -63,8 +63,10 @@ constexpr IRQn SBC_SPI_IRQn = SbcSpiSercomIRQn;
 #include "RTOSIface/RTOSIface.h"
 
 #include <General/IP4String.h>
+static TaskHandle linuxTaskHandle = nullptr;
 
-#if !defined(__LPC17xx__) && !defined(STM32F4)
+#if !__LPC17xx__ && !STM32F4
+
 #if USE_DMAC
 
 // Hardware IDs of the SPI transmit and receive DMA interfaces. See atsam datasheet.
@@ -308,7 +310,8 @@ static void setup_spi(void *inBuffer, const void *outBuffer, size_t bytesToTrans
 #if SAME5x
 	SbcSpiSercom->SPI.INTFLAG.reg = 0xFF;			// clear any pending interrupts
 	SbcSpiSercom->SPI.INTENSET.reg = SERCOM_SPI_INTENSET_SSL;	// enable the start of transfer (SS low) interrupt
-	hri_sercomspi_set_CTRLA_ENABLE_bit(SbcSpiSercom);
+	SbcSpiSercom->SPI.CTRLA.reg |= SERCOM_SPI_CTRLA_ENABLE;
+	while (SbcSpiSercom->SPI.SYNCBUSY.reg & (SERCOM_SPI_SYNCBUSY_SWRST | SERCOM_SPI_SYNCBUSY_ENABLE)) { };
 #else
 	spi_enable(SBC_SPI);
 
@@ -331,7 +334,8 @@ void disable_spi() noexcept
 
 	// Disable SPI
 #if SAME5x
-	hri_sercomspi_clear_CTRLA_ENABLE_bit(SbcSpiSercom);
+	SbcSpiSercom->SPI.CTRLA.reg &= ~SERCOM_SPI_CTRLA_ENABLE;
+	while (SbcSpiSercom->SPI.SYNCBUSY.reg & (SERCOM_SPI_SYNCBUSY_SWRST | SERCOM_SPI_SYNCBUSY_ENABLE)) { };
 #else
 	spi_disable(SBC_SPI);
 #endif
@@ -351,7 +355,9 @@ extern "C" void SBC_SPI_HANDLER() noexcept
 	{
 		SbcSpiSercom->SPI.INTENCLR.reg = SERCOM_SPI_INTENSET_SSL;		// disable the interrupt
 		SbcSpiSercom->SPI.INTFLAG.reg = SERCOM_SPI_INTENSET_SSL;		// clear the status
+
 		dataReceived = true;
+		TaskBase::GiveFromISR(linuxTaskHandle);
 	}
 #else
 	const uint32_t status = SBC_SPI->SPI_SR;							// read status and clear interrupt
@@ -360,7 +366,6 @@ extern "C" void SBC_SPI_HANDLER() noexcept
 	{
 		// Data has been transferred, disable transfer ready pin and XDMAC channels
 		disable_spi();
-		dataReceived = true;
 
 		// Check if any error occurred
 		if ((status & SPI_SR_OVRES) != 0)
@@ -371,14 +376,18 @@ extern "C" void SBC_SPI_HANDLER() noexcept
 		{
 			++spiTxUnderruns;
 		}
+
+		// Wake up the Linux task
+		dataReceived = true;
+		TaskBase::GiveFromISR(linuxTaskHandle);
 	}
 #endif
 }
 
 #else
-#if defined(__LPC17xx__)
+#if __LPC17xx__
 # include "LPC/Linux/DataTransfer.hpp"
-#elif defined(STM32F4)
+#elif STM32F4
 # include "STM32/Linux/DataTransfer.hpp"
 #endif
 #endif
@@ -418,7 +427,6 @@ void DataTransfer::Init() noexcept
 {
 	// Initialise transfer ready pin
 	pinMode(SbcTfrReadyPin, OUTPUT_LOW);
-	// Initialize SPI pins
 
 #if !SAME70
 	// Allocate buffers
@@ -426,7 +434,7 @@ void DataTransfer::Init() noexcept
 	txBuffer = (char *)new uint32_t[(LinuxTransferBufferSize + 3)/4];
 #endif
 
-#if defined(__LPC17xx__) || defined(STM32F4)
+#if __LPC17xx__ || STM32F4
     InitSpi();
 #elif SAME5x
 	// Initialize SPI
@@ -438,11 +446,13 @@ void DataTransfer::Init() noexcept
 	Serial::EnableSercomClock(SbcSpiSercomNumber);
 	spi_dma_disable();
 
-	hri_sercomspi_set_CTRLA_SWRST_bit(SbcSpiSercom);
+	SbcSpiSercom->SPI.CTRLA.reg |= SERCOM_SPI_CTRLA_SWRST;
+	while (SbcSpiSercom->SPI.SYNCBUSY.reg & SERCOM_SPI_SYNCBUSY_SWRST) { };
 	SbcSpiSercom->SPI.CTRLA.reg = SERCOM_SPI_CTRLA_DIPO(3) | SERCOM_SPI_CTRLA_DOPO(0) | SERCOM_SPI_CTRLA_MODE(2);
-	hri_sercomspi_write_CTRLB_reg(SbcSpiSercom, SERCOM_SPI_CTRLB_RXEN | SERCOM_SPI_CTRLB_SSDE | SERCOM_SPI_CTRLB_PLOADEN);
+	SbcSpiSercom->SPI.CTRLB.reg = SERCOM_SPI_CTRLB_RXEN | SERCOM_SPI_CTRLB_SSDE | SERCOM_SPI_CTRLB_PLOADEN;
+	while (SbcSpiSercom->SPI.SYNCBUSY.reg & SERCOM_SPI_SYNCBUSY_MASK) { };
 # if USE_32BIT_TRANSFERS
-	hri_sercomspi_write_CTRLC_reg(SbcSpiSercom, SERCOM_SPI_CTRLC_DATA32B);
+	SbcSpiSercom->SPI.CTRLC.reg = SERCOM_SPI_CTRLC_DATA32B;
 # else
 	hri_sercomspi_write_CTRLC_reg(SbcSpiSercom, 0);
 # endif
@@ -485,6 +495,11 @@ void DataTransfer::Init() noexcept
 	// A value of 8 seems to work. I haven't tried other values yet.
 	matrix_set_slave_slot_cycle(0, 8);
 #endif
+}
+
+void DataTransfer::SetLinuxTask(TaskHandle handle) noexcept
+{
+	linuxTaskHandle = handle;
 }
 
 void DataTransfer::Diagnostics(MessageType mtype) noexcept
@@ -577,42 +592,45 @@ GCodeChannel DataTransfer::ReadMacroCompleteInfo(bool &error) noexcept
 	return GCodeChannel(header->channel);
 }
 
-void DataTransfer::ReadHeightMap() noexcept
+bool DataTransfer::ReadHeightMap() noexcept
 {
-	// Read heightmap header
+	// Read height map header
 	const HeightMapHeader * const header = ReadDataHeader<HeightMapHeader>();
 	float xRange[2] = { header->xMin, header->xMax };
 	float yRange[2] = { header->yMin, header->yMax };
 	float spacing[2] = { header->xSpacing, header->ySpacing };
-	reprap.GetGCodes().AssignGrid(xRange, yRange, header->radius, spacing);
-
-	// Read Z coordinates
-	const size_t numPoints = header->numX * header->numY;
-	const float *points = reinterpret_cast<const float *>(ReadData(sizeof(float) * numPoints));
-
-	HeightMap& map = reprap.GetMove().AccessHeightMap();
-	map.ClearGridHeights();
-	for (size_t i = 0; i < numPoints; i++)
+	const bool ok = reprap.GetGCodes().AssignGrid(xRange, yRange, header->radius, spacing);
+	if (ok)
 	{
-		if (!std::isnan(points[i]))
+		// Read Z coordinates
+		const size_t numPoints = header->numX * header->numY;
+		const float *points = reinterpret_cast<const float *>(ReadData(sizeof(float) * numPoints));
+
+		HeightMap& map = reprap.GetMove().AccessHeightMap();
+		map.ClearGridHeights();
+		for (size_t i = 0; i < numPoints; i++)
 		{
-			map.SetGridHeight(i, points[i]);
+			if (!std::isnan(points[i]))
+			{
+				map.SetGridHeight(i, points[i]);
+			}
+		}
+
+		map.ExtrapolateMissing();
+
+		// Activate it
+		reprap.GetGCodes().ActivateHeightmap(true);
+
+		// Recalculate the deviations
+		float minError, maxError;
+		Deviation deviation;
+		const uint32_t numPointsProbed = reprap.GetMove().AccessHeightMap().GetStatistics(deviation, minError, maxError);
+		if (numPointsProbed >= 4)
+		{
+			reprap.GetMove().SetLatestMeshDeviation(deviation);
 		}
 	}
-
-	map.ExtrapolateMissing();
-
-	// Activate it
-	reprap.GetGCodes().ActivateHeightmap(true);
-
-	// Recalculate the deviations
-	float minError, maxError;
-	Deviation deviation;
-	const uint32_t numPointsProbed = reprap.GetMove().AccessHeightMap().GetStatistics(deviation, minError, maxError);
-	if (numPointsProbed >= 4)
-	{
-		reprap.GetMove().SetLatestMeshDeviation(deviation);
-	}
+	return ok;
 }
 
 GCodeChannel DataTransfer::ReadCodeChannel() noexcept
@@ -716,7 +734,7 @@ bool DataTransfer::IsReady() noexcept
 {
 	if (dataReceived)
 	{
-#if !defined(__LPC17xx__) && !defined(STM32F4)
+#if !__LPC17xx__ && !STM32F4
 #if SAME5x
 		if (!digitalRead(SbcSSPin))			// transfer is complete if SS is high
 		{
@@ -1043,7 +1061,7 @@ bool DataTransfer::WriteCodeReply(MessageType type, OutputBuffer *&response) noe
 	return true;
 }
 
-bool DataTransfer::WriteMacroRequest(GCodeChannel channel, const char *filename, bool reportMissing, bool fromCode) noexcept
+bool DataTransfer::WriteMacroRequest(GCodeChannel channel, const char *filename, bool fromCode) noexcept
 {
 	size_t filenameLength = strlen(filename);
 	if (!CanWritePacket(sizeof(ExecuteMacroHeader) + filenameLength))
@@ -1057,7 +1075,7 @@ bool DataTransfer::WriteMacroRequest(GCodeChannel channel, const char *filename,
 	// Write header
 	ExecuteMacroHeader *header = WriteDataHeader<ExecuteMacroHeader>();
 	header->channel = channel.RawValue();
-	header->reportMissing = reportMissing;
+	header->dummy = 0;
 	header->fromCode = fromCode;
 	header->length = filenameLength;
 
@@ -1081,6 +1099,24 @@ bool DataTransfer::WriteAbortFileRequest(GCodeChannel channel, bool abortAll) no
 	header->channel = channel.RawValue();
 	header->abortAll = abortAll;
 	header->padding = 0;
+	return true;
+}
+
+bool DataTransfer::WriteMacroFileClosed(GCodeChannel channel) noexcept
+{
+	if (!CanWritePacket(sizeof(CodeChannelHeader)))
+	{
+		return false;
+	}
+
+	// Write packet header
+	WritePacketHeader(FirmwareRequest::MacroFileClosed, sizeof(CodeChannelHeader));
+
+	// Write header
+	CodeChannelHeader *header = WriteDataHeader<CodeChannelHeader>();
+	header->channel = channel.RawValue();
+	header->paddingA = 0;
+	header->paddingB = 0;
 	return true;
 }
 
@@ -1323,9 +1359,29 @@ bool DataTransfer::WriteWaitForAcknowledgement(GCodeChannel channel) noexcept
 	// Write header
 	CodeChannelHeader *header = WriteDataHeader<CodeChannelHeader>();
 	header->channel = channel.RawValue();
-
+	header->paddingA = 0;
+	header->paddingB = 0;
 	return true;
 }
+
+bool DataTransfer::WriteMessageAcknowledged(GCodeChannel channel) noexcept
+{
+	if (!CanWritePacket(sizeof(CodeChannelHeader)))
+	{
+		return false;
+	}
+
+	// Write packet header
+	WritePacketHeader(FirmwareRequest::MessageAcknowledged, sizeof(CodeChannelHeader));
+
+	// Write header
+	CodeChannelHeader *header = WriteDataHeader<CodeChannelHeader>();
+	header->channel = channel.RawValue();
+	header->paddingA = 0;
+	header->paddingB = 0;
+	return true;
+}
+
 
 PacketHeader *DataTransfer::WritePacketHeader(FirmwareRequest request, size_t dataLength, uint16_t resendPacketId) noexcept
 {
@@ -1405,7 +1461,7 @@ uint16_t DataTransfer::CRC16(const char *buffer, size_t length) const noexcept
 }
 
 
-#if defined(__LPC17xx__) || defined(STM32F4)
+#if __LPC17xx__ || STM32F4
 
 // Additional methods to emulate the Duet3 IAP. This allows us to
 // use the standard firmware update routines from the DSF for updating

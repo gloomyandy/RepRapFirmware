@@ -4,25 +4,12 @@
 // Load Pins_<platform>.h
 
 #if !defined(PLATFORM)
-# if defined(__SAM3X8E__)
-#  if defined(__RADDS__)
-#   define PLATFORM RADDS
-#  elif defined(__ALLIGATOR__)
-#	define PLATFORM Alligator
-#  else
-#   define PLATFORM Duet
-#  endif
-# elif defined(__SAM4E8E__)
+# if defined(__SAM4E8E__)
 #  define PLATFORM DuetNG
-# elif defined(__SAME70Q21__) || defined(__SAME70Q20B__) || defined(__SAME70Q21B__)
-#  if defined(DUET3_V03)
-#   define PLATFORM Duet3_V03
-#  elif defined(DUET3_V05)
-#   define PLATFORM Duet3_V05
-#  elif defined(DUET3_V06)
+# elif defined(__SAME70Q20B__) || defined(__SAME70Q21B__)
+#  if defined(DUET3_V06)
 #   define PLATFORM Duet3_V06
-#  elif defined(SAME70XPLD)
-#   define PLATFORM SAME70xpld
+#   define DUET3		1
 #  else
 #   error Unknown platform
 #  endif
@@ -30,8 +17,9 @@
 #  define PLATFORM DuetM
 # elif defined(PCCB)
 #  define PLATFORM Pccb
-# elif defined(DUET_5LC)
-#  define PLATFORM Duet5LC
+# elif defined(DUET3MINI_V02) || defined(DUET3MINI_V04)
+#  define DUET3MINI		1
+#  define PLATFORM Duet3Mini
 # elif defined(__LPC17xx__)
 #  define PLATFORM LPC
 # elif defined(STM32F4)
@@ -39,10 +27,6 @@
 #else
 #  error Unknown platform
 # endif
-#endif
-
-#if defined(DUET3_V03) || defined(DUET3_V05) || defined(DUET3_V06)
-# define DUET3	1
 #endif
 
 #if !defined(P_INCLUDE_FILE)
@@ -120,12 +104,16 @@
 
 #define HAS_SMART_DRIVERS		(SUPPORT_TMC2660 || SUPPORT_TMC22xx || SUPPORT_TMC51xx)
 #ifndef HAS_STALL_DETECT
-# define HAS_STALL_DETECT		(SUPPORT_TMC2660 || SUPPORT_TMC51xx || ((defined(__LPC17xx__)||defined(STM32F4)) && SUPPORT_TMC22xx))
+# define HAS_STALL_DETECT		(SUPPORT_TMC2660 || SUPPORT_TMC51xx || ((__LPC17xx__ || STM32F4) && SUPPORT_TMC22xx))
 #endif
 
 #ifndef HAS_12V_MONITOR
 # define HAS_12V_MONITOR		0
 # define ENFORCE_MIN_V12		0
+#endif
+
+#ifndef HAS_ATX_POWER_MONITOR
+# define HAS_ATX_POWER_MONITOR  0
 #endif
 
 #if !HAS_VOLTAGE_MONITOR

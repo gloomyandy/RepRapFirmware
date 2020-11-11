@@ -13,7 +13,7 @@
 #if SAM4E || SAM4S || SAME70 || SAME5x
 const size_t NumFileWriteBuffers = 2;					// Number of write buffers
 const size_t FileWriteBufLen = 8192;					// Size of each write buffer
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
 # if HAS_WIFI_NETWORKING
 const size_t NumFileWriteBuffers = 1;
 const size_t FileWriteBufLen = 2*1024;

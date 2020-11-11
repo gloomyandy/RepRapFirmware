@@ -61,9 +61,9 @@ public:
 
 #if SAME70 || SAME5x
 	static constexpr uint32_t StepClockRate = 48000000/64;						// 750kHz
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
 	static constexpr uint32_t StepClockRate = 1000000;                          // 1MHz
-#elif defined(STM32F4)
+#elif STM32F4
 	static constexpr uint32_t StepClockRate = 1000000;                          // 1MHz
 #else
 	static constexpr uint32_t StepClockRate = VARIANT_MCK/128;					// just under 1MHz
@@ -84,7 +84,7 @@ private:
 
 	static StepTimer * volatile pendingList;			// list of pending callbacks, soonest first
 };
-#if defined(STM32F4)
+#if STM32F4
 extern TIM_HandleTypeDef *STHandle;
 #endif
 // Function GetTimerTicks() is quite long for SAM4S and SAME70 processors, so it is moved to StepTimer.cpp and no longer inlined
@@ -98,9 +98,9 @@ inline __attribute__((always_inline)) StepTimer::Ticks StepTimer::GetTimerTicks(
 	while (StepTc->CTRLBSET.bit.CMD != 0) { }
 	while (StepTc->SYNCBUSY.bit.COUNT) { }
 	return StepTc->COUNT.reg;
-# elif defined(__LPC17xx__)
+# elif __LPC17xx__
 	return STEP_TC->TC;
-# elif defined(STM32F4)
+# elif STM32F4
 	return __HAL_TIM_GET_COUNTER(STHandle);
 	return 0;
 # else
@@ -114,9 +114,9 @@ inline __attribute__((always_inline)) uint16_t StepTimer::GetTimerTicks16() noex
 {
 #if SAME5x
 	return (uint16_t)GetTimerTicks();
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
 	return (uint16_t)STEP_TC->TC;
-#elif defined(STM32F4)
+#elif STM32F4
 	return (uint16_t)__HAL_TIM_GET_COUNTER(STHandle);
 	return 0;
 #else

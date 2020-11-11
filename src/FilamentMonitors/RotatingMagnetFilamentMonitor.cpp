@@ -30,23 +30,23 @@ constexpr ObjectModelTableEntry RotatingMagnetFilamentMonitor::objectModelTable[
 {
 	// Within each group, these entries must be in alphabetical order
 	// 0. RotatingMagnetFilamentMonitor members
-	{ "calibrated", 		OBJECT_MODEL_FUNC_IF(self->dataReceived && self->HaveCalibrationData(), self, 1), 					ObjectModelEntryFlags::none },
-	{ "configured", 		OBJECT_MODEL_FUNC(self, 2), 																		ObjectModelEntryFlags::none },
-	{ "enabled",			OBJECT_MODEL_FUNC(self->comparisonEnabled),		 													ObjectModelEntryFlags::none },
-	{ "filamentPresent",	OBJECT_MODEL_FUNC_IF(self->switchOpenMask != 0, (self->sensorValue & self->switchOpenMask) == 0),	ObjectModelEntryFlags::live },
-	{ "type",				OBJECT_MODEL_FUNC_NOSELF("rotatingMagnet"), 														ObjectModelEntryFlags::none },
+	{ "calibrated", 		OBJECT_MODEL_FUNC_IF(self->IsLocal() && self->dataReceived && self->HaveCalibrationData(), self, 1), 	ObjectModelEntryFlags::none },
+	{ "configured", 		OBJECT_MODEL_FUNC(self, 2), 																			ObjectModelEntryFlags::none },
+	{ "enabled",			OBJECT_MODEL_FUNC(self->comparisonEnabled),		 														ObjectModelEntryFlags::none },
+	{ "status",				OBJECT_MODEL_FUNC(self->GetStatusText()),																ObjectModelEntryFlags::live },
+	{ "type",				OBJECT_MODEL_FUNC_NOSELF("rotatingMagnet"), 															ObjectModelEntryFlags::none },
 
 	// 1. RotatingMagnetFilamentMonitor.calibrated members
-	{ "mmPerRev",			OBJECT_MODEL_FUNC(self->MeasuredSensitivity(), 2), 													ObjectModelEntryFlags::none },
-	{ "percentMax",			OBJECT_MODEL_FUNC(ConvertToPercent(self->maxMovementRatio * self->MeasuredSensitivity())), 			ObjectModelEntryFlags::none },
-	{ "percentMin",			OBJECT_MODEL_FUNC(ConvertToPercent(self->minMovementRatio * self->MeasuredSensitivity())), 			ObjectModelEntryFlags::none },
-	{ "totalDistance",		OBJECT_MODEL_FUNC(self->totalExtrusionCommanded, 1), 												ObjectModelEntryFlags::none },
+	{ "mmPerRev",			OBJECT_MODEL_FUNC(self->MeasuredSensitivity(), 2), 														ObjectModelEntryFlags::none },
+	{ "percentMax",			OBJECT_MODEL_FUNC(ConvertToPercent(self->maxMovementRatio * self->MeasuredSensitivity())), 				ObjectModelEntryFlags::none },
+	{ "percentMin",			OBJECT_MODEL_FUNC(ConvertToPercent(self->minMovementRatio * self->MeasuredSensitivity())), 				ObjectModelEntryFlags::none },
+	{ "totalDistance",		OBJECT_MODEL_FUNC(self->totalExtrusionCommanded, 1), 													ObjectModelEntryFlags::none },
 
 	// 2. RotatingMagnetFilamentMonitor.configured members
-	{ "mmPerRev",			OBJECT_MODEL_FUNC(self->mmPerRev, 2), 																ObjectModelEntryFlags::none },
-	{ "percentMax",			OBJECT_MODEL_FUNC(ConvertToPercent(self->maxMovementAllowed)), 										ObjectModelEntryFlags::none },
-	{ "percentMin",			OBJECT_MODEL_FUNC(ConvertToPercent(self->minMovementAllowed)), 										ObjectModelEntryFlags::none },
-	{ "sampleDistance", 	OBJECT_MODEL_FUNC(self->minimumExtrusionCheckLength, 1), 											ObjectModelEntryFlags::none },
+	{ "mmPerRev",			OBJECT_MODEL_FUNC(self->mmPerRev, 2), 																	ObjectModelEntryFlags::none },
+	{ "percentMax",			OBJECT_MODEL_FUNC(ConvertToPercent(self->maxMovementAllowed)), 											ObjectModelEntryFlags::none },
+	{ "percentMin",			OBJECT_MODEL_FUNC(ConvertToPercent(self->minMovementAllowed)), 											ObjectModelEntryFlags::none },
+	{ "sampleDistance", 	OBJECT_MODEL_FUNC(self->minimumExtrusionCheckLength, 1), 												ObjectModelEntryFlags::none },
 };
 
 constexpr uint8_t RotatingMagnetFilamentMonitor::objectModelTableDescriptor[] = { 3, 5, 4, 4 };
@@ -55,13 +55,13 @@ DEFINE_GET_OBJECT_MODEL_TABLE(RotatingMagnetFilamentMonitor)
 
 #endif
 
-RotatingMagnetFilamentMonitor::RotatingMagnetFilamentMonitor(unsigned int extruder, unsigned int type) noexcept
-	: Duet3DFilamentMonitor(extruder, type),
+RotatingMagnetFilamentMonitor::RotatingMagnetFilamentMonitor(unsigned int extruder, unsigned int monitorType) noexcept
+	: Duet3DFilamentMonitor(extruder, monitorType),
 	  mmPerRev(DefaultMmPerRev),
 	  minMovementAllowed(DefaultMinMovementAllowed), maxMovementAllowed(DefaultMaxMovementAllowed),
 	  minimumExtrusionCheckLength(DefaultMinimumExtrusionCheckLength), comparisonEnabled(false), checkNonPrintingMoves(false)
 {
-	switchOpenMask = (type == 4) ? TypeMagnetV1SwitchOpenMask : 0;
+	switchOpenMask = (monitorType == 4) ? TypeMagnetV1SwitchOpenMask : 0;
 	Init();
 }
 
@@ -100,96 +100,94 @@ float RotatingMagnetFilamentMonitor::MeasuredSensitivity() const noexcept
 }
 
 // Configure this sensor, returning true if error and setting 'seen' if we processed any configuration parameters
-bool RotatingMagnetFilamentMonitor::Configure(GCodeBuffer& gb, const StringRef& reply, bool& seen)
+GCodeResult RotatingMagnetFilamentMonitor::Configure(GCodeBuffer& gb, const StringRef& reply, bool& seen)
 {
-	if (ConfigurePin(gb, reply, INTERRUPT_MODE_CHANGE, seen))
+	const GCodeResult rslt = CommonConfigure(gb, reply, INTERRUPT_MODE_CHANGE, seen);
+	if (rslt <= GCodeResult::warning)
 	{
-		return true;
-	}
+		gb.TryGetFValue('L', mmPerRev, seen);
+		gb.TryGetFValue('E', minimumExtrusionCheckLength, seen);
 
-	gb.TryGetFValue('L', mmPerRev, seen);
-	gb.TryGetFValue('E', minimumExtrusionCheckLength, seen);
-
-	if (gb.Seen('R'))
-	{
-		seen = true;
-		size_t numValues = 2;
-		uint32_t minMax[2];
-		gb.GetUnsignedArray(minMax, numValues, false);
-		if (numValues > 0)
+		if (gb.Seen('R'))
 		{
-			minMovementAllowed = (float)minMax[0] * 0.01;
+			seen = true;
+			size_t numValues = 2;
+			uint32_t minMax[2];
+			gb.GetUnsignedArray(minMax, numValues, false);
+			if (numValues > 0)
+			{
+				minMovementAllowed = (float)minMax[0] * 0.01;
+			}
+			if (numValues > 1)
+			{
+				maxMovementAllowed = (float)minMax[1] * 0.01;
+			}
 		}
-		if (numValues > 1)
+
+		if (gb.Seen('S'))
 		{
-			maxMovementAllowed = (float)minMax[1] * 0.01;
+			seen = true;
+			comparisonEnabled = (gb.GetIValue() > 0);
 		}
-	}
 
-	if (gb.Seen('S'))
-	{
-		seen = true;
-		comparisonEnabled = (gb.GetIValue() > 0);
-	}
-
-	if (gb.Seen('A'))
-	{
-		seen = true;
-		checkNonPrintingMoves = (gb.GetIValue() > 0);
-	}
-
-	if (seen)
-	{
-		Init();
-		reprap.SensorsUpdated();
-	}
-	else
-	{
-		reply.printf("Duet3D rotating magnet filament monitor v%u%s on pin ", version, (switchOpenMask != 0) ? " with switch" : "");
-		GetPort().AppendPinName(reply);
-		reply.catf(", %s, sensitivity %.2fmm/rev, allow %ld%% to %ld%%, check every %.1fmm, ",
-					(comparisonEnabled) ? "enabled" : "disabled",
-					(double)mmPerRev,
-					ConvertToPercent(minMovementAllowed),
-					ConvertToPercent(maxMovementAllowed),
-					(double)minimumExtrusionCheckLength);
-
-		if (!dataReceived)
+		if (gb.Seen('A'))
 		{
-			reply.cat("no data received");
+			seen = true;
+			checkNonPrintingMoves = (gb.GetIValue() > 0);
+		}
+
+		if (seen)
+		{
+			Init();
+			reprap.SensorsUpdated();
 		}
 		else
 		{
-			reply.catf("version %u, ", version);
-			if (version >= 3)
+			reply.printf("Duet3D rotating magnet filament monitor v%u%s on pin ", version, (switchOpenMask != 0) ? " with switch" : "");
+			GetPort().AppendPinName(reply);
+			reply.catf(", %s, sensitivity %.2fmm/rev, allow %ld%% to %ld%%, check every %.1fmm, ",
+						(comparisonEnabled) ? "enabled" : "disabled",
+						(double)mmPerRev,
+						ConvertToPercent(minMovementAllowed),
+						ConvertToPercent(maxMovementAllowed),
+						(double)minimumExtrusionCheckLength);
+
+			if (!dataReceived)
 			{
-				reply.catf("mag %u agc %u, ", magnitude, agc);
-			}
-			if (sensorError)
-			{
-				reply.cat("error");
-				if (lastErrorCode != 0)
-				{
-					reply.catf(" %u", lastErrorCode);
-				}
-			}
-			else if (HaveCalibrationData())
-			{
-				const float measuredMmPerRev = MeasuredSensitivity();
-				reply.catf("measured sensitivity %.2fmm/rev, min %ld%% max %ld%% over %.1fmm\n",
-					(double)measuredMmPerRev,
-					ConvertToPercent(minMovementRatio * measuredMmPerRev),
-					ConvertToPercent(maxMovementRatio * measuredMmPerRev),
-					(double)totalExtrusionCommanded);
+				reply.cat("no data received");
 			}
 			else
 			{
-				reply.cat("no calibration data");
+				reply.catf("version %u, ", version);
+				if (version >= 3)
+				{
+					reply.catf("mag %u agc %u, ", magnitude, agc);
+				}
+				if (sensorError)
+				{
+					reply.cat("error");
+					if (lastErrorCode != 0)
+					{
+						reply.catf(" %u", lastErrorCode);
+					}
+				}
+				else if (HaveCalibrationData())
+				{
+					const float measuredMmPerRev = MeasuredSensitivity();
+					reply.catf("measured sensitivity %.2fmm/rev, min %ld%% max %ld%% over %.1fmm\n",
+						(double)measuredMmPerRev,
+						ConvertToPercent(minMovementRatio * measuredMmPerRev),
+						ConvertToPercent(maxMovementRatio * measuredMmPerRev),
+						(double)totalExtrusionCommanded);
+				}
+				else
+				{
+					reply.cat("no calibration data");
+				}
 			}
 		}
 	}
-
-	return false;
+	return rslt;
 }
 
 // Return the current wheel angle
@@ -387,6 +385,11 @@ FilamentSensorStatus RotatingMagnetFilamentMonitor::Check(bool isPrinting, bool 
 // Compare the amount commanded with the amount of extrusion measured, and set up for the next comparison
 FilamentSensorStatus RotatingMagnetFilamentMonitor::CheckFilament(float amountCommanded, float amountMeasured, bool overdue) noexcept
 {
+	if (!dataReceived)
+	{
+		return FilamentSensorStatus::noDataReceived;
+	}
+
 	if (reprap.Debug(moduleFilamentSensors))
 	{
 		debugPrintf("Extr req %.3f meas %.3f%s\n", (double)amountCommanded, (double)amountMeasured, (overdue) ? " overdue" : "");
@@ -474,9 +477,10 @@ FilamentSensorStatus RotatingMagnetFilamentMonitor::Clear() noexcept
 	Reset();											// call this first so that haveStartBitData and synced are false when we call HandleIncomingData
 	HandleIncomingData();								// to keep the diagnostics up to date
 
-	return (sensorError) ? FilamentSensorStatus::sensorError
-			: ((sensorValue & switchOpenMask) != 0) ? FilamentSensorStatus::noFilament
-				: FilamentSensorStatus::ok;
+	return (!dataReceived) ? FilamentSensorStatus::noDataReceived
+			: (sensorError) ? FilamentSensorStatus::sensorError
+				: ((sensorValue & switchOpenMask) != 0) ? FilamentSensorStatus::noFilament
+					: FilamentSensorStatus::ok;
 }
 
 // Print diagnostic info for this sensor

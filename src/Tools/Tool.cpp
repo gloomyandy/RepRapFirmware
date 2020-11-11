@@ -124,7 +124,7 @@ DEFINE_GET_OBJECT_MODEL_TABLE(Tool)
 #endif
 
 // Create a new tool and return a pointer to it. If an error occurs, put an error message in 'reply' and return nullptr.
-/*static*/ Tool *Tool::Create(unsigned int toolNumber, const char *name, int32_t d[], size_t dCount, int32_t h[], size_t hCount, AxesBitmap xMap, AxesBitmap yMap, FansBitmap fanMap, int filamentDrive, const StringRef& reply) noexcept
+/*static*/ Tool *Tool::Create(unsigned int toolNumber, const char *toolName, int32_t d[], size_t dCount, int32_t h[], size_t hCount, AxesBitmap xMap, AxesBitmap yMap, FansBitmap fanMap, int filamentDrive, const StringRef& reply) noexcept
 {
 	const size_t numExtruders = reprap.GetGCodes().GetNumExtruders();
 	if (dCount > ARRAY_SIZE(Tool::drives))
@@ -173,12 +173,12 @@ DEFINE_GET_OBJECT_MODEL_TABLE(Tool)
 		t->filamentExtruder = -1;
 	}
 
-	const size_t nameLength = strlen(name);
+	const size_t nameLength = strlen(toolName);
 	if (nameLength != 0)
 	{
-		char *toolName = new char[nameLength + 1];
-		SafeStrncpy(toolName, name, nameLength + 1);
-		t->name = toolName;
+		char *tName = new char[nameLength + 1];
+		SafeStrncpy(tName, toolName, nameLength + 1);
+		t->name = tName;
 	}
 	else
 	{
@@ -385,7 +385,7 @@ void Tool::Activate() noexcept
 			reprap.GetHeat().SetActiveTemperature(heaters[heater], activeTemperatures[heater]);
 			reprap.GetHeat().SetStandbyTemperature(heaters[heater], standbyTemperatures[heater]);
 		}
-		catch (GCodeException& exc)
+		catch (const GCodeException& exc)
 		{
 			String<StringLength100> message;
 			exc.GetMessage(message.GetRef(), nullptr);
@@ -410,7 +410,7 @@ void Tool::Standby() noexcept
 				reprap.GetHeat().SetStandbyTemperature(heaters[heater], standbyTemperatures[heater]);
 				reprap.GetHeat().Standby(heaters[heater], this);
 			}
-			catch (GCodeException& exc)
+			catch (const GCodeException& exc)
 			{
 				String<StringLength100> message;
 				exc.GetMessage(message.GetRef(), nullptr);

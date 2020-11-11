@@ -197,6 +197,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 				{
 					reply.printf("Homing file %s not found", nextHomingFileName.c_str());
 					stateMachineResult = GCodeResult::error;
+					toBeHomed.Clear();
 					gb.SetState(GCodeState::normal);
 				}
 			}
@@ -211,6 +212,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 			{
 				reply.copy("Homing failed");
 				stateMachineResult = GCodeResult::error;
+				toBeHomed.Clear();
 				gb.SetState(GCodeState::normal);
 			}
 			else
@@ -331,7 +333,6 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 		}
 		else
 		{
-			CheckReportDue(gb, reply);
 			isWaiting = true;
 		}
 		break;
@@ -353,9 +354,28 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 			gb.AdvanceState();
 			if (AllAxesAreHomed())
 			{
-				if (!DoFileMacro(gb, FILAMENT_CHANGE_G, false, 600))
+				if (!DoFileMacro(gb, FILAMENT_CHANGE_G, false, -1))
 				{
-					DoFileMacro(gb, PAUSE_G, true, 600);
+					DoFileMacro(gb, PAUSE_G, true, -1);
+				}
+			}
+		}
+		break;
+
+	case GCodeState::filamentErrorPause1:
+		if (LockMovementAndWaitForStandstill(gb))
+		{
+			gb.AdvanceState();
+			if (AllAxesAreHomed())
+			{
+				String<StringLength20> macroName;
+				macroName.printf(FILAMENT_ERROR "%u.g", gb.MachineState().stateParameter);
+				if (!DoFileMacro(gb, macroName.c_str(), false, -1))
+				{
+					if (!DoFileMacro(gb, FILAMENT_ERROR ".g", false, -1))
+					{
+						DoFileMacro(gb, PAUSE_G, true, -1);
+					}
 				}
 			}
 		}
@@ -363,6 +383,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 
 	case GCodeState::pausing2:
 	case GCodeState::filamentChangePause2:
+	case GCodeState::filamentErrorPause2:
 		if (LockMovementAndWaitForStandstill(gb))
 		{
 			reply.printf((gb.GetState() == GCodeState::filamentChangePause2) ? "Printing paused for filament change at" : "Printing paused at");
@@ -370,7 +391,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 			{
 				reply.catf(" %c%.1f", axisLetters[axis], (double)pauseRestorePoint.moveCoords[axis]);
 			}
-			platform.MessageF(LogMessage, "%s\n", reply.c_str());
+			platform.MessageF(LogWarn, "%s\n", reply.c_str());
 			gb.SetState(GCodeState::normal);
 		}
 		break;
@@ -420,17 +441,18 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 			restartInitialUserY = pauseRestorePoint.initialUserY;
 			isPaused = false;
 			reply.copy("Printing resumed");
-			platform.Message(LogMessage, "Printing resumed\n");
+			platform.Message(LogWarn, "Printing resumed\n");
 			gb.SetState(GCodeState::normal);
 		}
 		break;
 
 	case GCodeState::flashing1:
 #if HAS_WIFI_NETWORKING
-		if (&gb == auxGCode)								// if M997 S1 is sent from USB, don't keep sending temperature reports
-		{
-			CheckReportDue(gb, reply);						// this is so that the ATE gets status reports and can tell when flashing is complete
-		}
+// wilriker: This probably can be removed
+//		if (&gb == auxGCode)								// if M997 S1 is sent from USB, don't keep sending temperature reports
+//		{
+//			CheckReportDue(gb, reply);						// this is so that the ATE gets status reports and can tell when flashing is complete
+//		}
 
 		// Update additional modules before the main firmware
 		if (FirmwareUpdater::IsReady())
@@ -560,6 +582,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 				}
 				else if (zp->Stopped() == EndStopHit::atStop)
 				{
+					reprap.GetMove().heightMapLock.ReleaseWriter();
 					reprap.GetHeat().SuspendHeaters(false);
 					gb.MachineState().SetError("Z probe already triggered before probing move started");
 					gb.SetState(GCodeState::checkError);
@@ -572,6 +595,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 					SetMoveBufferDefaults();
 					if (!platform.GetEndstops().EnableZProbe(currentZProbeNumber) || !zp->SetProbing(true))
 					{
+						reprap.GetMove().heightMapLock.ReleaseWriter();
 						gb.MachineState().SetError("Failed to enable Z probe");
 						gb.SetState(GCodeState::checkError);
 						RetractZProbe(gb, 29);
@@ -605,6 +629,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 				zp->SetProbing(false);
 				if (!zProbeTriggered)
 				{
+					reprap.GetMove().heightMapLock.ReleaseWriter();
 					gb.MachineState().SetError("Z probe was not triggered during probing move");
 					gb.SetState(GCodeState::checkError);
 					RetractZProbe(gb, 29);
@@ -677,6 +702,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 			}
 			else
 			{
+				reprap.GetMove().heightMapLock.ReleaseWriter();
 				gb.MachineState().SetError("Z probe readings not consistent");
 				gb.SetState(GCodeState::checkError);
 				RetractZProbe(gb, 29);
@@ -759,10 +785,11 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 			{
 				gb.MachineState().SetError("Too few points probed");
 			}
+			reprap.GetMove().heightMapLock.ReleaseWriter();
 		}
 		if (stateMachineResult == GCodeResult::ok)
 		{
-			reprap.GetPlatform().MessageF(LogMessage, "%s\n", reply.c_str());
+			reprap.GetPlatform().MessageF(LogWarn, "%s\n", reply.c_str());
 		}
 		gb.SetState(GCodeState::normal);
 		break;
@@ -1023,12 +1050,15 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 				ToolOffsetInverseTransform(moveBuffer.coords, currentUserPosition);
 			}
 			gb.AdvanceState();
-			RetractZProbe(gb, 30);
+			if (zp->GetProbeType() != ZProbeType::blTouch)			// if it's a BLTouch then we have already retracted it
+			{
+				RetractZProbe(gb, 30);
+			}
 		}
 		break;
 
 	case GCodeState::probingAtPoint6:
-		// Here when we have finished probing with a P parameter and have retracted the probe if necessary
+		// Here when we have finished probing and have retracted the probe if necessary
 		if (LockMovementAndWaitForStandstill(gb))		// retracting the Z probe
 		{
 			if (g30SValue == 1)
@@ -1347,17 +1377,8 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 #endif
 
 #if HAS_LINUX_INTERFACE
-	case GCodeState::doingUserMacro:			// finished a macro from M98 which has been cancelled by M99 or M291 P1 (only in SBC mode)
-		gb.SetState(GCodeState::normal);
-		break;
-
 	case GCodeState::waitingForAcknowledgement:	// finished M291 and the SBC expects a response next
-		SendSbcEvent(gb);
-		gb.FinishedBinaryMode();
-		gb.SetState(GCodeState::normal);
-		break;
 #endif
-
 	case GCodeState::checkError:				// we return to this state after running the retractprobe macro when there may be a stored error message
 		gb.SetState(GCodeState::normal);
 		break;

@@ -22,6 +22,8 @@ class Menu
 {
 public:
 	Menu(Lcd& refLcd) noexcept;
+	~Menu();
+
 	void Load(const char* filename) noexcept;							// load a menu file
 	void Pop() noexcept;
 	void EncoderAction(int action) noexcept;
@@ -52,7 +54,7 @@ private:
 	static char *SkipWhitespace(char *s) noexcept;
 	static bool CheckVisibility(MenuItem::Visibility vis) noexcept;
 
-#ifdef __LPC17xx__
+#if __LPC17xx__
     static const size_t CommandBufferSize = 1024;
 #else
     static const size_t CommandBufferSize = 2500;

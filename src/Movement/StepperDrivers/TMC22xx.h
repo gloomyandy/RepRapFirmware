@@ -6,8 +6,8 @@
  */
 
 // Ugly hack to make sure we use the LPC version
-#ifdef __LPC17xx__
-#include "LPC/Movement/StepperDrivers/TMC22xx.h"
+#if __LPC17xx__ || STM32F4
+#include "common/Movement/StepperDrivers/TMC22xx.h"
 #else
 // NB - must #include some file that includes Pins.h before including this one, so that SUPPORT_TMC22xx is defined
 

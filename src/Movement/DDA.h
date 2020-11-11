@@ -66,9 +66,9 @@ public:
 	int32_t GetTimeLeft() const noexcept;
 
 #if SUPPORT_CAN_EXPANSION
-	uint32_t InsertHiccup(uint32_t now) noexcept;
+	uint32_t InsertHiccup(uint32_t whenNextInterruptWanted) noexcept;
 #else
-	void InsertHiccup(uint32_t now) noexcept;
+	void InsertHiccup(uint32_t whenNextInterruptWanted) noexcept;
 #endif
 	const int32_t *DriveCoordinates() const noexcept { return endPoint; }			// Get endpoints of a move in machine coordinates
 	void SetDriveCoordinate(int32_t a, size_t drive) noexcept;						// Force an end point
@@ -134,22 +134,27 @@ public:
 	// Use the same defaults as for the SAM4E for now.
 	static constexpr uint32_t MinCalcIntervalDelta = (40 * StepTimer::StepClockRate)/1000000; 		// the smallest sensible interval between calculations (40us) in step timer clocks
 	static constexpr uint32_t MinCalcIntervalCartesian = (40 * StepTimer::StepClockRate)/1000000;	// same as delta for now, but could be lower
-	static constexpr uint32_t HiccupTime = 20;														// how long we hiccup for
+	static constexpr uint32_t HiccupTime = (30 * StepTimer::StepClockRate)/1000000;					// how long we hiccup for in step timer clocks
 #elif SAM4E || SAM4S || SAME5x
 	static constexpr uint32_t MinCalcIntervalDelta = (40 * StepTimer::StepClockRate)/1000000; 		// the smallest sensible interval between calculations (40us) in step timer clocks
 	static constexpr uint32_t MinCalcIntervalCartesian = (40 * StepTimer::StepClockRate)/1000000;	// same as delta for now, but could be lower
-	static constexpr uint32_t HiccupTime = 20;														// how long we hiccup for
-#elif defined(__LPC17xx__)
+	static constexpr uint32_t HiccupTime = (30 * StepTimer::StepClockRate)/1000000;					// how long we hiccup for in step timer clocks
+#elif __LPC17xx__
     static constexpr uint32_t MinCalcIntervalDelta = (40 * StepTimer::StepClockRate)/1000000;		// the smallest sensible interval between calculations (40us) in step timer clocks
     static constexpr uint32_t MinCalcIntervalCartesian = (40 * StepTimer::StepClockRate)/1000000;	// same as delta for now, but could be lower
-	static constexpr uint32_t HiccupTime = 20;														// how long we hiccup for
+	static constexpr uint32_t HiccupTime = (30 * StepTimer::StepClockRate)/1000000;					// how long we hiccup for in step timer clocks
+#elif STM32F4
+    static constexpr uint32_t MinCalcIntervalDelta = (40 * StepTimer::StepClockRate)/1000000;		// the smallest sensible interval between calculations (40us) in step timer clocks
+    static constexpr uint32_t MinCalcIntervalCartesian = (40 * StepTimer::StepClockRate)/1000000;	// same as delta for now, but could be lower
+	static constexpr uint32_t HiccupTime = (30 * StepTimer::StepClockRate)/1000000;					// how long we hiccup for in step timer clocks
 #else	// SAM3X
 	static constexpr uint32_t MinCalcIntervalDelta = (60 * StepTimer::StepClockRate)/1000000; 		// the smallest sensible interval between calculations (60us) in step timer clocks
 	static constexpr uint32_t MinCalcIntervalCartesian = (60 * StepTimer::StepClockRate)/1000000;	// same as delta for now, but could be lower
-	static constexpr uint32_t HiccupTime = 20;														// how long we hiccup for
+	static constexpr uint32_t HiccupTime = (40 * StepTimer::StepClockRate)/1000000;					// how long we hiccup for in step timer clocks
 #endif
 	static constexpr uint32_t MaxStepInterruptTime = 10 * StepTimer::MinInterruptInterval;			// the maximum time we spend looping in the ISR , in step clocks
 	static constexpr uint32_t WakeupTime = (100 * StepTimer::StepClockRate)/1000000;				// stop resting 100us before the move is due to end
+	static constexpr uint32_t HiccupIncrement = HiccupTime/2;										// how much we increase the hiccup time by on each attempt
 
 	static void PrintMoves() noexcept;																// print saved moves for debugging
 
@@ -179,7 +184,6 @@ private:
 	bool IsDecelerationMove() const noexcept;								// return true if this move is or have been might have been intended to be a deceleration-only move
 	bool IsAccelerationMove() const noexcept;								// return true if this move is or have been might have been intended to be an acceleration-only move
 	void DebugPrintVector(const char *name, const float *vec, size_t len) const noexcept;
-	float NormaliseXYZ() noexcept;											// Make the direction vector unit-normal in XYZ
 	void AdjustAcceleration() noexcept;										// Adjust the acceleration and deceleration to reduce ringing
 
 #if SUPPORT_CAN_EXPANSION
@@ -187,12 +191,15 @@ private:
 #endif
 
 	static void DoLookahead(DDARing& ring, DDA *laDDA) noexcept __attribute__ ((hot));	// Try to smooth out moves in the queue
-    static float Normalise(float v[], size_t dim1, size_t dim2) noexcept;  	// Normalise a vector of dim1 dimensions to unit length in the first dim1 dimensions
+    static float Normalise(float v[], AxesBitmap unitLengthAxes) noexcept;  // Normalise a vector to unit length over the specified axes
+    static float Normalise(float v[]) noexcept; 							// Normalise a vector to unit length over all axes
+	float NormaliseLinearMotion(AxesBitmap linearAxes) noexcept;			// Make the direction vector unit-normal in XYZ
     static void Absolute(float v[], size_t dimensions) noexcept;			// Put a vector in the positive hyperquadrant
-    static float Magnitude(const float v[], size_t dimensions) noexcept;  	// Return the length of a vector
-    static void Scale(float v[], float scale, size_t dimensions) noexcept;	// Multiply a vector by a scalar
-    static float VectorBoxIntersection(const float v[], 					// Compute the length that a vector would have to have to...
-    		const float box[], size_t dimensions) noexcept;					// ...just touch the surface of a hyperbox.
+
+    static float Magnitude(const float v[]) noexcept;						// Get the magnitude measured over all axes and extruders
+    static float Magnitude(const float v[], AxesBitmap axes) noexcept;  	// Return the length of a vector over the specified orthogonal axes
+    static void Scale(float v[], float scale) noexcept;						// Multiply a vector by a scalar
+    static float VectorBoxIntersection(const float v[], const float box[]) noexcept;	// Compute the length that a vector would have to have to just touch the surface of a hyperbox of MaxAxesPlusExtruders dimensions.
 
     DDA *next;										// The next one in the ring
 	DDA *prev;										// The previous one in the ring
@@ -341,6 +348,12 @@ inline __attribute__((always_inline)) bool DDA::ScheduleNextStepInterrupt(StepTi
 	return false;
 }
 
+// Return true if there is no reason to delay preparing this move
+inline bool DDA::IsGoodToPrepare() const noexcept
+{
+	return endSpeed >= topSpeed;							// if it never decelerates, we can't improve it
+}
+
 inline bool DDA::CanPauseAfter() const noexcept
 {
 	return flags.canPauseAfter
@@ -354,21 +367,21 @@ inline bool DDA::CanPauseAfter() const noexcept
 #if SUPPORT_CAN_EXPANSION
 
 // Insert a hiccup, returning the amount of time inserted
-inline __attribute__((always_inline)) uint32_t DDA::InsertHiccup(uint32_t now) noexcept
+inline __attribute__((always_inline)) uint32_t DDA::InsertHiccup(uint32_t whenNextInterruptWanted) noexcept
 {
 	const uint32_t ticksDueAfterStart = (activeDMs != nullptr) ? activeDMs->nextStepTime : clocksNeeded - DDA::WakeupTime;
 	const uint32_t oldStartTime = afterPrepare.moveStartTime;
-	afterPrepare.moveStartTime = now + DDA::HiccupTime - ticksDueAfterStart;
+	afterPrepare.moveStartTime = whenNextInterruptWanted - ticksDueAfterStart;
 	return afterPrepare.moveStartTime - oldStartTime;
 }
 
 #else
 
 // Insert a hiccup
-inline __attribute__((always_inline)) void DDA::InsertHiccup(uint32_t now) noexcept
+inline __attribute__((always_inline)) void DDA::InsertHiccup(uint32_t whenNextInterruptWanted) noexcept
 {
 	const uint32_t ticksDueAfterStart = (activeDMs != nullptr) ? activeDMs->nextStepTime : clocksNeeded - DDA::WakeupTime;
-	afterPrepare.moveStartTime = now + DDA::HiccupTime - ticksDueAfterStart;
+	afterPrepare.moveStartTime = whenNextInterruptWanted - ticksDueAfterStart;
 }
 
 #endif

@@ -42,7 +42,7 @@ float tuningVoltageAccumulator;				// sum of the voltage readings we take during
 
 LocalHeater::LocalHeater(unsigned int heaterNum) noexcept : Heater(heaterNum), mode(HeaterMode::off)
 {
-	ResetHeater();
+	LocalHeater::ResetHeater();
 	SetHeater(0.0);							// set up the pin even if the heater is not enabled (for PCCB)
 
 	// Time the sensor was last sampled.  During startup, we use the current
@@ -52,7 +52,7 @@ LocalHeater::LocalHeater(unsigned int heaterNum) noexcept : Heater(heaterNum), m
 
 LocalHeater::~LocalHeater() noexcept
 {
-	SwitchOff();
+	LocalHeater::SwitchOff();
 	port.Release();
 }
 
@@ -85,7 +85,7 @@ void LocalHeater::ResetHeater() noexcept
 }
 
 // Configure the heater port and the sensor number
-GCodeResult LocalHeater::ConfigurePortAndSensor(const char *portName, PwmFrequency freq, unsigned int sensorNumber, const StringRef& reply)
+GCodeResult LocalHeater::ConfigurePortAndSensor(const char *portName, PwmFrequency freq, unsigned int sn, const StringRef& reply)
 {
 	if (!port.AssignPort(portName, reply, PinUsedBy::heater, PinAccess::pwm))
 	{
@@ -93,10 +93,10 @@ GCodeResult LocalHeater::ConfigurePortAndSensor(const char *portName, PwmFrequen
 	}
 
 	port.SetFrequency(freq);
-	SetSensorNumber(sensorNumber);
-	if (reprap.GetHeat().FindSensor(sensorNumber).IsNull())
+	SetSensorNumber(sn);
+	if (reprap.GetHeat().FindSensor(sn).IsNull())
 	{
-		reply.printf("Sensor number %u has not been defined", sensorNumber);
+		reply.printf("Sensor number %u has not been defined", sn);
 		return GCodeResult::warning;
 	}
 	return GCodeResult::ok;
@@ -539,7 +539,7 @@ void LocalHeater::GetAutoTuneStatus(const StringRef& reply) const noexcept
 
 /* Notes on the auto tune algorithm
  *
- * Most 3D printer firmwares use the Åström-Hägglund relay tuning method (sometimes called Ziegler-Nichols + relay).
+ * Most 3D printer firmwares use the ï¿½strï¿½m-Hï¿½gglund relay tuning method (sometimes called Ziegler-Nichols + relay).
  * This gives results  of variable quality, but they seem to be generally satisfactory.
  *
  * We use Cohen-Coon tuning instead. This models the heating process as a first-order process (i.e. one that with constant heating
@@ -861,9 +861,19 @@ void LocalHeater::CalculateModel() noexcept
 	if (rslt == GCodeResult::ok || rslt == GCodeResult::warning)
 	{
 		reprap.GetPlatform().MessageF(LoggedGenericMessage,
-				"Auto tune heater %u completed in %" PRIu32 " sec\n"
-				"Use M307 H%u to see the result, or M500 to save the result in config-override.g\n",
-				GetHeaterNumber(), (millis() - tuningBeginTime)/(uint32_t)SecondsToMillis, GetHeaterNumber());
+										"Auto tuning heater %u completed in %" PRIu32 " seconds. This heater needs the following M307 command:\n"
+										" M307 H%u A%.1f C%.1f D%.1f S%.2f V%.1f\n",
+										GetHeaterNumber(), (millis() - tuningBeginTime)/(uint32_t)SecondsToMillis,
+										GetHeaterNumber(), (double)GetModel().GetGain(), (double)GetModel().GetTimeConstant(), (double)GetModel().GetDeadTime(),
+										(double)GetModel().GetMaxPwm(), (double)GetModel().GetVoltage());
+		if (reprap.GetGCodes().SawM501InConfigFile())
+		{
+			reprap.GetPlatform().Message(GenericMessage, "Send M500 to save this command in config-override.g\n");
+		}
+		else
+		{
+			reprap.GetPlatform().MessageF(GenericMessage, "Edit the M307 %u command in config.g to match this.\n", GetHeaterNumber());
+		}
 	}
 	else
 	{

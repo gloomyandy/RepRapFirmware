@@ -141,15 +141,15 @@ void DDA::ReleaseDMs() noexcept
 	// Normally there should be no active DMs, but release any that there may be
 	for (DriveMovement* dm = activeDMs; dm != nullptr; )
 	{
-		DriveMovement* const next = dm->nextDM;
+		DriveMovement* const dnext = dm->nextDM;
 		DriveMovement::Release(dm);
-		dm = next;
+		dm = dnext;
 	}
 	for (DriveMovement* dm = completedDMs; dm != nullptr; )
 	{
-		DriveMovement* const next = dm->nextDM;
+		DriveMovement* const dnext = dm->nextDM;
 		DriveMovement::Release(dm);
-		dm = next;
+		dm = dnext;
 	}
 	activeDMs = completedDMs = nullptr;
 }
@@ -278,52 +278,49 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 	}
 
 	flags.xyMoving = false;
-	bool axesMoving = false;
-	bool extruding = false;												// we set this true if extrusion was commanded, even if it is too small to do
+	bool linearAxesMoving = false;
+	bool rotationalAxesMoving = false;
+	bool extrudersMoving = false;
 	bool forwardExtruding = false;
-	bool realMove = false;
 	float accelerations[MaxAxesPlusExtruders];
 	const float * const normalAccelerations = reprap.GetPlatform().Accelerations();
-	const Kinematics& k = move.GetKinematics();
 
 	for (size_t drive = 0; drive < MaxAxesPlusExtruders; drive++)
 	{
 		accelerations[drive] = normalAccelerations[drive];
 		endCoordinates[drive] = nextMove.coords[drive];
 
-		if (drive < numTotalAxes)
+		if (drive < numVisibleAxes)
 		{
-			if (!doMotorMapping && drive < numVisibleAxes)
-			{
-				endPoint[drive] = Move::MotorMovementToSteps(drive, nextMove.coords[drive]);
-			}
-
-			const int32_t delta = endPoint[drive] - positionNow[drive];
+			int32_t delta;
 			if (doMotorMapping)
 			{
-				if (drive >= numVisibleAxes)
+				delta = endPoint[drive] - positionNow[drive];
+				const float positionDelta = endCoordinates[drive] - prev->GetEndCoordinate(drive, false);
+				directionVector[drive] = positionDelta;
+				if (positionDelta != 0.0 && (Tool::GetXAxes(nextMove.tool).IsBitSet(drive) || Tool::GetYAxes(nextMove.tool).IsBitSet(drive)))
 				{
-					directionVector[drive] = 0.0;
-				}
-				else
-				{
-					const float positionDelta = endCoordinates[drive] - prev->GetEndCoordinate(drive, false);
-					directionVector[drive] = positionDelta;
-					if (positionDelta != 0.0 && (Tool::GetXAxes(nextMove.tool).IsBitSet(drive) || Tool::GetYAxes(nextMove.tool).IsBitSet(drive)))
-					{
-						flags.xyMoving = true;
-					}
+					flags.xyMoving = true;				// this move has XY movement in user space, before axis were mapped
 				}
 			}
 			else
 			{
+				// Raw motor move on a visible axis
+				endPoint[drive] = Move::MotorMovementToSteps(drive, nextMove.coords[drive]);
+				delta = endPoint[drive] - positionNow[drive];
 				directionVector[drive] = (float)delta/reprap.GetPlatform().DriveStepsPerUnit(drive);
 			}
 
 			if (delta != 0)
 			{
-				realMove = true;
-				axesMoving = true;
+				if (reprap.GetPlatform().IsAxisRotational(drive))
+				{
+					rotationalAxesMoving = true;
+				}
+				else
+				{
+					linearAxesMoving = true;
+				}
 			}
 		}
 		else if (LogicalDriveToExtruder(drive) < reprap.GetGCodes().GetNumExtruders())
@@ -334,8 +331,7 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 			directionVector[drive] = movement;
 			if (movement != 0.0)
 			{
-				realMove = true;
-				extruding = true;
+				extrudersMoving = true;
 				if (movement > 0.0)
 				{
 					forwardExtruding = true;
@@ -358,7 +354,7 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 	}
 
 	// 2. Throw it away if there's no real movement.
-	if (!realMove)
+	if (!(linearAxesMoving || rotationalAxesMoving || extrudersMoving))
 	{
 		// Update the end position in the previous move, so that on the next move we don't think there is XY movement when the user didn't ask for any
 		if (doMotorMapping)
@@ -384,7 +380,7 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 	flags.canPauseAfter = nextMove.canPauseAfter;
 	flags.usingStandardFeedrate = nextMove.usingStandardFeedrate;
 	flags.isPrintingMove = flags.xyMoving && forwardExtruding;				// require forward extrusion so that wipe-while-retracting doesn't count
-	flags.isNonPrintingExtruderMove = extruding && !flags.isPrintingMove;	// flag used by filament monitors - we can ignore Z movement
+	flags.isNonPrintingExtruderMove = extrudersMoving && !flags.isPrintingMove;	// flag used by filament monitors - we can ignore Z movement
 	flags.usePressureAdvance = nextMove.usePressureAdvance;
 	flags.hadLookaheadUnderrun = false;
 	flags.isLeadscrewAdjustmentMove = false;
@@ -413,18 +409,21 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 	}
 
 	// 4. Normalise the direction vector and compute the amount of motion.
-	if (flags.xyMoving)
+	// NIST standard section 2.1.2.5 rule A: if any of XYZ is moving then the feed rate specifies the linear XYZ movement
+	// We treat additional linear axes the same as XYZ
+	const Kinematics& k = move.GetKinematics();
+	if (linearAxesMoving)
 	{
-		// There is some XY movement, so normalise the direction vector so that the total XYZ movement has unit length and 'totalDistance' is the XYZ distance moved.
+		// There is some linear axis movement, so normalise the direction vector so that the total linear movement has unit length and 'totalDistance' is the linear distance moved.
 		// This means that the user gets the feed rate that he asked for. It also makes the delta calculations simpler.
 		// First do the bed tilt compensation for deltas.
 		directionVector[Z_AXIS] += (directionVector[X_AXIS] * k.GetTiltCorrection(X_AXIS)) + (directionVector[Y_AXIS] * k.GetTiltCorrection(Y_AXIS));
-		totalDistance = NormaliseXYZ();
+		totalDistance = NormaliseLinearMotion(reprap.GetPlatform().GetLinearAxes());
 	}
-	else if (axesMoving)
+	else if (rotationalAxesMoving)
 	{
 		// Some axes are moving, but not axes that X or Y are mapped to. Normalise the movement to the vector sum of the axes that are moving.
-		totalDistance = Normalise(directionVector, MaxAxesPlusExtruders, numTotalAxes);
+		totalDistance = Normalise(directionVector, reprap.GetPlatform().GetRotationalAxes());
 	}
 	else
 	{
@@ -436,7 +435,7 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 		}
 		if (totalDistance > 0.0)		// should always be true
 		{
-			Scale(directionVector, 1.0/totalDistance, MaxAxesPlusExtruders);
+			Scale(directionVector, 1.0/totalDistance);
 		}
 	}
 
@@ -444,7 +443,7 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 	float normalisedDirectionVector[MaxAxesPlusExtruders];			// used to hold a unit-length vector in the direction of motion
 	memcpy(normalisedDirectionVector, directionVector, sizeof(normalisedDirectionVector));
 	Absolute(normalisedDirectionVector, MaxAxesPlusExtruders);
-	acceleration = beforePrepare.maxAcceleration = VectorBoxIntersection(normalisedDirectionVector, accelerations, MaxAxesPlusExtruders);
+	acceleration = beforePrepare.maxAcceleration = VectorBoxIntersection(normalisedDirectionVector, accelerations);
 	if (flags.xyMoving)											// apply M204 acceleration limits to XY moves
 	{
 		acceleration = min<float>(acceleration, (flags.isPrintingMove) ? move.GetMaxPrintingAcceleration() : move.GetMaxTravelAcceleration());
@@ -476,7 +475,7 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 	// Don't use the constrain function in the following, because if we have a very small XY movement and a lot of extrusion, we may have to make the
 	// speed lower than the configured minimum movement speed. We must apply the minimum speed first and then limit it if necessary after that.
 	requestedSpeed = min<float>(max<float>(reqSpeed, reprap.GetPlatform().MinMovementSpeed()),
-								VectorBoxIntersection(normalisedDirectionVector, reprap.GetPlatform().MaxFeedrates(), MaxAxesPlusExtruders));
+								VectorBoxIntersection(normalisedDirectionVector, reprap.GetPlatform().MaxFeedrates()));
 
 	// On a Cartesian printer, it is OK to limit the X and Y speeds and accelerations independently, and in consequence to allow greater values
 	// for diagonal moves. On other architectures, this is not OK and any movement in the XY plane should be limited on other ways.
@@ -573,7 +572,7 @@ bool DDA::InitLeadscrewMove(DDARing& ring, float feedrate, const float adjustmen
 
 	// 4. Normalise the direction vector and compute the amount of motion.
 	// Currently we normalise the vector sum of all Z motor movement to unit length.
-	totalDistance = Normalise(directionVector, MaxAxesPlusExtruders, MaxAxesPlusExtruders);
+	totalDistance = Normalise(directionVector);
 
 	// 6. Set the speed to the smaller of the requested and maximum speed.
 	requestedSpeed = feedrate;
@@ -648,7 +647,7 @@ bool DDA::InitAsyncMove(DDARing& ring, const AsyncMove& nextMove) noexcept
 #endif
 
 	// Currently we normalise the vector sum of all motor movements to unit length.
-	totalDistance = Normalise(directionVector, MaxAxesPlusExtruders, MaxAxesPlusExtruders);
+	totalDistance = Normalise(directionVector);
 
 	RecalculateMove(ring);
 	state = provisional;
@@ -675,12 +674,6 @@ inline bool DDA::IsAccelerationMove() const noexcept
 			|| (topSpeed < requestedSpeed								// can't have been intended as deceleration-only if it reaches the requested speed
 				&& beforePrepare.accelDistance > 0.98 * totalDistance	// rounding error can only go so far
 			   );
-}
-
-// Return true if there is no reason to delay preparing this move
-bool DDA::IsGoodToPrepare() const noexcept
-{
-	return endSpeed >= topSpeed;							// if it never decelerates, we can't improve it
 }
 
 #if 0
@@ -715,31 +708,37 @@ pre(state == provisional)
 			if (laDDA->topSpeed >= laDDA->requestedSpeed)
 			{
 				// This move already reaches its top speed, so we just need to adjust the deceleration part
-				laDDA->MatchSpeeds();									// adjust it if necessary
+				laDDA->MatchSpeeds();													// adjust it if necessary
 				goingUp = false;
 			}
 			else if (   laDDA->IsDecelerationMove()
-					 && laDDA->prev->state == DDA::provisional			// if we can't adjust the previous move then we don't care (and its figures may not be reliable if it has been recycled already)
-					 && laDDA->prev->beforePrepare.decelDistance > 0.0	// if the previous move has no deceleration phase then no point in adjusting it
+					 && laDDA->prev->beforePrepare.decelDistance > 0.0					// if the previous move has no deceleration phase then no point in adjusting it
 					)
 			{
-				// This is a deceleration-only move, so we may have to adjust the previous move as well to get optimum behaviour
-				if (   laDDA->prev->state == provisional
-					&& laDDA->prev->flags.xyMoving == laDDA->flags.xyMoving
-					&& (   laDDA->prev->flags.isPrintingMove == laDDA->flags.isPrintingMove
-						|| (laDDA->prev->flags.isPrintingMove && laDDA->prev->requestedSpeed == laDDA->requestedSpeed)	// special case to support coast-to-end
+				const DDAState st = laDDA->prev->state;
+				// This is a deceleration-only move, and the previous one has a deceleration phase. We may have to adjust the previous move as well to get optimum behaviour.
+				if (   st == provisional
+					&& (   reprap.GetMove().GetJerkPolicy() != 0
+						|| (   laDDA->prev->flags.xyMoving == laDDA->flags.xyMoving
+							&& (   laDDA->prev->flags.isPrintingMove == laDDA->flags.isPrintingMove
+								|| (laDDA->prev->flags.isPrintingMove && laDDA->prev->requestedSpeed == laDDA->requestedSpeed)	// special case to support coast-to-end
+							   )
+						   )
 					   )
 				   )
 				{
 					laDDA->MatchSpeeds();
 					const float maxStartSpeed = sqrtf(fsquare(laDDA->beforePrepare.targetNextSpeed) + (2 * laDDA->deceleration * laDDA->totalDistance));
 					laDDA->prev->beforePrepare.targetNextSpeed = min<float>(maxStartSpeed, laDDA->requestedSpeed);
-					// leave 'recurse' true
+					// leave 'goingUp' true
 				}
 				else
 				{
 					// This move is a deceleration-only move but we can't adjust the previous one
-					laDDA->flags.hadLookaheadUnderrun = true;
+					if (st == frozen || st == executing)
+					{
+						laDDA->flags.hadLookaheadUnderrun = true;
+					}
 					const float maxReachableSpeed = sqrtf(fsquare(laDDA->startSpeed) + (2 * laDDA->deceleration * laDDA->totalDistance));
 					if (laDDA->beforePrepare.targetNextSpeed > maxReachableSpeed)
 					{
@@ -846,10 +845,11 @@ float DDA::AdvanceBabyStepping(DDARing& ring, size_t axis, float amount) noexcep
 		if (amount != 0.0 && cdda->flags.xyMoving)
 		{
 			// Limit the babystepping Z speed to the lower of 0.1 times the original XYZ speed and 0.5 times the Z jerk
-			const float maxBabySteppingAmount = cdda->totalDistance * min<float>(0.1, 0.5 * reprap.GetPlatform().GetInstantDv(Z_AXIS)/cdda->topSpeed);
+			Platform& platform = reprap.GetPlatform();
+			const float maxBabySteppingAmount = cdda->totalDistance * min<float>(0.1, 0.5 * platform.GetInstantDv(Z_AXIS)/cdda->topSpeed);
 			babySteppingToDo = constrain<float>(amount, -maxBabySteppingAmount, maxBabySteppingAmount);
 			cdda->directionVector[Z_AXIS] += babySteppingToDo/cdda->totalDistance;
-			cdda->totalDistance *= cdda->NormaliseXYZ();
+			cdda->totalDistance *= cdda->NormaliseLinearMotion(platform.GetLinearAxes());
 			cdda->RecalculateMove(ring);
 			babySteppingDone += babySteppingToDo;
 			amount -= babySteppingToDo;
@@ -859,11 +859,11 @@ float DDA::AdvanceBabyStepping(DDARing& ring, size_t axis, float amount) noexcep
 		cdda->endCoordinates[Z_AXIS] += babySteppingDone;
 		if (cdda->flags.isDeltaMovement)
 		{
-			for (size_t axis = 0; axis < reprap.GetGCodes().GetTotalAxes(); ++axis)
+			for (size_t motor = 0; motor < reprap.GetGCodes().GetTotalAxes(); ++motor)
 			{
-				if (reprap.GetMove().GetKinematics().GetMotionType(axis) == MotionType::segmentFreeDelta)
+				if (reprap.GetMove().GetKinematics().GetMotionType(motor) == MotionType::segmentFreeDelta)
 				{
-					cdda->endPoint[axis] += (int32_t)(babySteppingDone * reprap.GetPlatform().DriveStepsPerUnit(axis));
+					cdda->endPoint[motor] += (int32_t)(babySteppingDone * reprap.GetPlatform().DriveStepsPerUnit(motor));
 				}
 			}
 		}
@@ -1536,58 +1536,89 @@ void DDA::Prepare(uint8_t simMode, float extrusionPending[]) noexcept
 
 // Take a unit positive-hyperquadrant vector, and return the factor needed to obtain
 // length of the vector as projected to touch box[].
-/*static*/ float DDA::VectorBoxIntersection(const float v[], const float box[], size_t dimensions) noexcept
+/*static*/ float DDA::VectorBoxIntersection(const float v[], const float box[]) noexcept
 {
 	// Generate a vector length that is guaranteed to exceed the size of the box
-	const float biggerThanBoxDiagonal = 2.0*Magnitude(box, dimensions);
-	float magnitude = biggerThanBoxDiagonal;
-	for (size_t d = 0; d < dimensions; d++)
+	float magnitude = 0.0;
+	for (size_t d = 0; d < MaxAxesPlusExtruders; d++)
 	{
-		if (biggerThanBoxDiagonal*v[d] > box[d])
+		magnitude += box[d];
+	}
+
+	// Now reduce the length until every axis fits
+	for (size_t d = 0; d < MaxAxesPlusExtruders; d++)
+	{
+		if (magnitude * v[d] > box[d])
 		{
-			const float a = box[d]/v[d];
-			if (a < magnitude)
-			{
-				magnitude = a;
-			}
+			magnitude = box[d]/v[d];
 		}
 	}
 	return magnitude;
 }
 
-// Normalise a vector with dim1 dimensions so that it is unit in the first dim2 dimensions, and also return its previous magnitude in dim2 dimensions
-/*static*/ float DDA::Normalise(float v[], size_t dim1, size_t dim2) noexcept
+// Get the magnitude measured over all axes and extruders
+/*static*/ float DDA::Magnitude(const float v[]) noexcept
 {
-	const float magnitude = Magnitude(v, dim2);
+	float magnitudeSquared = 0.0;
+	for (size_t d = 0; d < MaxAxesPlusExtruders; d++)
+	{
+		magnitudeSquared += fsquare(v[d]);
+	}
+	return sqrtf(magnitudeSquared);
+}
+
+// Normalise a vector with dim1 dimensions to unit length over the specified axes, and also return its previous magnitude in dim2 dimensions
+/*static*/ float DDA::Normalise(float v[], AxesBitmap unitLengthAxes) noexcept
+{
+	const float magnitude = Magnitude(v, unitLengthAxes);
 	if (magnitude <= 0.0)
 	{
 		return 0.0;
 	}
-	Scale(v, 1.0/magnitude, dim1);
+	Scale(v, 1.0/magnitude);
 	return magnitude;
 }
 
-// Make the direction vector unit-normal in XYZ and return the previous magnitude
-float DDA::NormaliseXYZ() noexcept
+// Normalise a vector to unit length over all axes
+/*static*/ float DDA::Normalise(float v[]) noexcept
 {
-	// First calculate the magnitude of the vector. If there is more than one X or Y axis, take an average of their movements (they should be equal).
-	float xMagSquared = 0.0, yMagSquared = 0.0;
+	const float magnitude = Magnitude(v);
+	if (magnitude <= 0.0)
+	{
+		return 0.0;
+	}
+	Scale(v, 1.0/magnitude);
+	return magnitude;
+}
+
+// Make the direction vector unit-normal in the linear axes, taking account of axis mapping, and return the previous magnitude
+float DDA::NormaliseLinearMotion(AxesBitmap linearAxes) noexcept
+{
+	// First calculate the magnitude of the vector. If there is more than one X or Y axis, take an average of their movements (they should normally be equal).
+	float xMagSquared = 0.0, yMagSquared = 0.0, magSquared = 0.0;
 	unsigned int numXaxes = 0, numYaxes = 0;
 	const AxesBitmap xAxes = Tool::GetXAxes(tool);
 	const AxesBitmap yAxes = Tool::GetYAxes(tool);
-	for (size_t d = 0; d < MaxAxes; ++d)
-	{
-		if (xAxes.IsBitSet(d))
-		{
-			xMagSquared += fsquare(directionVector[d]);
-			++numXaxes;
-		}
-		if (yAxes.IsBitSet(d))
-		{
-			yMagSquared += fsquare(directionVector[d]);
-			++numYaxes;
-		}
-	}
+	const float * const dv = directionVector;
+	linearAxes.Iterate([&xMagSquared, &yMagSquared, &magSquared, &numXaxes, &numYaxes, xAxes, yAxes, dv](unsigned int axis, unsigned int count)
+						{
+							const float dv2 = fsquare(dv[axis]);
+							if (xAxes.IsBitSet(axis))
+							{
+								xMagSquared += dv2;
+								++numXaxes;
+							}
+							else if (yAxes.IsBitSet(axis))
+							{
+								yMagSquared += dv2;
+								++numYaxes;
+							}
+							else
+							{
+								magSquared += dv2;
+							}
+						}
+					  );
 	if (numXaxes > 1)
 	{
 		xMagSquared /= numXaxes;
@@ -1596,32 +1627,29 @@ float DDA::NormaliseXYZ() noexcept
 	{
 		yMagSquared /= numYaxes;
 	}
-	const float magnitude = sqrtf(xMagSquared + yMagSquared + fsquare(directionVector[Z_AXIS]));
+	const float magnitude = sqrtf(xMagSquared + yMagSquared + magSquared);
 	if (magnitude <= 0.0)
 	{
 		return 0.0;
 	}
 
 	// Now normalise it
-	Scale(directionVector, 1.0/magnitude, MaxAxesPlusExtruders);
+	Scale(directionVector, 1.0/magnitude);
 	return magnitude;
 }
 
-// Return the magnitude of a vector
-/*static*/ float DDA::Magnitude(const float v[], size_t dimensions) noexcept
+// Return the magnitude of a vector over the specified orthogonal axes
+/*static*/ float DDA::Magnitude(const float v[], AxesBitmap axes) noexcept
 {
 	float magnitude = 0.0;
-	for (size_t d = 0; d < dimensions; d++)
-	{
-		magnitude += v[d]*v[d];
-	}
+	axes.Iterate([&magnitude, v](unsigned int axis, unsigned int count) { magnitude += fsquare(v[axis]); });
 	return sqrtf(magnitude);
 }
 
 // Multiply a vector by a scalar
-/*static*/ void DDA::Scale(float v[], float scale, size_t dimensions) noexcept
+/*static*/ void DDA::Scale(float v[], float scale) noexcept
 {
-	for (size_t d = 0; d < dimensions; d++)
+	for (size_t d = 0; d < MaxAxesPlusExtruders; d++)
 	{
 		v[d] *= scale;
 	}

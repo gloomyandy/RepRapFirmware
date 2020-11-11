@@ -11,9 +11,7 @@
 # include <Cache.h>
 # include <flash_efc.h>
 #endif
-#if defined(__LPC17xx__)
-# include "NVMEmulation.h"
-#endif
+
 
 NonVolatileMemory::NonVolatileMemory() noexcept : state(NvmState::notRead)
 {
@@ -25,7 +23,7 @@ void NonVolatileMemory::EnsureRead() noexcept
 	{
 #if SAME5x
 		memcpy(&buffer, reinterpret_cast<const void *>(SEEPROM_ADDR), sizeof(buffer));
-#elif defined(__LPC17xx__) || defined(STM32F4)
+#elif __LPC17xx__ || STM32F4
 		NVMEmulationRead(&buffer, sizeof(buffer));
 #elif SAM4E || SAM4S || SAME70
 		const bool cacheEnabled = Cache::Disable();
@@ -69,7 +67,7 @@ void NonVolatileMemory::EnsureWritten() noexcept
 		// Erase the page
 # if SAM4E || SAM4S || SAME70
 		flash_erase_user_signature();
-# elif defined(__LPC17xx__)  || defined(STM32F4)
+# elif __LPC17xx__  || STM32F4
 		NVMEmulationErase();
 # endif
 		state = NvmState::writeNeeded;
@@ -79,7 +77,7 @@ void NonVolatileMemory::EnsureWritten() noexcept
 	{
 # if SAM4E || SAM4S || SAME70
 		flash_write_user_signature(&buffer, sizeof(buffer)/sizeof(uint32_t));
-# elif defined(__LPC17xx__)  || defined(STM32F4)
+# elif __LPC17xx__  || STM32F4
 		NVMEmulationWrite(&buffer, sizeof(buffer));
 # else
 #  error Unsupported processor

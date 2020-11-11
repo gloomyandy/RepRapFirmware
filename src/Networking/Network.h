@@ -15,20 +15,18 @@
 #include <RTOSIface/RTOSIface.h>
 #include <ObjectModel/ObjectModel.h>
 #include <General/NamedEnum.h>
-#if defined(__LPC17xx__) && (HAS_WIFI_NETWORKING == 0) && (HAS_RTOSPLUSTCP_NETWORKING == 0)
-# include "LPC/NoNetwork/Network.h"
-#elif (defined(STM32F4)) && (HAS_WIFI_NETWORKING == 0) && (HAS_RTOSPLUSTCP_NETWORKING == 0)
-# include "STM32/NoNetwork/Network.h"
+#if (__LPC17xx__ || STM32F4) && (HAS_WIFI_NETWORKING == 0) && (HAS_RTOSPLUSTCP_NETWORKING == 0)
+# include "NoNetwork/Network.h"
 #else
 #if defined(DUET3_V03)
 const size_t NumNetworkInterfaces = 2;
-#elif defined(SAME70XPLD) || defined(DUET3_V05) || defined(DUET3_V06) || defined(DUET_NG) || defined(DUET_M) || defined(__LPC17xx__) || defined(STM32F4) || defined(PCCB) || defined(__RADDS__) || defined(DUET_5LC)
+#elif defined(DUET3_V06) || defined(DUET_NG) || defined(DUET_M) || defined(__LPC17xx__) || defined(STM32F4) || defined(PCCB) || defined(DUET3MINI)
 const size_t NumNetworkInterfaces = 1;
 #else
 # error Wrong Network.h file included
 #endif
 
-#if defined(__LPC17xx__) || defined(STM32F4)
+#if defined(__LPC17xx__)
 // Only 2 http responders as we are tight on memory.
 const size_t NumHttpResponders = 2;		// the number of concurrent HTTP requests we can process
 const size_t NumFtpResponders = 0;		// the number of concurrent FTP sessions we support

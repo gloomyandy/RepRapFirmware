@@ -29,9 +29,7 @@ StringParser::StringParser(GCodeBuffer& gcodeBuffer) noexcept
 	: gb(gcodeBuffer), fileBeingWritten(nullptr), writingFileSize(0), eofStringCounter(0), indentToSkipTo(NoIndentSkip),
 	  hasCommandNumber(false), commandLetter('Q'), checksumRequired(false), binaryWriting(false)
 {
-#if HAS_MASS_STORAGE
 	StartNewFile();
-#endif
 	Init();
 }
 
@@ -751,41 +749,33 @@ void StringParser::DecodeCommand() noexcept
 			}
 		}
 
-		// Find where the end of the command is. We assume that a G or M preceded by a space and not inside quotes or { } is the start of a new command.
+		// Find where the end of the command is. We assume that a G or M not inside quotes or { } is the start of a new command.
 		bool inQuotes = false;
-		unsigned int braceCount = 0;
-		bool primed = false;
+		unsigned int localBraceCount = 0;
 		for (commandEnd = parameterStart; commandEnd < gcodeLineEnd; ++commandEnd)
 		{
 			const char c = gb.buffer[commandEnd];
 			if (c == '"')
 			{
 				inQuotes = !inQuotes;
-				primed = false;
 			}
 			else if (!inQuotes)
 			{
 				char c2;
 				if (c == '{')
 				{
-					++braceCount;
-					primed = false;
+					++localBraceCount;
 				}
-				else if (c == '}')
+				else if (localBraceCount != 0)
 				{
-					if (braceCount != 0)
+					if (c == '}')
 					{
-						--braceCount;
+						--localBraceCount;
 					}
-					primed = false;
 				}
-				else if (primed && ((c2 = toupper(c)) == 'G' || c2 == 'M'))
+				else if ((c2 = toupper(c)) == 'G' || c2 == 'M')
 				{
 					break;
-				}
-				else if (braceCount == 0)
-				{
-					primed = (c == ' ' || c == '\t');
 				}
 			}
 		}
@@ -1483,14 +1473,15 @@ void StringParser::WriteToFile() noexcept
 	Init();
 }
 
-void StringParser::WriteBinaryToFile(char b) noexcept
+// Write a character to file, returning true if we finished doing the binary upload
+bool StringParser::WriteBinaryToFile(char b) noexcept
 {
 	if (b == eofString[eofStringCounter] && writingFileSize == 0)
 	{
 		eofStringCounter++;
 		if (eofStringCounter < ARRAY_SIZE(eofString) - 1)
 		{
-			return;					// not reached end of input yet
+			return false;					// not reached end of input yet
 		}
 	}
 	else
@@ -1506,11 +1497,12 @@ void StringParser::WriteBinaryToFile(char b) noexcept
 		fileBeingWritten->Write(b);		// writing one character at a time isn't very efficient, but uploading HTML files via USB is rarely done these days
 		if (writingFileSize == 0 || fileBeingWritten->Length() < writingFileSize)
 		{
-			return;					// not reached end of input yet
+			return false;					// not reached end of input yet
 		}
 	}
 
 	FinishWritingBinary();
+	return true;
 }
 
 void StringParser::FinishWritingBinary() noexcept

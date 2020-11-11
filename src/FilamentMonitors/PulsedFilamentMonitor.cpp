@@ -30,32 +30,33 @@ constexpr ObjectModelTableEntry PulsedFilamentMonitor::objectModelTable[] =
 {
 	// Within each group, these entries must be in alphabetical order
 	// 0. PulsedFilamentMonitor members
-	{ "calibrated", 	OBJECT_MODEL_FUNC_IF(self->DataReceived() && self->HaveCalibrationData(), self, 1), 	ObjectModelEntryFlags::none },
-	{ "configured", 	OBJECT_MODEL_FUNC(self, 2), 															ObjectModelEntryFlags::none },
-	{ "enabled",		OBJECT_MODEL_FUNC(self->comparisonEnabled),		 										ObjectModelEntryFlags::none },
-	{ "type",			OBJECT_MODEL_FUNC_NOSELF("pulsed"), 													ObjectModelEntryFlags::none },
+	{ "calibrated", 	OBJECT_MODEL_FUNC_IF(self->IsLocal() && self->DataReceived() && self->HaveCalibrationData(), self, 1), 	ObjectModelEntryFlags::none },
+	{ "configured", 	OBJECT_MODEL_FUNC(self, 2), 																			ObjectModelEntryFlags::none },
+	{ "enabled",		OBJECT_MODEL_FUNC(self->comparisonEnabled),		 														ObjectModelEntryFlags::none },
+	{ "status",			OBJECT_MODEL_FUNC(self->GetStatusText()),																ObjectModelEntryFlags::live },
+	{ "type",			OBJECT_MODEL_FUNC_NOSELF("pulsed"), 																	ObjectModelEntryFlags::none },
 
 	// 1. PulsedFilamentMonitor.calibrated members
-	{ "mmPerPulse",		OBJECT_MODEL_FUNC(self->MeasuredSensitivity(), 3), 										ObjectModelEntryFlags::none },
-	{ "percentMax",		OBJECT_MODEL_FUNC(ConvertToPercent(self->maxMovementRatio)), 							ObjectModelEntryFlags::none },
-	{ "percentMin",		OBJECT_MODEL_FUNC(ConvertToPercent(self->minMovementRatio)), 							ObjectModelEntryFlags::none },
-	{ "totalDistance",	OBJECT_MODEL_FUNC(self->totalExtrusionCommanded, 1), 									ObjectModelEntryFlags::none },
+	{ "mmPerPulse",		OBJECT_MODEL_FUNC(self->MeasuredSensitivity(), 3), 														ObjectModelEntryFlags::none },
+	{ "percentMax",		OBJECT_MODEL_FUNC(ConvertToPercent(self->maxMovementRatio)), 											ObjectModelEntryFlags::none },
+	{ "percentMin",		OBJECT_MODEL_FUNC(ConvertToPercent(self->minMovementRatio)), 											ObjectModelEntryFlags::none },
+	{ "totalDistance",	OBJECT_MODEL_FUNC(self->totalExtrusionCommanded, 1), 													ObjectModelEntryFlags::none },
 
 	// 2. PulsedFilamentMonitor.configured members
-	{ "mmPerPulse",		OBJECT_MODEL_FUNC(self->mmPerPulse, 3), 												ObjectModelEntryFlags::none },
-	{ "percentMax",		OBJECT_MODEL_FUNC(ConvertToPercent(self->maxMovementAllowed)), 							ObjectModelEntryFlags::none },
-	{ "percentMin",		OBJECT_MODEL_FUNC(ConvertToPercent(self->minMovementAllowed)), 							ObjectModelEntryFlags::none },
-	{ "sampleDistance", OBJECT_MODEL_FUNC(self->minimumExtrusionCheckLength, 1), 								ObjectModelEntryFlags::none },
+	{ "mmPerPulse",		OBJECT_MODEL_FUNC(self->mmPerPulse, 3), 																ObjectModelEntryFlags::none },
+	{ "percentMax",		OBJECT_MODEL_FUNC(ConvertToPercent(self->maxMovementAllowed)), 											ObjectModelEntryFlags::none },
+	{ "percentMin",		OBJECT_MODEL_FUNC(ConvertToPercent(self->minMovementAllowed)), 											ObjectModelEntryFlags::none },
+	{ "sampleDistance", OBJECT_MODEL_FUNC(self->minimumExtrusionCheckLength, 1), 												ObjectModelEntryFlags::none },
 };
 
-constexpr uint8_t PulsedFilamentMonitor::objectModelTableDescriptor[] = { 3, 4, 4, 4 };
+constexpr uint8_t PulsedFilamentMonitor::objectModelTableDescriptor[] = { 3, 5, 4, 4 };
 
 DEFINE_GET_OBJECT_MODEL_TABLE(PulsedFilamentMonitor)
 
 #endif
 
-PulsedFilamentMonitor::PulsedFilamentMonitor(unsigned int extruder, unsigned int type) noexcept
-	: FilamentMonitor(extruder, type),
+PulsedFilamentMonitor::PulsedFilamentMonitor(unsigned int extruder, unsigned int monitorType) noexcept
+	: FilamentMonitor(extruder, monitorType),
 	  mmPerPulse(DefaultMmPerPulse),
 	  minMovementAllowed(DefaultMinMovementAllowed), maxMovementAllowed(DefaultMaxMovementAllowed),
 	  minimumExtrusionCheckLength(DefaultMinimumExtrusionCheckLength), comparisonEnabled(false)
@@ -96,73 +97,71 @@ float PulsedFilamentMonitor::MeasuredSensitivity() const noexcept
 }
 
 // Configure this sensor, returning true if error and setting 'seen' if we processed any configuration parameters
-bool PulsedFilamentMonitor::Configure(GCodeBuffer& gb, const StringRef& reply, bool& seen)
+GCodeResult PulsedFilamentMonitor::Configure(GCodeBuffer& gb, const StringRef& reply, bool& seen)
 {
-	if (ConfigurePin(gb, reply, INTERRUPT_MODE_RISING, seen))
+	const GCodeResult rslt = CommonConfigure(gb, reply, INTERRUPT_MODE_RISING, seen);
+	if (rslt <= GCodeResult::warning)
 	{
-		return true;
-	}
+		gb.TryGetFValue('L', mmPerPulse, seen);
+		gb.TryGetFValue('E', minimumExtrusionCheckLength, seen);
 
-	gb.TryGetFValue('L', mmPerPulse, seen);
-	gb.TryGetFValue('E', minimumExtrusionCheckLength, seen);
-
-	if (gb.Seen('R'))
-	{
-		seen = true;
-		size_t numValues = 2;
-		uint32_t minMax[2];
-		gb.GetUnsignedArray(minMax, numValues, false);
-		if (numValues > 0)
+		if (gb.Seen('R'))
 		{
-			minMovementAllowed = (float)minMax[0] * 0.01;
+			seen = true;
+			size_t numValues = 2;
+			uint32_t minMax[2];
+			gb.GetUnsignedArray(minMax, numValues, false);
+			if (numValues > 0)
+			{
+				minMovementAllowed = (float)minMax[0] * 0.01;
+			}
+			if (numValues > 1)
+			{
+				maxMovementAllowed = (float)minMax[1] * 0.01;
+			}
 		}
-		if (numValues > 1)
+
+		if (gb.Seen('S'))
 		{
-			maxMovementAllowed = (float)minMax[1] * 0.01;
+			seen = true;
+			comparisonEnabled = (gb.GetIValue() > 0);
 		}
-	}
 
-	if (gb.Seen('S'))
-	{
-		seen = true;
-		comparisonEnabled = (gb.GetIValue() > 0);
-	}
-
-	if (seen)
-	{
-		Init();
-		reprap.SensorsUpdated();
-	}
-	else
-	{
-		reply.copy("Pulse-type filament monitor on pin ");
-		GetPort().AppendPinName(reply);
-		reply.catf(", %s, sensitivity %.3fmm/pulse, allowed movement %ld%% to %ld%%, check every %.1fmm, ",
-					(comparisonEnabled) ? "enabled" : "disabled",
-					(double)mmPerPulse,
-					ConvertToPercent(minMovementAllowed),
-					ConvertToPercent(maxMovementAllowed),
-					(double)minimumExtrusionCheckLength);
-
-		if (!DataReceived())
+		if (seen)
 		{
-			reply.cat("no data received");
-		}
-		else if (HaveCalibrationData())
-		{
-			reply.catf("measured sensitivity %.3fmm/pulse, measured minimum %ld%%, maximum %ld%% over %.1fmm\n",
-				(double)MeasuredSensitivity(),
-				ConvertToPercent(minMovementRatio),
-				ConvertToPercent(maxMovementRatio),
-				(double)totalExtrusionCommanded);
+			Init();
+			reprap.SensorsUpdated();
 		}
 		else
 		{
-			reply.cat("no calibration data");
+			reply.copy("Pulse-type filament monitor on pin ");
+			GetPort().AppendPinName(reply);
+			reply.catf(", %s, sensitivity %.3fmm/pulse, allowed movement %ld%% to %ld%%, check every %.1fmm, ",
+						(comparisonEnabled) ? "enabled" : "disabled",
+						(double)mmPerPulse,
+						ConvertToPercent(minMovementAllowed),
+						ConvertToPercent(maxMovementAllowed),
+						(double)minimumExtrusionCheckLength);
+
+			if (!DataReceived())
+			{
+				reply.cat("no data received");
+			}
+			else if (HaveCalibrationData())
+			{
+				reply.catf("measured sensitivity %.3fmm/pulse, measured minimum %ld%%, maximum %ld%% over %.1fmm\n",
+					(double)MeasuredSensitivity(),
+					ConvertToPercent(minMovementRatio),
+					ConvertToPercent(maxMovementRatio),
+					(double)totalExtrusionCommanded);
+			}
+			else
+			{
+				reply.cat("no calibration data");
+			}
 		}
 	}
-
-	return false;
+	return rslt;
 }
 
 // ISR for when the pin state changes. It should return true if the ISR wants the commanded extrusion to be fetched.

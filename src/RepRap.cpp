@@ -78,6 +78,9 @@ static_assert(CONF_HSMCI_XDMAC_CHANNEL == DmacChanHsmci, "mismatched DMA channel
 // We call vTaskNotifyGiveFromISR from various interrupts, so the following must be true
 static_assert(configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY <= NvicPriorityHSMCI, "configMAX_SYSCALL_INTERRUPT_PRIORITY is set too high");
 
+// Builds that use CoreN2G now need a version string. Eventually, all builds of RRF3 will use CoreN2G.
+extern const char VersionText[] = FIRMWARE_NAME " version " VERSION;
+
 #if HAS_HIGH_SPEED_SD && !SAME5x										// SAME5x uses CoreN2G which makes its own RTOS calls
 
 static TaskHandle hsmciTask = nullptr;									// the task that is waiting for a HSMCI command to complete
@@ -101,10 +104,8 @@ void HsmciDmaCallback(CallbackParameter cp) noexcept
 	XDMAC->XDMAC_CHID[DmacChanHsmci].XDMAC_CID = 0xFFFFFFFF;			// disable all DMA interrupts for this channel
 	if (hsmciTask != nullptr)
 	{
-		BaseType_t higherPriorityTaskWoken = pdFALSE;
-		vTaskNotifyGiveFromISR(hsmciTask, &higherPriorityTaskWoken);	// wake up the task
+		TaskBase::GiveFromISR(hsmciTask);
 		hsmciTask = nullptr;
-		portYIELD_FROM_ISR(higherPriorityTaskWoken);
 	}
 }
 
@@ -237,6 +238,7 @@ constexpr ObjectModelTableEntry RepRap::objectModelTable[] =
 	{ "job",					OBJECT_MODEL_FUNC(self->printMonitor),									ObjectModelEntryFlags::live },
 	{ "limits",					OBJECT_MODEL_FUNC(self, 2),												ObjectModelEntryFlags::none },
 	{ "move",					OBJECT_MODEL_FUNC(self->move),											ObjectModelEntryFlags::live },
+	// Note, 'network' is needed even if there is no networking, because it contains the machine name
 	{ "network",				OBJECT_MODEL_FUNC(self->network),										ObjectModelEntryFlags::none },
 #if SUPPORT_SCANNER
 	{ "scanner",				OBJECT_MODEL_FUNC(self->scanner),										ObjectModelEntryFlags::none },
@@ -315,8 +317,10 @@ constexpr ObjectModelTableEntry RepRap::objectModelTable[] =
 #else
 	{ "logFile",				OBJECT_MODEL_FUNC_NOSELF(nullptr),										ObjectModelEntryFlags::none },
 #endif
+	{ "logLevel",				OBJECT_MODEL_FUNC(self->platform->GetLogLevel()),						ObjectModelEntryFlags::none },
 	{ "machineMode",			OBJECT_MODEL_FUNC(self->gCodes->GetMachineModeString()),				ObjectModelEntryFlags::none },
 	{ "messageBox",				OBJECT_MODEL_FUNC_IF(self->mbox.active, self, 5),						ObjectModelEntryFlags::none },
+	{ "msUpTime",				OBJECT_MODEL_FUNC_NOSELF((int32_t)(context.GetStartMillis() % 1000u)),	ObjectModelEntryFlags::live },
 	{ "nextTool",				OBJECT_MODEL_FUNC((int32_t)self->gCodes->GetNewToolNumber()),			ObjectModelEntryFlags::live },
 #if HAS_VOLTAGE_MONITOR
 	{ "powerFailScript",		OBJECT_MODEL_FUNC(self->gCodes->GetPowerFailScript()),					ObjectModelEntryFlags::none },
@@ -325,7 +329,7 @@ constexpr ObjectModelTableEntry RepRap::objectModelTable[] =
 	{ "restorePoints",			OBJECT_MODEL_FUNC_NOSELF(&restorePointsArrayDescriptor),				ObjectModelEntryFlags::none },
 	{ "status",					OBJECT_MODEL_FUNC(self->GetStatusString()),								ObjectModelEntryFlags::live },
 	{ "time",					OBJECT_MODEL_FUNC(DateTime(self->platform->GetDateTime())),				ObjectModelEntryFlags::live },
-	{ "upTime",					OBJECT_MODEL_FUNC_NOSELF((int32_t)((millis64()/1000u) & 0x7FFFFFFF)),	ObjectModelEntryFlags::live },
+	{ "upTime",					OBJECT_MODEL_FUNC_NOSELF((int32_t)((context.GetStartMillis()/1000u) & 0x7FFFFFFF)),	ObjectModelEntryFlags::live },
 
 	// 4. MachineModel.state.beep
 	{ "duration",				OBJECT_MODEL_FUNC((int32_t)self->beepDuration),							ObjectModelEntryFlags::none },
@@ -350,8 +354,9 @@ constexpr ObjectModelTableEntry RepRap::objectModelTable[] =
 	{ "job",					OBJECT_MODEL_FUNC((int32_t)self->jobSeq),								ObjectModelEntryFlags::live },
 	// no need for 'limits' because it never changes
 	{ "move",					OBJECT_MODEL_FUNC((int32_t)self->moveSeq),								ObjectModelEntryFlags::live },
-#if HAS_NETWORKING
+	// Note, 'network' is needed even if there is no networking, because it contains the machine name
 	{ "network",				OBJECT_MODEL_FUNC((int32_t)self->networkSeq),							ObjectModelEntryFlags::live },
+#if HAS_NETWORKING
 	{ "reply",					OBJECT_MODEL_FUNC_NOSELF((int32_t)HttpResponder::GetReplySeq()),		ObjectModelEntryFlags::live },
 #endif
 #if SUPPORT_SCANNER
@@ -376,10 +381,10 @@ constexpr uint8_t RepRap::objectModelTableDescriptor[] =
 	0,																		// directories
 #endif
 	25,																		// limits
-	14 + HAS_VOLTAGE_MONITOR + SUPPORT_LASER,								// state
+	16 + HAS_VOLTAGE_MONITOR + SUPPORT_LASER,								// state
 	2,																		// state.beep
 	6,																		// state.messageBox
-	10 + 2 * HAS_NETWORKING + SUPPORT_SCANNER + 2 * HAS_MASS_STORAGE		// seqs
+	11 + HAS_NETWORKING + SUPPORT_SCANNER + 2 * HAS_MASS_STORAGE			// seqs
 };
 
 DEFINE_GET_OBJECT_MODEL_TABLE(RepRap)
@@ -460,7 +465,6 @@ void RepRap::Init() noexcept
 	fansManager->Init();
 	printMonitor->Init();
 	FilamentMonitor::InitStatic();
-
 #if SUPPORT_ROLAND
 	roland->Init();
 #endif
@@ -479,9 +483,9 @@ void RepRap::Init() noexcept
 #if SAME5x
 	WatchdogInit();
 	NVIC_EnableIRQ(WDT_IRQn);														// enable the watchdog early warning interrupt
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
 	wdt_init(1); // set wdt to 1 second. reset the processor on a watchdog fault
-#elif defined(STM32F4)
+#elif STM32F4
 	watchdogEnable(1000);
 #else
 	{
@@ -504,13 +508,24 @@ void RepRap::Init() noexcept
 #endif
 
 	active = true;										// must do this before we start the network or call Spin(), else the watchdog may time out
+#if (__LPC17xx__ || STM32F4) && HAS_SMART_DRIVERS
+	if (platform->AtxPower())
+	{
+		// ensure smart drivers are up and running
+		platform->MessageF(UsbMessage, "Checking drivers...\n");
+		do
+		{
+			SmartDrivers::Spin(true);
+		} while (!SmartDrivers::IsReady());
+	}
+#endif
 
 #if HAS_LINUX_INTERFACE && !HAS_MASS_STORAGE
 	linuxInterface->Init();
 	usingLinuxInterface = true;
 #endif
 
-	platform->MessageF(UsbMessage, "\n%s Version %s dated %s\n", FIRMWARE_NAME, VERSION, DATE);
+	platform->MessageF(UsbMessage, "%s\n", VersionText);
 
 #if HAS_MASS_STORAGE
 	// Try to mount the first SD card
@@ -561,8 +576,19 @@ void RepRap::Init() noexcept
 #if HAS_LINUX_INTERFACE
 	if (usingLinuxInterface)
 	{
-		processingConfig = false;
-		gCodes->RunConfigFile(GCodes::CONFIG_FILE);		// we didn't get config.g from SD card so request it from Linux
+		// Keep spinning until the SBC connects
+		while (!linuxInterface->IsConnected())
+		{
+			Spin();
+		}
+
+		// Run config.g or config.g.bak
+		if (!RunStartupFile(GCodes::CONFIG_FILE))
+		{
+			RunStartupFile(GCodes::CONFIG_BACKUP_FILE);
+		}
+
+		// runonce.g is executed by the SBC as soon as processingConfig is set to false.
 		// As we are running the SBC, save RAM by not activating the network
 	}
 	else
@@ -576,8 +602,8 @@ void RepRap::Init() noexcept
 			platform->DeleteSysFile(GCodes::RUNONCE_G);
 		}
 #endif
-		processingConfig = false;
 	}
+	processingConfig = false;
 
 #if HAS_HIGH_SPEED_SD && !SAME5x
 	hsmci_set_idle_func(hsmciIdle);
@@ -597,12 +623,12 @@ bool RepRap::RunStartupFile(const char *filename) noexcept
 	bool rslt = gCodes->RunConfigFile(filename);
 	if (rslt)
 	{
-		platform->MessageF(UsbMessage, "Executing %s...", filename);
+		platform->MessageF(UsbMessage, "Executing %s... ", filename);
 		do
 		{
 			// GCodes::Spin will process the macro file and ensure IsDaemonBusy returns false when it's done
 			Spin();
-		} while (gCodes->IsDaemonBusy());
+		} while (gCodes->IsTriggerBusy());
 		platform->Message(UsbMessage, "Done!\n");
 	}
 	return rslt;
@@ -610,7 +636,7 @@ bool RepRap::RunStartupFile(const char *filename) noexcept
 
 void RepRap::Exit() noexcept
 {
-#if HAS_HIGH_SPEED_SD && !SAME5x		//TODO implement for SAME5x
+#if HAS_HIGH_SPEED_SD && !SAME5x		// SAME5x MCI driver is RTOS_aware, so it doesn't need this
 	hsmci_set_idle_func(nullptr);
 #endif
 	active = false;
@@ -675,15 +701,6 @@ void RepRap::Spin() noexcept
 	ticksInSpinState = 0;
 	spinningModule = moduleDisplay;
 	display->Spin();
-#endif
-
-#if HAS_LINUX_INTERFACE
-	if (usingLinuxInterface)
-	{
-		ticksInSpinState = 0;
-		spinningModule = moduleLinuxInterface;
-		linuxInterface->Spin();
-	}
 #endif
 
 	ticksInSpinState = 0;
@@ -782,7 +799,7 @@ void RepRap::Diagnostics(MessageType mtype) noexcept
 # endif
 	const char* const expansionName = DuetExpansion::GetExpansionBoardName();
 	platform->MessageF(mtype, (expansionName == nullptr) ? "\n" : " + %s\n", expansionName);
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
 	platform->MessageF(mtype, "%s (%s) version %s running on %s at %dMhz\n", FIRMWARE_NAME, lpcBoardName, VERSION, platform->GetElectronicsString(), (int)SystemCoreClock/1000000);
 #elif HAS_LINUX_INTERFACE
 	platform->MessageF(mtype, "%s version %s running on %s (%s mode)\n", FIRMWARE_NAME, VERSION, platform->GetElectronicsString(),
@@ -807,7 +824,12 @@ void RepRap::Diagnostics(MessageType mtype) noexcept
 	move->Diagnostics(mtype);
 	heat->Diagnostics(mtype);
 	gCodes->Diagnostics(mtype);
-	network->Diagnostics(mtype);
+#if HAS_LINUX_INTERFACE
+	if (!usingLinuxInterface)
+#endif
+	{
+		network->Diagnostics(mtype);
+	}
 	FilamentMonitor::Diagnostics(mtype);
 #ifdef DUET_NG
 	DuetExpansion::Diagnostics(mtype);
@@ -1183,7 +1205,7 @@ void RepRap::Tick() noexcept
 				__asm volatile("mrs r2, psp");
 				register const uint32_t * stackPtr asm ("r2");					// we want the PSP not the MSP
 				SoftwareReset(
-					(heatTaskStuck) ? (uint16_t)SoftwareResetReason::heaterWatchdog : (uint16_t)SoftwareResetReason::stuckInSpin,
+					(heatTaskStuck) ? SoftwareResetReason::heaterWatchdog : SoftwareResetReason::stuckInSpin,
 					stackPtr + 5);												// discard uninteresting registers, keep LR PC PSR
 			}
 		}
@@ -1289,7 +1311,7 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 				response->EncodeString(mbox.message, false);
 				response->cat(",\"title\":");
 				response->EncodeString(mbox.title, false);
-				response->catf(",\"mode\":%d,\"seq\":%" PRIu32 ",\"timeout\":%.1f,\"controls\":%u}", mbox.mode, mbox.seq, (double)timeLeft, mbox.controls.GetRaw());
+				response->catf(",\"mode\":%d,\"seq\":%" PRIu32 ",\"timeout\":%.1f,\"controls\":%u}", mbox.mode, mbox.seq, (double)timeLeft, (unsigned int)mbox.controls.GetRaw());
 			}
 			response->cat('}');
 		}
@@ -1821,7 +1843,7 @@ OutputBuffer *RepRap::GetConfigResponse() noexcept
 	return response;
 }
 
-// Get the JSON status response for PanelDue or the old web server.
+// Get the JSON status response for PanelDue
 // Type 0 was the old-style webserver status response, but is no longer supported.
 // Type 1 is the new-style webserver status response.
 // Type 2 is the M105 S2 response, which is like the new-style status response but some fields are omitted.
@@ -1957,7 +1979,7 @@ OutputBuffer *RepRap::GetLegacyStatusResponse(uint8_t type, int seq) const noexc
 		if (mbox.active)
 		{
 			response->catf(",\"msgBox.mode\":%d,\"msgBox.seq\":%" PRIu32 ",\"msgBox.timeout\":%.1f,\"msgBox.controls\":%u",
-							mbox.mode, mbox.seq, (double)timeLeft, mbox.controls.GetRaw());
+							mbox.mode, mbox.seq, (double)timeLeft, (unsigned int)mbox.controls.GetRaw());
 			response->cat(",\"msgBox.msg\":");
 			response->EncodeString(mbox.message, false);
 			response->cat(",\"msgBox.title\":");
@@ -1990,13 +2012,13 @@ OutputBuffer *RepRap::GetLegacyStatusResponse(uint8_t type, int seq) const noexc
 		response->EncodeString(FIRMWARE_NAME, false);
 	}
 
-	response->cat('}');
+	response->cat("}\n");			// include a newline to help PanelDue resync
 	return response;
 }
 
 #if HAS_MASS_STORAGE
 
-// Get the list of files in the specified directory in JSON format.
+// Get the list of files in the specified directory in JSON format. PanelDue uses this one, so include a newline at the end.
 // If flagDirs is true then we prefix each directory with a * character.
 OutputBuffer *RepRap::GetFilesResponse(const char *dir, unsigned int startAt, bool flagsDirs) noexcept
 {
@@ -2061,11 +2083,16 @@ OutputBuffer *RepRap::GetFilesResponse(const char *dir, unsigned int startAt, bo
 
 	if (err != 0)
 	{
-		response->catf("],\"err\":%u}", err);
+		response->catf("],\"err\":%u}\n", err);
 	}
 	else
 	{
-		response->catf("],\"next\":%u,\"err\":%u}", nextFile, err);
+		response->catf("],\"next\":%u,\"err\":%u}\n", nextFile, err);
+	}
+
+	if (response->HadOverflow())
+	{
+		OutputBuffer::ReleaseAll(response);
 	}
 	return response;
 }
@@ -2150,13 +2177,17 @@ OutputBuffer *RepRap::GetFilelistResponse(const char *dir, unsigned int startAt)
 	// If there is no error, don't append "err":0 because if we do then DWC thinks there has been an error - looks like it doesn't check the value
 	if (err != 0)
 	{
-		response->catf("],\"err\":%u}", err);
+		response->catf("],\"err\":%u}\n", err);
 	}
 	else
 	{
-		response->catf("],\"next\":%u}", nextFile);
+		response->catf("],\"next\":%u}\n", nextFile);
 	}
 
+	if (response->HadOverflow())
+	{
+		OutputBuffer::ReleaseAll(response);
+	}
 	return response;
 }
 
@@ -2309,6 +2340,7 @@ void RepRap::AppendStringArray(OutputBuffer *buf, const char *name, size_t numVa
 #if SUPPORT_OBJECT_MODEL
 
 // Return a query into the object model, or return nullptr if no buffer available
+// We append a newline to help PanelDue resync after receiving corrupt or incomplete data. DWC ignores it.
 OutputBuffer *RepRap::GetModelResponse(const char *key, const char *flags) const THROWS(GCodeException)
 {
 	OutputBuffer *outBuf;
@@ -2328,9 +2360,21 @@ OutputBuffer *RepRap::GetModelResponse(const char *key, const char *flags) const
 			++key;
 		}
 
-		outBuf->cat(",\"result\":");
-		reprap.ReportAsJson(outBuf, key, flags, wantArrayLength);
-		outBuf->cat('}');
+		try
+		{
+			outBuf->cat(",\"result\":");
+			reprap.ReportAsJson(outBuf, key, flags, wantArrayLength);
+			outBuf->cat("}\n");
+			if (outBuf->HadOverflow())
+			{
+				OutputBuffer::ReleaseAll(outBuf);
+			}
+		}
+		catch (...)
+		{
+			OutputBuffer::ReleaseAll(outBuf);
+			throw;
+		}
 	}
 
 	return outBuf;
@@ -2383,6 +2427,7 @@ void RepRap::SetMessage(const char *msg) noexcept
 	{
 		platform->SendPanelDueMessage(0, msg);
 	}
+	platform->Message(MessageType::LogInfo, msg);
 }
 
 // Display a message box on the web interface
@@ -2624,9 +2669,9 @@ bool RepRap::WriteToolParameters(FileStore *f, const bool forceWriteOffsets) noe
 
 // Firmware update operations
 
-#ifdef __LPC17xx__
+#if __LPC17xx__
     #include "LPC/FirmwareUpdate.hpp"
-#elif defined(STM32F4)
+#elif STM32F4
     #include "STM32/FirmwareUpdate.hpp"
 #else
 
@@ -2682,7 +2727,7 @@ void RepRap::UpdateFirmware() noexcept
 	FileStore * const iapFile = platform->OpenFile(DEFAULT_SYS_DIR, IAP_UPDATE_FILE, OpenMode::read);
 	if (iapFile == nullptr)
 	{
-		platform->MessageF(FirmwareUpdateMessage, "IAP file '" IAP_UPDATE_FILE "' not found\n");
+		platform->Message(FirmwareUpdateMessage, "IAP file '" IAP_UPDATE_FILE "' not found\n");
 		return;
 	}
 
@@ -2716,6 +2761,10 @@ void RepRap::PrepareToLoadIap() noexcept
 	SmartDrivers::Exit();					// stop the drivers being polled via SPI or UART because it may use data in the last 64Kb of RAM
 	FilamentMonitor::Exit();				// stop the filament monitors generating interrupts, we may be about to overwrite them
 	fansManager->Exit();					// stop the fan tachos generating interrupts, we may be about to overwrite them
+	if (RTOSIface::GetCurrentTask() != Tasks::GetMainTask())
+	{
+		Tasks::TerminateMainTask();			// stop the main task if IAP is being written from another task
+	}
 
 #ifdef DUET_NG
 	DuetExpansion::Exit();					// stop the DueX polling task
@@ -2843,10 +2892,10 @@ void RepRap::StartIap() noexcept
 	(void)*(reinterpret_cast<const volatile char*>(0x20800000));
 #elif SAM3XA
 	(void)*(reinterpret_cast<const volatile char*>(0x20200000));
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
 	// The LPC176x/5x generates Bus Fault exception when accessing a reserved memory address
 	(void)*(reinterpret_cast<const volatile char*>(0x00080000));
-#elif defined(STM32F4)
+#elif STM32F4
 	// FIXME need to test this probably not the correct address
 	(void)*(reinterpret_cast<const volatile char*>(0x00080000));
 #else

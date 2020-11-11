@@ -12,8 +12,9 @@
 #include <CAN/CanInterface.h>
 #include <RepRap.h>
 #include <Platform.h>
+#include <GCodes/GCodeBuffer/GCodeBuffer.h>
 
-ExpansionBoardData::ExpansionBoardData() noexcept : typeName(nullptr), state(BoardState::unknown)
+ExpansionBoardData::ExpansionBoardData() noexcept : typeName(nullptr), state(BoardState::unknown), numDrivers(0)
 {
 	mcuTemp.min = mcuTemp.max = mcuTemp.current = vin.max = vin.min = vin.current = v12.max = v12.min = v12.current = 0.0;
 }
@@ -33,7 +34,7 @@ constexpr ObjectModelTableEntry ExpansionManager::objectModelTable[] =
 	{ "canAddress",			OBJECT_MODEL_FUNC((int32_t)(&(self->FindIndexedBoard(context.GetLastIndex())) - self->boards)),					ObjectModelEntryFlags::none },
 	{ "firmwareFileName",	OBJECT_MODEL_FUNC(self->FindIndexedBoard(context.GetLastIndex()).typeName, ExpansionDetail::firmwareFileName),	ObjectModelEntryFlags::none },
 	{ "firmwareVersion",	OBJECT_MODEL_FUNC(self->FindIndexedBoard(context.GetLastIndex()).typeName, ExpansionDetail::firmwareVersion),	ObjectModelEntryFlags::none },
-	{ "maxMotors",			OBJECT_MODEL_FUNC_NOSELF((int32_t)NumDirectDrivers),															ObjectModelEntryFlags::verbose },
+	{ "maxMotors",			OBJECT_MODEL_FUNC((int32_t)self->FindIndexedBoard(context.GetLastIndex()).numDrivers),							ObjectModelEntryFlags::verbose },
 	{ "mcuTemp",			OBJECT_MODEL_FUNC(self, 1),																						ObjectModelEntryFlags::live },
 	{ "shortName",			OBJECT_MODEL_FUNC(self->FindIndexedBoard(context.GetLastIndex()).typeName, ExpansionDetail::shortName),			ObjectModelEntryFlags::none },
 	{ "state",				OBJECT_MODEL_FUNC(self->FindIndexedBoard(context.GetLastIndex()).state.ToString()),								ObjectModelEntryFlags::none },
@@ -72,6 +73,7 @@ DEFINE_GET_OBJECT_MODEL_TABLE(ExpansionManager)
 ExpansionManager::ExpansionManager() noexcept : numExpansionBoards(0), numBoardsFlashing(0), lastIndexSearched(0), lastAddressFound(0)
 {
 	// the boards table array is initialised by its constructor
+	boards[0].numDrivers = NumDirectDrivers;
 }
 
 // Update the state of a board
@@ -107,7 +109,7 @@ void ExpansionManager::UpdateBoardState(CanAddress address, BoardState newState)
 	}
 }
 
-// Process an announcement from an expansion board and free the message buffer that it arrived in
+// Process an announcement from an expansion board. Don't free the message buffer that it arrived in
 void ExpansionManager::ProcessAnnouncement(CanMessageBuffer *buf) noexcept
 {
 	const CanAddress src = buf->id.Src();
@@ -135,11 +137,18 @@ void ExpansionManager::ProcessAnnouncement(CanMessageBuffer *buf) noexcept
 				newTypeName = temp;
 			}
 			board.typeName = newTypeName;
+			board.numDrivers = buf->msg.announce.numDrivers;
 		}
 		UpdateBoardState(src, BoardState::running);
 	}
 	buf->SetupResponseMessage<CanMessageAcknowledgeAnnounce>(0, CanId::MasterAddress, src);
-	CanInterface::SendResponse(buf);
+	CanInterface::SendResponseNoFree(buf);
+}
+
+// Return a pointer to the expansion board, if it is present
+const ExpansionBoardData *ExpansionManager::GetBoardDetails(uint8_t address) const noexcept
+{
+	return (address < ARRAY_SIZE(boards) && boards[address].state == BoardState::running) ? &boards[address] : nullptr;
 }
 
 // Tell an expansion board to update
@@ -147,19 +156,29 @@ GCodeResult ExpansionManager::UpdateRemoteFirmware(uint32_t boardAddress, GCodeB
 {
 	CanInterface::CheckCanAddress(boardAddress, gb);
 
+	const unsigned int moduleNumber = (gb.Seen('S')) ? gb.GetLimitedUIValue('S', 4) : 0;
+	if (moduleNumber != (unsigned int)FirmwareModule::main && moduleNumber != (unsigned int)FirmwareModule::bootloader)
+	{
+		reply.printf("Unknown module number %u", moduleNumber);
+		return GCodeResult::error;
+	}
+
 	// Ask the board for its type and check we have the firmware file for it
-	CanMessageBuffer * const buf1 = CanInterface::AllocateBuffer(gb);
+	CanMessageBuffer * const buf1 = CanInterface::AllocateBuffer(&gb);
 	CanRequestId rid1 = CanInterface::AllocateRequestId(boardAddress);
 	auto msg1 = buf1->SetupRequestMessage<CanMessageReturnInfo>(rid1, CanId::MasterAddress, (CanAddress)boardAddress);
-	msg1->type = CanMessageReturnInfo::typeBoardName;
-	const GCodeResult rslt = CanInterface::SendRequestAndGetStandardReply(buf1, rid1, reply);
-	if (rslt != GCodeResult::ok)
+
+	msg1->type = (moduleNumber == (unsigned int)FirmwareModule::bootloader) ? CanMessageReturnInfo::typeBootloaderName : CanMessageReturnInfo::typeBoardName;
 	{
-		return rslt;
+		const GCodeResult rslt = CanInterface::SendRequestAndGetStandardReply(buf1, rid1, reply);
+		if (rslt != GCodeResult::ok)
+		{
+			return rslt;
+		}
 	}
 
 	String<StringLength50> firmwareFilename;
-	firmwareFilename.copy("Duet3Firmware_");
+	firmwareFilename.copy((moduleNumber == 3) ? "Duet3Bootloader-" : "Duet3Firmware_");
 	firmwareFilename.cat(reply.c_str());
 	reply.Clear();
 	firmwareFilename.cat(".bin");
@@ -180,13 +199,18 @@ GCodeResult ExpansionManager::UpdateRemoteFirmware(uint32_t boardAddress, GCodeB
 	}
 #endif
 
-	CanMessageBuffer * const buf2 = CanInterface::AllocateBuffer(gb);
+	CanMessageBuffer * const buf2 = CanInterface::AllocateBuffer(&gb);
 	const CanRequestId rid2 = CanInterface::AllocateRequestId(boardAddress);
 	auto msg2 = buf2->SetupRequestMessage<CanMessageUpdateYourFirmware>(rid2, CanId::MasterAddress, (CanAddress)boardAddress);
 	msg2->boardId = (uint8_t)boardAddress;
 	msg2->invertedBoardId = (uint8_t)~boardAddress;
-	UpdateBoardState(boardAddress, BoardState::flashing);
-	return CanInterface::SendRequestAndGetStandardReply(buf2, rid2, reply);
+	msg2->module = moduleNumber;
+	const GCodeResult rslt = CanInterface::SendRequestAndGetStandardReply(buf2, rid2, reply);
+	if (rslt == GCodeResult::ok)
+	{
+		UpdateBoardState(boardAddress, BoardState::flashing);
+	}
+	return rslt;
 }
 
 void ExpansionManager::UpdateFinished(CanAddress address) noexcept
@@ -202,7 +226,7 @@ void ExpansionManager::UpdateFailed(CanAddress address) noexcept
 GCodeResult ExpansionManager::ResetRemote(uint32_t boardAddress, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {
 	CanInterface::CheckCanAddress(boardAddress, gb);
-	CanMessageBuffer * const buf = CanInterface::AllocateBuffer(gb);
+	CanMessageBuffer * const buf = CanInterface::AllocateBuffer(&gb);
 	const CanRequestId rid = CanInterface::AllocateRequestId(boardAddress);
 	buf->SetupRequestMessage<CanMessageReset>(rid, CanId::MasterAddress, (uint8_t)boardAddress);
 	return CanInterface::SendRequestAndGetStandardReply(buf, rid, reply);
@@ -242,28 +266,33 @@ const ExpansionBoardData& ExpansionManager::FindIndexedBoard(unsigned int index)
 
 void ExpansionManager::EmergencyStop() noexcept
 {
-	for (unsigned int i = 0; i < 1000; ++i)
+	CanMessageBuffer *buf;
+	while ((buf = CanMessageBuffer::Allocate()) == nullptr)
 	{
-		CanMessageBuffer * const buf = CanMessageBuffer::Allocate();
-		if (buf != nullptr)
-		{
-			// Send an individual message to each known expansion board
-			for (CanAddress addr = 1; addr <= CanId::MaxCanAddress; ++addr)
-			{
-				if (boards[addr].state == BoardState::running)
-				{
-					buf->SetupRequestMessage<CanMessageEmergencyStop>(0, CanId::MasterAddress, addr);
-					CanInterface::SendMessageNoReplyNoFree(buf);
-				}
-			}
-
-			// Finally, send a broadcast message in case we missed any, and free the buffer
-			buf->SetupBroadcastMessage<CanMessageEmergencyStop>(CanId::MasterAddress);
-			CanInterface::SendBroadcast(buf);
-			break;
-		}
-		delay(1);				// wait for a buffer to become available
+		delay(1);
 	}
+
+//	debugPrintf("Allocated buffer\n");
+	// Send an individual message to each known expansion board
+	for (CanAddress addr = 1; addr <= CanId::MaxCanAddress; ++addr)
+	{
+		if (boards[addr].state == BoardState::running)
+		{
+			buf->SetupRequestMessage<CanMessageEmergencyStop>(0, CanId::MasterAddress, addr);
+			CanInterface::SendMessageNoReplyNoFree(buf);
+		}
+	}
+//	debugPrintf("sent individual messages\n");
+
+	// Finally, send a broadcast message in case we missed any, and free the buffer
+	buf->SetupBroadcastMessage<CanMessageEmergencyStop>(CanId::MasterAddress);
+	CanInterface::SendBroadcastNoFree(buf);
+
+	CanMessageBuffer::Free(buf);
+//	debugPrintf("sent broadcast\n");
+
+	delay(10);							// allow time for the broadcast to be sent
+	CanInterface::Shutdown();
 }
 
 #endif

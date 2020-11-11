@@ -9,7 +9,7 @@
 #include <Hardware/SharedSpi/SharedSpiDevice.h>
 
 Lcd::Lcd(PixelNumber nr, PixelNumber nc, const LcdFont * const fnts[], size_t nFonts, SpiMode mode) noexcept
-#ifdef __LPC17xx__
+#if __LPC17xx__
  : device(SharedSpiDevice::GetSharedSpiDevice(LcdSpiChannel), LcdSpiClockFrequency, SpiMode::mode0, NoPin, true),
 #else
  : device(SharedSpiDevice::GetMainSharedSpiDevice(), LcdSpiClockFrequency, SpiMode::mode0, NoPin, true),
@@ -27,9 +27,13 @@ Lcd::~Lcd()
 }
 
 // Initialise. a0Pin is only used by the ST7567.
-void Lcd::Init(Pin csPin, Pin p_a0Pin, bool csPolarity, uint32_t freq) noexcept
+void Lcd::Init(Pin csPin, Pin p_a0Pin, bool csPolarity, uint32_t freq, uint8_t p_contrastRatio, uint8_t p_resistorRatio) noexcept
 {
+	// All this is SPI-display specific hardware initialisation, which prohibits I2C-display or UART-display support.
+	// NOTE: https://github.com/SchmartMaker/RepRapFirmware/tree/ST7565/src/Display did contain this abstraction
 	a0Pin = p_a0Pin;
+	contrastRatio = p_contrastRatio;
+	resistorRatio = p_resistorRatio;
 	device.SetClockFrequency(freq);
 	device.SetCsPin(csPin);
 	device.SetCsPolarity(csPolarity);		// normally active high chip select for ST7920, active low for ST7567
@@ -375,10 +379,10 @@ void Lcd::Clear(PixelNumber sRow, PixelNumber sCol, PixelNumber eRow, PixelNumbe
 		{
 			sMask |= eMask;							// special case of just clearing some middle bits
 		}
-		for (PixelNumber row = sRow; row < eRow; ++row)
+		for (PixelNumber r = sRow; r < eRow; ++r)
 		{
-			uint8_t * p = image + ((row * (numCols/8)) + (sCol/8));
-			uint8_t * const endp = image + ((row * (numCols/8)) + (eCol/8));
+			uint8_t * p = image + ((r * (numCols/8)) + (sCol/8));
+			uint8_t * const endp = image + ((r * (numCols/8)) + (eCol/8));
 			*p &= sMask;
 			if (p != endp)
 			{

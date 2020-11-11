@@ -1,3 +1,30 @@
+Version 3.2-beta2_4
+===================
+* LPC reduce number of probe points (to 16) to avoid firmware reset
+* LPC Increased exception handler stack size (to avoid resets)
+* LPC fix PWM interrupt priority
+* TMC22xx detect and ignore missing drivers
+* TMC22xx fix problem were settings are sometimes lost at startup
+* TMC22xx change default operating mode to stealthchop to match Duet and doc
+* Fix for watchdog timeout when creating a hiccup step
+* Set inital ATX power state with atx.initialPowerOn (default is true).
+* Enable/Disable TMC drivers based on ATX power (via M80/M81)
+* Add support for NeoPixel LEDs via m150 (new board.txt entry led.neopixelPin)
+
+
+
+
+Version 3.2-beta2_2
+===================
+* RRF v3.2-beta2 (See the RRF docs for details)
+* STM32 initial support for M5 expansion board.
+* STM32 incresed number of drivers/fans etc.
+* LPC increase number of motors per axis to 3.
+* LPC adjust memory usage to allow for new SBC interface.
+* Initial support for driver expansion board (SKR 1.3/1.4/Pro)
+* Fix for SanDisk Sd card compatibility problem.
+
+
 New Unified LPC/STM32F4 version
 ==================================
 As of V3.2-beta1_2 both LPC and STM32F4 based boards are supported via mcu specific core components and a set of common sources. 

@@ -4,9 +4,9 @@
  *  Created on: 16 Jun 2020
  *      Author: David
  */
-#if defined(__LPC17xx__)
+#if __LPC17xx__
 	#include "LPC/Hardware/SharedSpi/SharedSpiDevice.hpp"
-#elif defined(STM32F4)
+#elif STM32F4
 	#include "STM32/Hardware/SharedSpi/SharedSpiDevice.hpp"
 #else
 
@@ -18,6 +18,7 @@
 # include <DmacManager.h>
 # include <Serial.h>
 # include <peripheral_clk_config.h>
+# include <hri_sercom_e54.h>
 #elif USART_SPI
 # include <usart/usart.h>
 #else

@@ -11,6 +11,9 @@
 #if HAS_MASS_STORAGE
 # include <GCodes/GCodeInput.h>
 #endif
+#if HAS_LINUX_INTERFACE
+# include <Linux/LinuxInterface.h>
+#endif
 #include "BinaryParser.h"
 #include "StringParser.h"
 #include <GCodes/GCodeException.h>
@@ -18,16 +21,17 @@
 #include <Platform.h>
 
 // Macros to reduce the amount of explicit conditional compilation in this file
-
 #if HAS_LINUX_INTERFACE
 
 # define PARSER_OPERATION(_x)	((isBinaryBuffer) ? (binaryParser._x) : (stringParser._x))
+# define BINARY_OR(_x)			((isBinaryBuffer) || (_x))
 # define NOT_BINARY_AND(_x)		((!isBinaryBuffer) && (_x))
 # define IF_NOT_BINARY(_x)		{ if (!isBinaryBuffer) { _x; } }
 
 #else
 
 # define PARSER_OPERATION(_x)	(stringParser._x)
+# define BINARY_OR(_x)			(_x)
 # define NOT_BINARY_AND(_x)		(_x)
 # define IF_NOT_BINARY(_x)		{ _x; }
 
@@ -91,12 +95,16 @@ GCodeBuffer::GCodeBuffer(GCodeChannel::RawType channel, GCodeInput *normalIn, Fi
 	  binaryParser(*this),
 #endif
 	  stringParser(*this),
-	  machineState(new GCodeMachineState()),
+	  machineState(new GCodeMachineState()), whenReportDueTimerStarted(millis()),
 #if HAS_LINUX_INTERFACE
 	  isBinaryBuffer(false),
 #endif
 	  timerRunning(false), motionCommanded(false)
+#if HAS_LINUX_INTERFACE
+	  , isWaitingForMacro(false)
+#endif
 {
+	mutex.Create(((GCodeChannel)channel).ToString());
 	machineState->compatibility = c;
 	Reset();
 }
@@ -104,11 +112,21 @@ GCodeBuffer::GCodeBuffer(GCodeChannel::RawType channel, GCodeInput *normalIn, Fi
 // Reset it to its state after start-up
 void GCodeBuffer::Reset() noexcept
 {
+#if HAS_LINUX_INTERFACE
+	if (isWaitingForMacro)
+	{
+		macroError = true;
+		macroSemaphore.Give();
+	}
+#endif
+
 	while (PopState(false)) { }
+
 #if HAS_LINUX_INTERFACE
 	requestedMacroFile.Clear();
-	reportMissingMacro = isMacroFromCode = macroRequested = abortFile = abortAllFiles = false;
+	isWaitingForMacro = hasStartedMacro = abortFile = abortAllFiles = invalidated = messageAcknowledged = macroFileClosed = false;
 	isBinaryBuffer = false;
+	machineState->lastCodeFromSbc = machineState->isMacroFromCode = false;
 #endif
 	Init();
 }
@@ -148,6 +166,20 @@ bool GCodeBuffer::DoDwellTime(uint32_t dwellMillis) noexcept
 
 	// New dwell - set it up
 	StartTimer();
+	return false;
+}
+
+// Delay executing this GCodeBuffer for the specified time. Return true when the timer has expired.
+bool GCodeBuffer::IsReportDue() noexcept
+{
+	const uint32_t now = millis();
+
+	// Are we due?
+	if (now - whenReportDueTimerStarted >= reportDueInterval)
+	{
+		ResetReportDueTimer();
+		return true;
+	}
 	return false;
 }
 
@@ -202,6 +234,7 @@ void GCodeBuffer::Diagnostics(MessageType mtype) noexcept
 bool GCodeBuffer::Put(char c) noexcept
 {
 #if HAS_LINUX_INTERFACE
+	machineState->lastCodeFromSbc = false;
 	isBinaryBuffer = false;
 #endif
 	return stringParser.Put(c);
@@ -224,10 +257,12 @@ bool GCodeBuffer::CheckMetaCommand(const StringRef& reply)
 
 void GCodeBuffer::PutAndDecode(const char *str, size_t len, bool isBinary) noexcept
 {
+	machineState->lastCodeFromSbc = isBinary;
 	isBinaryBuffer = isBinary;
 	if (isBinary)
 	{
 		binaryParser.Put(str, len);
+		hasStartedMacro = false;
 	}
 	else
 	{
@@ -248,6 +283,7 @@ void GCodeBuffer::PutAndDecode(const char *str, size_t len) noexcept
 void GCodeBuffer::PutAndDecode(const char *str) noexcept
 {
 #if HAS_LINUX_INTERFACE
+	machineState->lastCodeFromSbc = false;
 	isBinaryBuffer = false;
 #endif
 	stringParser.PutAndDecode(str);
@@ -778,30 +814,42 @@ void GCodeBuffer::SetPrintFinished() noexcept
 	}
 }
 
-// This is only called when using the Linux interface. 'filename' is sometimes null.
-void GCodeBuffer::RequestMacroFile(const char *filename, bool reportMissing, bool fromCode) noexcept
+// This is only called when using the Linux interface and returns if the macro file could be opened
+bool GCodeBuffer::RequestMacroFile(const char *filename, bool fromCode) noexcept
 {
-	machineState->SetFileExecuting();
-	if (!fromCode)
+	if (!reprap.GetLinuxInterface().IsConnected())
 	{
-		// This suppresses unwanted replies in the USB console
-		isBinaryBuffer = true;
-		memset(buffer, 0, sizeof(CodeHeader));
+		// Don't wait for a macro file if no SBC is connected
+		return false;
+	}
+	// Request the macro file from the SBC
+	requestedMacroFile.copy(filename);
+	machineState->isMacroFromCode = fromCode;
+	hasStartedMacro = macroError = macroEmpty = false;
+	isWaitingForMacro = true;
+
+	// Wait for a response (but not forever)
+	if (!macroSemaphore.Take(SpiConnectionTimeout))
+	{
+		isWaitingForMacro = false;
+		reprap.GetPlatform().MessageF(ErrorMessage, "Failed to get macro response within %" PRIu32 "ms from SBC (channel %s)\n", SpiConnectionTimeout, GetChannel().ToString());
+		return false;
 	}
 
-	requestedMacroFile.copy(filename);
-	reportMissingMacro = reportMissing;
-	isMacroFromCode = fromCode;
-	macroRequested = true;
-
-	abortFile = abortAllFiles = false;
+	if (!macroError)
+	{
+		hasStartedMacro = !macroEmpty;
+		return true;
+	}
+	return false;
 }
 
-const char *GCodeBuffer::GetRequestedMacroFile(bool& reportMissing, bool& fromCode) const noexcept
+void GCodeBuffer::ResolveMacroRequest(bool hadError, bool isEmpty) noexcept
 {
-	reportMissing = reportMissingMacro;
-	fromCode = isMacroFromCode;
-	return requestedMacroFile.c_str();
+	isWaitingForMacro = false;
+	macroError = hadError;
+	macroEmpty = isEmpty;
+	macroSemaphore.Give();
 }
 
 #endif
@@ -817,6 +865,9 @@ void GCodeBuffer::MessageAcknowledged(bool cancelled) noexcept
 			ms->waitingForAcknowledgement = false;
 			ms->messageAcknowledged = true;
 			ms->messageCancelled = cancelled;
+#if HAS_LINUX_INTERFACE
+			messageAcknowledged = true;
+#endif
 		}
 	}
 }
@@ -824,7 +875,7 @@ void GCodeBuffer::MessageAcknowledged(bool cancelled) noexcept
 MessageType GCodeBuffer::GetResponseMessageType() const noexcept
 {
 #if HAS_LINUX_INTERFACE
-	if (isBinaryBuffer)
+	if (machineState->lastCodeFromSbc)
 	{
 		return (MessageType)((1u << codeChannel.ToBaseType()) | BinaryCodeReplyFlag);
 	}
@@ -859,9 +910,9 @@ bool GCodeBuffer::IsWritingBinary() const noexcept
 	return NOT_BINARY_AND(stringParser.IsWritingBinary());
 }
 
-void GCodeBuffer::WriteBinaryToFile(char b) noexcept
+bool GCodeBuffer::WriteBinaryToFile(char b) noexcept
 {
-	IF_NOT_BINARY(stringParser.WriteBinaryToFile(b));
+	return BINARY_OR(stringParser.WriteBinaryToFile(b));
 }
 
 void GCodeBuffer::FinishWritingBinary() noexcept

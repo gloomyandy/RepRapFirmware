@@ -45,7 +45,7 @@
 #include <Movement/StepTimer.h>
 #include <TaskPriorities.h>
 
-#ifdef __LPC17xx__
+#if __LPC17xx__
 constexpr size_t NetworkStackWords = 575;
 #elif defined(DEBUG)
 constexpr size_t NetworkStackWords = 1000;				// needs to be enough to support rr_model
@@ -87,11 +87,11 @@ Network::Network(Platform& p) noexcept : platform(p)
 	interfaces[1] = new WiFiInterface(p);
 #elif defined(SAME70XPLD) || defined(DUET3_V05) || defined(DUET3_V06)
 	interfaces[0] = new LwipEthernetInterface(p);
-#elif defined(DUET_NG) || defined(DUET_5LC)
+#elif defined(DUET_NG) || defined(DUET3MINI)
 	interfaces[0] = nullptr;			// we set this up in Init()
 #elif defined(DUET_M)
 	interfaces[0] = new W5500Interface(p);
-#elif defined(__LPC17xx__) || defined(STM32F4)
+#elif __LPC17xx__ || STM32F4
 # if HAS_WIFI_NETWORKING
 	interfaces[0] = new WiFiInterface(p);
  #else
@@ -168,7 +168,7 @@ void Network::Init() noexcept
 #  endif
 # endif
 
-# if defined(DUET_5LC)
+# if defined(DUET3MINI)
 #  if HAS_WIFI_NETWORKING && HAS_LWIP_NETWORKING
 	interfaces[0] = (platform.IsDuetWiFi()) ? static_cast<NetworkInterface*>(new WiFiInterface(platform)) : static_cast<NetworkInterface*>(new LwipEthernetInterface(platform));
 #  elif HAS_WIFI_NETWORKING
@@ -454,7 +454,7 @@ void Network::Exit() noexcept
 	TelnetResponder::Disable();
 #endif
 
-	if (TaskBase::GetCallerTaskHandle() != networkTask.GetHandle())
+	if (TaskBase::GetCallerTaskHandle() != &networkTask)
 	{
 		// Terminate the network task. Not trivial because currently, the caller may be the network task.
 		networkTask.TerminateAndUnlink();

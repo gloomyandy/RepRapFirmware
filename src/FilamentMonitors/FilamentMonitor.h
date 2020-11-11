@@ -15,14 +15,24 @@
 #include <ObjectModel/ObjectModel.h>
 #include "RTOSIface/RTOSIface.h"
 
-enum class FilamentSensorStatus : uint8_t
-{
+#if defined(DUET3) || defined(DUET3MINI)
+# include <Duet3Common.h>
+#else
+# include <General/NamedEnum.h>
+NamedEnum(FilamentSensorStatus, uint8_t,
+	noMonitor,
 	ok,
+	noDataReceived,
 	noFilament,
 	tooLittleMovement,
 	tooMuchMovement,
 	sensorError
-};
+);
+#endif
+
+#if SUPPORT_CAN_EXPANSION
+class CanMessageFilamentMonitorsStatus;
+#endif
 
 class FilamentMonitor INHERIT_OBJECT_MODEL
 {
@@ -30,7 +40,7 @@ public:
 	FilamentMonitor(const FilamentMonitor&) = delete;
 
 	// Configure this sensor, returning true if error and setting 'seen' if we processed any configuration parameters
-	virtual bool Configure(GCodeBuffer& gb, const StringRef& reply, bool& seen) THROWS(GCodeException) = 0;
+	virtual GCodeResult Configure(GCodeBuffer& gb, const StringRef& reply, bool& seen) THROWS(GCodeException) = 0;
 
 	// Call the following at intervals to check the status. This is only called when extrusion is in progress or imminent.
 	// 'filamentConsumed' is the net amount of extrusion since the last call to this function.
@@ -54,21 +64,27 @@ public:
 	// Return the type of this sensor
 	unsigned int GetType() const noexcept { return type; }
 
+	// Check that this monitor still refers to a valid extruder
+	bool IsValid() const noexcept;
+
+	// Get the status of the filament monitor as a string
+	const char *GetStatusText() const noexcept { return lastStatus.ToString(); }
+
 	// Static initialisation
 	static void InitStatic() noexcept;
 
-	// Return an error message corresponding to a status code
-	static const char *GetErrorMessage(FilamentSensorStatus f) noexcept;
-
 	// Poll the filament sensors
 	static void Spin() noexcept;
+
+	// Check the drive assignments. Called when M584 may have been used to remap extruder drives. Return true if we need to output the warning appended to 'reply'.
+	static bool CheckDriveAssignments(const StringRef& reply) noexcept;
 
 	// Close down the filament monitors, in particular stop them generating interrupts. Called when we are about to update firmware.
 	static void Exit() noexcept;
 
 	// Handle M591
 	static GCodeResult Configure(GCodeBuffer& gb, const StringRef& reply, unsigned int extruder) THROWS(GCodeException)
-	pre(extruder < MaxExtruders);
+	pre(extruder < MaxExtruders; extruder < reprap.GetGCodes().GetNumExtruders());
 
 	// Send diagnostics info
 	static void Diagnostics(MessageType mtype) noexcept;
@@ -81,13 +97,17 @@ public:
 	static FilamentMonitor *GetMonitorAlreadyLocked(size_t extruder) noexcept { return filamentSensors[extruder]; }
 #endif
 
+#if SUPPORT_CAN_EXPANSION
+	static void UpdateRemoteFilamentStatus(CanAddress src, CanMessageFilamentMonitorsStatus& msg) noexcept;
+#endif
+
 	// This must be public so that the array descriptor in class RepRap can lock it
 	static ReadWriteLock filamentMonitorsLock;
 
 protected:
-	FilamentMonitor(unsigned int extruder, unsigned int t) noexcept : extruderNumber(extruder), type(t) { }
+	FilamentMonitor(unsigned int extruder, unsigned int t) noexcept;
 
-	bool ConfigurePin(GCodeBuffer& gb, const StringRef& reply, InterruptMode interruptMode, bool& seen);
+	GCodeResult CommonConfigure(GCodeBuffer& gb, const StringRef& reply, InterruptMode interruptMode, bool& seen) noexcept;
 
 	const IoPort& GetPort() const noexcept { return port; }
 	bool HaveIsrStepsCommanded() const noexcept { return haveIsrStepsCommanded; }
@@ -97,20 +117,29 @@ protected:
 		return lrintf(100 * f);
 	}
 
+	bool IsLocal() const noexcept { return driver.IsLocal(); }
+
 private:
+
 	// Create a filament sensor returning null if not a valid sensor type
-	static FilamentMonitor *Create(unsigned int extruder, unsigned int type) noexcept;
+	static FilamentMonitor *Create(unsigned int extruder, unsigned int monitorType, GCodeBuffer& gb, const StringRef& reply) noexcept;
 	static void InterruptEntry(CallbackParameter param) noexcept;
 
 	static FilamentMonitor *filamentSensors[MaxExtruders];
 
 	int32_t isrExtruderStepsCommanded;
-	uint32_t isrMillis;
+	uint32_t lastIsrMillis;
 	unsigned int extruderNumber;
 	unsigned int type;
 	IoPort port;
+	DriverId driver;
+
 	bool isrWasPrinting;
 	bool haveIsrStepsCommanded;
+	FilamentSensorStatus lastStatus;
+#if SUPPORT_CAN_EXPANSION
+	bool hasRemote;
+#endif
 };
 
 #endif /* SRC_FILAMENTSENSORS_FILAMENTMONITOR_H_ */

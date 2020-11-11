@@ -1,14 +1,20 @@
-#ifndef PINS_SAME70_H__
-#define PINS_SAME70_H__
+#ifndef PINS_DUET3_V06_H__
+#define PINS_DUET3_V06_H__
 
 #define BOARD_SHORT_NAME		"MB6HC"
 #define BOARD_NAME				"Duet 3 MB6HC"
-#define FIRMWARE_NAME			"RepRapFirmware for Duet 3 MB6HC"
 #define DEFAULT_BOARD_TYPE		BoardType::Auto
+
+#ifdef DUET3_ATE
+# define FIRMWARE_NAME			"Duet 3 ATE firmware for MB6HC"
+# define IAP_FIRMWARE_FILE		"Duet3ATEFirmware_" BOARD_SHORT_NAME ".bin"
+#else
+# define FIRMWARE_NAME			"RepRapFirmware for Duet 3 MB6HC"
+# define IAP_FIRMWARE_FILE		"Duet3Firmware_" BOARD_SHORT_NAME ".bin"
+#endif
 
 const size_t NumFirmwareUpdateModules = 1;
 
-#define IAP_FIRMWARE_FILE		"Duet3Firmware_" BOARD_SHORT_NAME ".bin"
 #define IAP_UPDATE_FILE			"Duet3_SDiap_" BOARD_SHORT_NAME ".bin"
 #define IAP_UPDATE_FILE_SBC		"Duet3_SBCiap_" BOARD_SHORT_NAME ".bin"
 constexpr uint32_t IAP_IMAGE_START = 0x20450000;		// last 64kb of RAM
@@ -70,7 +76,7 @@ constexpr size_t NumTmcDriversSenseChannels = 1;
 
 constexpr size_t MinAxes = 3;						// The minimum and default number of axes
 constexpr size_t MaxAxes = 10;						// The maximum number of movement axes in the machine
-constexpr size_t MaxDriversPerAxis = 5;				// The maximum number of stepper drivers assigned to one axis
+constexpr size_t MaxDriversPerAxis = 6;				// The maximum number of stepper drivers assigned to one axis
 
 constexpr size_t MaxExtruders = 16;					// The maximum number of extruders
 constexpr size_t NumDefaultExtruders = 1;			// The number of drivers that we configure as extruders by default
@@ -119,8 +125,10 @@ constexpr Pin VrefSensePin = PortCPin(0);
 
 // Thermistor series resistor value in Ohms
 constexpr float DefaultThermistorSeriesR = 2200.0;
-constexpr float MinVrefLoadR = (DefaultThermistorSeriesR / 4) * 4700.0/((DefaultThermistorSeriesR / 4) + 4700.0);
+constexpr float MinVrefLoadR = (DefaultThermistorSeriesR / NumThermistorInputs) * 4700.0/((DefaultThermistorSeriesR / NumThermistorInputs) + 4700.0);
 																			// there are 4 temperature sensing channels and a 4K7 load resistor
+constexpr float VrefSeriesR = 15.0;
+
 // Digital pins the SPI temperature sensors have their select lines tied to
 constexpr Pin SpiTempSensorCsPins[] = { PortAPin(5), PortAPin(6), PortDPin(20), PortCPin(22) };
 

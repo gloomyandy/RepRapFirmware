@@ -11,7 +11,7 @@
 #include "RepRapFirmware.h"
 #include "NetworkDefs.h"
 
-#if defined(__LPC17xx__) && HAS_RTOSPLUSTCP_NETWORKING
+#if __LPC17xx__ && HAS_RTOSPLUSTCP_NETWORKING
 # include "RTOSPlusTCPEthernetInterface.h"
 #endif
 

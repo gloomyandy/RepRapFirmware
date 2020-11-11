@@ -40,18 +40,23 @@
 #include "Math/Isqrt.h"
 #include "Hardware/I2C.h"
 #include <Hardware/NonVolatileMemory.h>
-#ifdef __LPC17xx__
+#if __LPC17xx__
 # include "LPC/BoardConfig.h"
 # ifdef LPC_DEBUG
 #  include "SoftwarePWMTimer.h"
   extern int lateTimers;
 # endif
 # include <sd_mmc.h>
-#elif defined(STM32F4)
+#elif STM32F4
 # include "STM32/BoardConfig.h"
 # include <sd_mmc.h>
 # include "ResetCause.h"
 #else
+
+#if SAM4E || SAM4S || SAME70
+# include "sam/services/flash_efc/flash_efc.h"		// for flash_read_unique_id()
+#endif
+
 #if SAME70
 # include <DmacManager.h>
 static_assert(NumDmaChannelsUsed <= NumDmaChannelsSupported, "Need more DMA channels in CoreNG");
@@ -164,7 +169,7 @@ int debugLine = 0;
 // Therefore, be very careful what you do here!
 extern "C" void UrgentInit()
 {
-#if defined(STM32F4)
+#if STM32F4
 	InitResetCause();
 #endif
 #if defined(DUET_NG)
@@ -247,6 +252,9 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 #if SUPPORT_CAN_EXPANSION
 	{ "canAddress",			OBJECT_MODEL_FUNC_NOSELF((int32_t)0),																ObjectModelEntryFlags::none },
 #endif
+#if SUPPORT_12864_LCD
+	{ "directDisplay",		OBJECT_MODEL_FUNC_IF_NOSELF(reprap.GetDisplay().IsPresent(), &reprap.GetDisplay()),					ObjectModelEntryFlags::none },
+#endif
 	{ "firmwareDate",		OBJECT_MODEL_FUNC_NOSELF(DATE),																		ObjectModelEntryFlags::none },
 	{ "firmwareFileName",	OBJECT_MODEL_FUNC_NOSELF(IAP_FIRMWARE_FILE),														ObjectModelEntryFlags::none },
 	{ "firmwareName",		OBJECT_MODEL_FUNC_NOSELF(FIRMWARE_NAME),															ObjectModelEntryFlags::none },
@@ -261,14 +269,14 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 # ifdef DUET_NG
 	{ "name",				OBJECT_MODEL_FUNC(self->GetBoardName()),															ObjectModelEntryFlags::none },
 	{ "shortName",			OBJECT_MODEL_FUNC(self->GetBoardShortName()),														ObjectModelEntryFlags::none },
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__ || STM32F4
     { "name",               OBJECT_MODEL_FUNC_NOSELF(lpcBoardName),                                                             ObjectModelEntryFlags::none },
     { "shortName",          OBJECT_MODEL_FUNC_NOSELF(BOARD_SHORT_NAME),                                                         ObjectModelEntryFlags::none },
 # else
 	{ "name",				OBJECT_MODEL_FUNC_NOSELF(BOARD_NAME),																ObjectModelEntryFlags::none },
 	{ "shortName",			OBJECT_MODEL_FUNC_NOSELF(BOARD_SHORT_NAME),															ObjectModelEntryFlags::none },
 # endif
-	{ "supports12864",		OBJECT_MODEL_FUNC_NOSELF(SUPPORT_12864_LCD ? true : false),											ObjectModelEntryFlags::verbose },
+	{ "supportsDirectDisplay", OBJECT_MODEL_FUNC_NOSELF(SUPPORT_12864_LCD ? true : false),										ObjectModelEntryFlags::verbose },
 #if MCU_HAS_UNIQUE_ID
 	{ "uniqueId",			OBJECT_MODEL_FUNC(self->GetUniqueIdString()),														ObjectModelEntryFlags::none },
 #endif
@@ -296,7 +304,7 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 	{ "babystep",			OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetTotalBabyStepOffset(context.GetLastIndex()), 3),		ObjectModelEntryFlags::none },
 	{ "current",			OBJECT_MODEL_FUNC((int32_t)lrintf(self->GetMotorCurrent(context.GetLastIndex(), 906))),				ObjectModelEntryFlags::none },
 	{ "drivers",			OBJECT_MODEL_FUNC_NOSELF(&axisDriversArrayDescriptor),												ObjectModelEntryFlags::none },
-	{ "homed",				OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().IsAxisHomed(context.GetLastIndex())),					ObjectModelEntryFlags::live },
+	{ "homed",				OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().IsAxisHomed(context.GetLastIndex())),					ObjectModelEntryFlags::none },
 	{ "jerk",				OBJECT_MODEL_FUNC(MinutesToSeconds * self->GetInstantDv(context.GetLastIndex()), 1),				ObjectModelEntryFlags::none },
 	{ "letter",				OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetAxisLetters()[context.GetLastIndex()]),				ObjectModelEntryFlags::none },
 	{ "machinePosition",	OBJECT_MODEL_FUNC_NOSELF(reprap.GetMove().LiveCoordinate(context.GetLastIndex(), reprap.GetCurrentTool()), 3),	ObjectModelEntryFlags::live },
@@ -350,7 +358,7 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 constexpr uint8_t Platform::objectModelTableDescriptor[] =
 {
 	9,																		// number of sections
-	12 + HAS_LINUX_INTERFACE + HAS_12V_MONITOR + SUPPORT_CAN_EXPANSION + MCU_HAS_UNIQUE_ID,		// section 0: boards[0]
+	12 + HAS_LINUX_INTERFACE + HAS_12V_MONITOR + SUPPORT_CAN_EXPANSION + SUPPORT_12864_LCD + MCU_HAS_UNIQUE_ID,		// section 0: boards[0]
 #if HAS_CPU_TEMP_SENSOR
 	3,																		// section 1: mcuTemp
 #else
@@ -397,6 +405,8 @@ size_t Platform::GetNumGpOutputsToReport() const noexcept
 
 #endif
 
+bool Platform::deliberateError = false;						// true if we deliberately caused an exception for testing purposes
+
 Platform::Platform() noexcept :
 #if HAS_MASS_STORAGE
 	logger(nullptr),
@@ -414,30 +424,29 @@ Platform::Platform() noexcept :
 #if SUPPORT_LASER
 	lastLaserPwm(0.0),
 #endif
-	deferredPowerDown(false), deliberateError(false)
+	deferredPowerDown(false)
 {
 }
 
 // Initialise the Platform. Note: this is the first module to be initialised, so don't call other modules from here!
 void Platform::Init() noexcept
 {
-#if defined(DUET3) || defined(DUET_5LC)
+#if defined(DUET3) || defined(DUET3MINI)
 	pinMode(EthernetPhyResetPin, OUTPUT_LOW);			// hold the Ethernet Phy chip in reset, hopefully this will prevent it being too noisy if Ethernet is not enabled
 #endif
 
 	// Deal with power first (we assume this doesn't depend on identifying the board type)
 	pinMode(ATX_POWER_PIN, OUTPUT_LOW);
 
-	SetBoardType(BoardType::Auto);
-
+	// Make sure the on-board drivers are disabled
 #if defined(DUET_NG) || defined(PCCB_10) || defined(PCCB_08_X5)
 	pinMode(GlobalTmc2660EnablePin, OUTPUT_HIGH);
-#endif
-
-#if defined(DUET_M) || defined(PCCB_08) || defined(PCCB_08_X5) || defined(DUET_5LC)
-	// Make sure the on-board TMC22xx drivers are disabled
+#elif defined(DUET_M) || defined(PCCB_08) || defined(PCCB_08_X5) || defined(DUET3MINI)
 	pinMode(GlobalTmc22xxEnablePin, OUTPUT_HIGH);
 #endif
+
+	// Sort out which board we are running on (some firmware builds support more than one board variant)
+	SetBoardType(BoardType::Auto);
 
 #if SAME70
 	DmacManager::Init();
@@ -456,7 +465,7 @@ void Platform::Init() noexcept
 	usbMutex.Create("USB");
 #if SAME5x
     SERIAL_MAIN_DEVICE.Start();
-#elif defined(__LPC17xx__) || defined(STM32F4)
+#elif __LPC17xx__ || STM32F4
 	SERIAL_MAIN_DEVICE.begin(baudRates[0]);
 #else
     SERIAL_MAIN_DEVICE.Start(UsbVBusPin);
@@ -467,7 +476,6 @@ void Platform::Init() noexcept
 	baudRates[1] = AUX_BAUD_RATE;
 	commsParams[1] = 1;							// by default we require a checksum on data from the aux port, to guard against overrun errors
 #endif
-
 #ifdef SERIAL_AUX2_DEVICE
     auxDevices[1].Init(&SERIAL_AUX2_DEVICE);
 	baudRates[2] = AUX2_BAUD_RATE;
@@ -479,7 +487,6 @@ void Platform::Init() noexcept
 	// Shared SPI subsystem
 	SharedSpiDevice::Init();
 
-
 	// File management and SD card interfaces
 	for (size_t i = 0; i < NumSdCards; ++i)
 	{
@@ -490,13 +497,11 @@ void Platform::Init() noexcept
 	MassStorage::Init();
 #endif
 
-#if defined(__LPC17xx__) || defined(STM32F4)
+#if __LPC17xx__ || STM32F4
 	// Load HW pin assignments from sdcard
 	BoardConfig::Init();
-	pinMode(ATX_POWER_PIN,(ATX_POWER_INVERTED==false)?OUTPUT_LOW:OUTPUT_HIGH);
 #if HAS_NETWORKING
 	// Set default Mac address
-	debugPrintf("Setting Mac address\n");
 	defaultMacAddress.SetDefault();
 #endif
 #else
@@ -542,9 +547,9 @@ void Platform::Init() noexcept
 	numSmartDrivers = MaxSmartDrivers;
 # elif defined(DUET3)
 	numSmartDrivers = MaxSmartDrivers;
-# elif defined(__LPC17xx__) || defined(STM32F4)
+# elif __LPC17xx__ || STM32F4
 	numSmartDrivers = lpcSmartDrivers;
-# elif defined(DUET_5LC)
+# elif defined(DUET3MINI)
 	numSmartDrivers = MaxSmartDrivers;							// support the expansion board, but don't mind if it's missing
 # endif
 #endif
@@ -583,7 +588,7 @@ void Platform::Init() noexcept
 	pinMode(SpiFLASHcsPin,OUTPUT_HIGH);														// Init Spi FLASH Cs pin, not implemented, default unselected
 #endif
 
-#if defined(__LPC17xx__)
+#if __LPC17xx__
 	if (hasDriverCurrentControl)
 	{
 		mcp4451.begin();
@@ -649,7 +654,7 @@ void Platform::Init() noexcept
 		// Set up the control pins
 		pinMode(STEP_PINS[driver], OUTPUT_LOW);
 		pinMode(DIRECTION_PINS[driver], OUTPUT_LOW);
-#if !defined(DUET3) && !defined(DUET_5LC)
+#if !defined(DUET3) && !defined(DUET3MINI)
 		pinMode(ENABLE_PINS[driver], OUTPUT_HIGH);				// this is OK for the TMC2660 CS pins too
 #endif
 	}
@@ -677,6 +682,8 @@ void Platform::Init() noexcept
 		axisDrivers[axis].driverNumbers[0].SetLocal(driver);
 		driveDriverBits[axis] = StepPins::CalcDriverBitmap(driver);	// overwrite the default value set up earlier
 	}
+	linearAxes = AxesBitmap::MakeLowestNBits(3);				// XYZ axes are linear
+
 	for (size_t axis = MinAxes; axis < MaxAxes; ++axis)
 	{
 		axisDrivers[axis].numDrivers = 0;
@@ -749,7 +756,7 @@ void Platform::Init() noexcept
 	// Initialise the configured heaters to just the default bed heater (there are no default chamber heaters)
 	configuredHeaters.Clear();
 
-#if !defined(DUET3) && !defined(DUET_5LC)
+#if !defined(DUET3) && !defined(DUET3MINI)
 	if (DefaultBedHeater >= 0)
 	{
 		configuredHeaters.SetBit(DefaultBedHeater);
@@ -767,7 +774,7 @@ void Platform::Init() noexcept
 	// Enable the pullup resistor, with luck this will make it float high instead.
 #if SAM3XA
 	pinMode(APIN_SHARED_SPI_MISO, INPUT_PULLUP);
-#elif defined(__LPC17xx__) || SAME5x || defined(STM32F4)
+#elif __LPC17xx__ || SAME5x || STM32F4
 	// nothing to do here
 #else
 	pinMode(APIN_USART_SSPI_MISO, INPUT_PULLUP);
@@ -855,6 +862,12 @@ void Platform::Init() noexcept
 	numV12UnderVoltageEvents = previousV12UnderVoltageEvents = 0;
 #endif
 
+#if __LPC17xx__ || STM32F4
+	if (ATX_INITIAL_POWER_ON)
+		AtxPowerOn();
+	else
+		AtxPowerOff(false);
+#endif
 	// Kick everything off
 	InitialiseInterrupts();
 
@@ -1080,7 +1093,7 @@ void Platform::Spin() noexcept
 		return;
 	}
 
-#if defined(DUET3) || defined(DUET_5LC) || defined(__LPC17xx__) || defined(STM32F4)
+#if defined(DUET3) || defined(DUET3MINI) || defined(__LPC17xx__) || defined(STM32F4)
 	// Blink the LED at about 2Hz. Duet 3 expansion boards will blink in sync when they have established clock sync with us.
 	//digitalWrite(DiagPin, XNor(DiagOnPolarity, StepTimer::GetTimerTicks() & (1u << 19)) != 0);
 	digitalWrite(DiagPin, XNor(DiagOnPolarity, millis() & (512)) != 0);
@@ -1149,6 +1162,15 @@ void Platform::Spin() noexcept
 			driversPowered = false;
 			++numV12UnderVoltageEvents;
 			lastV12UnderVoltageValue = currentV12;					// save this because the voltage may have changed by the time we report it
+			reprap.GetGCodes().SetAllAxesNotHomed();
+		}
+		else
+#endif
+
+#if HAS_ATX_POWER_MONITOR
+		if (!AtxPower())
+		{
+			driversPowered = false;
 			reprap.GetGCodes().SetAllAxesNotHomed();
 		}
 		else
@@ -1285,6 +1307,8 @@ void Platform::Spin() noexcept
 			)
 #elif HAS_12V_MONITOR
 	else if (currentV12 >= driverV12OnAdcReading)
+#elif HAS_ATX_POWER_MONITOR
+	else if (AtxPower())
 #else
 	else
 #endif
@@ -1582,7 +1606,7 @@ float Platform::GetCpuTemperature() const noexcept
 	return (voltage - 0.8) * (1000.0/2.65) + 27.0 + mcuTemperatureAdjust;			// accuracy at 27C is +/-45C
 # elif SAME70
 	return (voltage - 0.72) * (1000.0/2.33) + 25.0 + mcuTemperatureAdjust;			// accuracy at 25C is +/-34C
-# elif defined(STM32F4)
+# elif STM32F4
 	// Magic numbers are the location of STM32 calibration constants
 	return ((110.0f - 30.0f)/(((float)(*(uint16_t *)0x1FFF7A2E)) - ((float)(*(uint16_t *)0x1FFF7A2C)))) * ((voltage*((float)(1u << AdcBits))/3.3f) - ((float)(*(uint16_t *)0x1FFF7A2C))) + 30.0f; 
 # else
@@ -1598,9 +1622,9 @@ float Platform::GetCpuTemperature() const noexcept
 
 void Platform::InitialiseInterrupts() noexcept
 {
-#if SAM4E || SAME70 || SAME5x || defined(__LPC17xx__)
+#if SAM4E || SAME70 || SAME5x || __LPC17xx__
 	NVIC_SetPriority(WDT_IRQn, NvicPriorityWatchdog);			// set priority for watchdog interrupts
-#elif defined(STM32F4)
+#elif STM32F4
 	NVIC_SetPriority(WWDG_IRQn, NvicPriorityWatchdog);			// set priority for watchdog interrupts
 #endif
 
@@ -1613,7 +1637,7 @@ void Platform::InitialiseInterrupts() noexcept
 
 #if SUPPORT_TMC22xx && !SAME5x											// SAME5x uses a DMA interrupt instead of the UART interrupt
 # if TMC_SOFT_UART
-# if defined(STM32F4)
+# if definedSTM32F4
 	NVIC_SetPriority(DMA2_Stream5_IRQn, NvicPriorityDriversSerialTMC); // Software serial
 # endif
 # elif TMC22xx_HAS_MUX
@@ -1647,10 +1671,10 @@ void Platform::InitialiseInterrupts() noexcept
 	NVIC_SetPriority(XDMAC_IRQn, NvicPriorityDMA);
 #endif
 
-#ifdef __LPC17xx__
+#if __LPC17xx__
 	// Interrupt for GPIO pins. Only port 0 and 2 support interrupts and both share EINT3
 	NVIC_SetPriority(EINT3_IRQn, NvicPriorityPins);
-#elif defined(STM32F4)
+#elif STM32F4
     NVIC_SetPriority(EXTI0_IRQn, NvicPriorityPins);
     NVIC_SetPriority(EXTI1_IRQn, NvicPriorityPins);
     NVIC_SetPriority(EXTI2_IRQn, NvicPriorityPins);
@@ -1682,9 +1706,9 @@ void Platform::InitialiseInterrupts() noexcept
 	NVIC_SetPriority(UDP_IRQn, NvicPriorityUSB);
 #elif SAM3XA
 	NVIC_SetPriority(UOTGHS_IRQn, NvicPriorityUSB);
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
 	NVIC_SetPriority(USB_IRQn, NvicPriorityUSB);
-#elif defined(STM32F4)
+#elif STM32F4
 	NVIC_SetPriority(OTG_FS_IRQn, NvicPriorityUSB);
 #else
 # error Unsupported processor
@@ -1697,16 +1721,26 @@ void Platform::InitialiseInterrupts() noexcept
 	NVIC_SetPriority(I2C1_IRQn, NvicPriorityTwi);
 #endif
 
-#if defined(__LPC17xx__)
+#if SUPPORT_CAN_EXPANSION
+# if SAME5x
+	NVIC_SetPriority(CAN0_IRQn, NvicPriorityCan);
+	NVIC_SetPriority(CAN1_IRQn, NvicPriorityCan);
+# elif SAME70
+	NVIC_SetPriority(MCAN0_INT0_IRQn, NvicPriorityCan);		// we don't use INT1
+	NVIC_SetPriority(MCAN1_INT0_IRQn, NvicPriorityCan);		// we don't use INT1
+# endif
+#endif
+
+#if __LPC17xx__
 	// set rest of the Timer Interrupt priorities
 	// Timer 0 is used for step generation (set elsewhere)
 	// DMA and SPI priorites are defined in BoardConfig as they are needed for File I/O
 	NVIC_SetPriority(TIMER1_IRQn, 8);                       //Timer 1 is free
-	NVIC_SetPriority(TIMER2_IRQn, NvicPriorityTimerServo);  //Timer 2 runs the PWM for Servos at 50hz
+	NVIC_SetPriority(TIMER2_IRQn, 8);  						//Timer 2 is free
 	NVIC_SetPriority(TIMER3_IRQn, 8);                       //Timer 3 is optionally used for TMC22XX UART emulation. This is DMA based and does not use the timer interrupt.
-	NVIC_SetPriority(RITIMER_IRQn, 8); 						//RIT is free
+	NVIC_SetPriority(RITIMER_IRQn, NvicPriorityTimerPWM);	//RIT runs software PWM
 	NVIC_SetPriority(ADC_IRQn, NvicPriorityADC);            //ADC interrupt priority when using burst with pre-filtering
-    NVIC_SetPriority(PWM1_IRQn, NvicPriorityTimerPWM);  	//HWPWM running in timer mode runs Software PWM
+    NVIC_SetPriority(PWM1_IRQn, NvicPriorityTimerServo);  	//HWPWM provides HW servo if possible, does not use interrupts
 
 #endif
 
@@ -1759,7 +1793,7 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 		resetString.cat('\n');
 		Message(mtype, resetString.c_str());
 	}
-#elif !defined(__LPC17xx__) && !defined(STM32F4)
+#elif !__LPC17xx__ && !STM32F4
 	const char* resetReasons[8] = { "power up", "backup", "watchdog", "software",
 # ifdef DUET_NG
 	// On the SAM4E a watchdog reset may be reported as a user reset because of the capacitor on the NRST pin.
@@ -1773,12 +1807,12 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 			(unsigned int)(now/3600), (unsigned int)((now % 3600)/60), (unsigned int)(now % 60),
 			resetReasons[(REG_RSTC_SR & RSTC_SR_RSTTYP_Msk) >> RSTC_SR_RSTTYP_Pos]);
 #endif
-#if defined(__LPC17xx__) || defined(STM32F4)
+#if __LPC17xx__ || STM32F4
 		// Reset Reason
 	MessageF(mtype, "Last reset %02d:%02d:%02d ago, cause: ",
 				 (unsigned int)(now/3600), (unsigned int)((now % 3600)/60), (unsigned int)(now % 60));
 
-# if defined(__LPC17xx__)
+# if __LPC17xx__
 	if (LPC_SYSCTL->RSID & RSID_POR) { MessageF(mtype, "[power up]"); }
 	if (LPC_SYSCTL->RSID & RSID_EXTR) { MessageF(mtype, "[reset button]"); }
 	if (LPC_SYSCTL->RSID & RSID_WDTR) { MessageF(mtype, "[watchdog]"); }
@@ -1808,7 +1842,7 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 	}
 
 	// Show the current error codes
-	MessageF(mtype, "Error status: 0x02%" PRIx32 "\n", errorCodeBits);		// we only use the bottom 5 bits at present, so print just 2 bytes
+	MessageF(mtype, "Error status: 0x%02" PRIx32 "\n", errorCodeBits);		// we only use the bottom 5 bits at present, so print just 2 bytes
 
 #if HAS_CPU_TEMP_SENSOR
 	// Show the MCU temperatures
@@ -1906,6 +1940,22 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 	MessageF(mtype, "I2C nak errors %" PRIu32 ", send timeouts %" PRIu32 ", receive timeouts %" PRIu32 ", finishTimeouts %" PRIu32 ", resets %" PRIu32 "\n",
 		errs.naks, errs.sendTimeouts, errs.recvTimeouts, errs.finishTimeouts, errs.resets);
 #endif
+}
+
+// Execute a timed square root that takes less than one millisecond
+static uint32_t TimedSqrt(uint64_t arg, uint32_t& timeAcc) noexcept
+{
+	cpu_irq_disable();
+	asm volatile("":::"memory");
+	uint32_t now1 = SysTick->VAL;
+	const uint32_t ret = isqrt64(arg);
+	uint32_t now2 = SysTick->VAL;
+	asm volatile("":::"memory");
+	cpu_irq_enable();
+	now1 &= 0x00FFFFFF;
+	now2 &= 0x00FFFFFF;
+	timeAcc += ((now1 > now2) ? now1 : now1 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now2;
+	return ret;
 }
 
 GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, OutputBuffer*& buf, unsigned int d) THROWS(GCodeException)
@@ -2058,6 +2108,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 
 	case (int)DiagnosticTestType::SetWriteBuffer:
 #if SAME70
+		//TODO set cache to write-back instead
 		reply.copy("Write buffer not supported on this processor");
 		return GCodeResult::error;
 #else
@@ -2170,13 +2221,9 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 			uint32_t tim1 = 0;
 			for (uint32_t i = 0; i < 100; ++i)
 			{
-				const uint32_t num1 = 0x7265ac3d + i;
+				const uint32_t num1 = 0x7fffffff - (67 * i);
 				const uint64_t sq = (uint64_t)num1 * num1;
-				cpu_irq_disable();
-				const uint32_t now1 = StepTimer::GetTimerTicks();
-				const uint32_t num1a = isqrt64(sq);
-				tim1 += StepTimer::GetTimerTicks() - now1;
-				cpu_irq_enable();
+				const uint32_t num1a = TimedSqrt(sq, tim1);
 				if (num1a != num1)
 				{
 					ok1 = false;
@@ -2187,13 +2234,9 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 			uint32_t tim2 = 0;
 			for (uint32_t i = 0; i < 100; ++i)
 			{
-				const uint32_t num2 = 0x0000a4c5 + i;
+				const uint32_t num2 = 0x0000ffff - (67 * i);
 				const uint64_t sq = (uint64_t)num2 * num2;
-				cpu_irq_disable();
-				const uint32_t now2 = StepTimer::GetTimerTicks();
-				const uint32_t num2a = isqrt64(sq);
-				tim2 += StepTimer::GetTimerTicks() - now2;
-				cpu_irq_enable();
+				const uint32_t num2a = TimedSqrt(sq, tim2);
 				if (num2a != num2)
 				{
 					ok2 = false;
@@ -2201,34 +2244,32 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 			}
 
 			reply.printf("Square roots: 62-bit %.2fus %s, 32-bit %.2fus %s",
-					(double)(tim1 * 10000)/StepTimer::StepClockRate, (ok1) ? "ok" : "ERROR",
-							(double)(tim2 * 10000)/StepTimer::StepClockRate, (ok2) ? "ok" : "ERROR");
+					(double)(tim1 * 10000)/SystemCoreClock, (ok1) ? "ok" : "ERROR",
+							(double)(tim2 * 10000)/SystemCoreClock, (ok2) ? "ok" : "ERROR");
 		}
 		break;
 
 	case (unsigned int)DiagnosticTestType::TimeSinCos:			// Show the sin/cosine calculation time. Caution: may disable interrupt for several tens of microseconds.
 		{
-			bool ok = true;
 			uint32_t tim1 = 0;
 			for (unsigned int i = 0; i < 100; ++i)
 			{
 				const float angle = 0.01 * i;
+
 				cpu_irq_disable();
-				const uint32_t now1 = StepTimer::GetTimerTicks();
-				const float f1 = RepRap::SinfCosf(angle);
-				tim1 += StepTimer::GetTimerTicks() - now1;
+				asm volatile("":::"memory");
+				uint32_t now1 = SysTick->VAL;
+				(void)RepRap::SinfCosf(angle);
+				uint32_t now2 = SysTick->VAL;
+				asm volatile("":::"memory");
 				cpu_irq_enable();
-				if (f1 >= 1.5)
-				{
-					ok = false;		// need to use f1 to prevent the calculations being omitted
-				}
+				now1 &= 0x00FFFFFF;
+				now2 &= 0x00FFFFFF;
+				tim1 += ((now1 > now2) ? now1 : now1 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now2;
 			}
 
 			// We no longer calculate sin and cos for doubles because it pulls in those library functions, which we don't otherwise need
-			if (ok)			// should always be true
-			{
-				reply.printf("Sine + cosine: float %.2fus", (double)(tim1 * 10000)/StepTimer::StepClockRate);
-			}
+			reply.printf("Sine + cosine: float %.2fus", (double)(tim1 * 10000)/SystemCoreClock);
 		}
 		break;
 
@@ -2556,7 +2597,7 @@ void Platform::EnableOneLocalDriver(size_t driver, float requiredCurrent) noexce
 		{
 			SmartDrivers::EnableDrive(driver, true);
 		}
-# if !defined(DUET_5LC)		// no enable pins on 5LC
+# if !defined(DUET3MINI)		// no enable pins on 5LC
 		else
 		{
 			digitalWrite(ENABLE_PINS[driver], enableValues[driver] > 0);
@@ -2582,7 +2623,7 @@ void Platform::DisableOneLocalDriver(size_t driver) noexcept
 		{
 			SmartDrivers::EnableDrive(driver, false);
 		}
-# if !defined(DUET_5LC)		// Duet 5LC has no enable pins
+# if !defined(DUET3MINI)		// Duet 5LC has no enable pins
 		else
 		{
 			digitalWrite(ENABLE_PINS[driver], enableValues[driver] <= 0);
@@ -2681,7 +2722,7 @@ void Platform::SetDriversIdle() noexcept
 }
 
 // Set the current for all drivers on an axis or extruder. Current is in mA.
-bool Platform::SetMotorCurrent(size_t axisOrExtruder, float currentOrPercent, int code, const StringRef& reply) noexcept
+GCodeResult Platform::SetMotorCurrent(size_t axisOrExtruder, float currentOrPercent, int code, const StringRef& reply) noexcept
 {
 	switch (code)
 	{
@@ -2700,11 +2741,11 @@ bool Platform::SetMotorCurrent(size_t axisOrExtruder, float currentOrPercent, in
 #endif
 
 	default:
-		return false;
+		return GCodeResult::error;
 	}
 
 #if SUPPORT_CAN_EXPANSION
-	CanDriversData canDriversToUpdate;
+	CanDriversData<float> canDriversToUpdate;
 
 	IterateDrivers(axisOrExtruder,
 							[this, axisOrExtruder, code](uint8_t driver)
@@ -2724,11 +2765,11 @@ bool Platform::SetMotorCurrent(size_t axisOrExtruder, float currentOrPercent, in
 							{
 								if (code == 917)
 								{
-									canDriversToUpdate.AddEntry(driver, (uint16_t)(standstillCurrentPercent[axisOrExtruder]));
+									canDriversToUpdate.AddEntry(driver, standstillCurrentPercent[axisOrExtruder]);
 								}
 								else
 								{
-									canDriversToUpdate.AddEntry(driver, (uint16_t)(motorCurrents[axisOrExtruder] * motorCurrentFraction[axisOrExtruder]));
+									canDriversToUpdate.AddEntry(driver, motorCurrents[axisOrExtruder] * motorCurrentFraction[axisOrExtruder]);
 								}
 							}
 						);
@@ -2756,7 +2797,7 @@ bool Platform::SetMotorCurrent(size_t axisOrExtruder, float currentOrPercent, in
 								}
 							}
 	);
-	return true;
+	return GCodeResult::ok;
 #endif
 }
 
@@ -2810,7 +2851,7 @@ void Platform::UpdateMotorCurrent(size_t driver, float current) noexcept
 		{
 			dacPiggy.setChannel(7-driver, current * 0.102);
 		}
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
 		if (hasDriverCurrentControl)
 		{
 			//Has digipots to set current control for drivers
@@ -2860,7 +2901,7 @@ void Platform::SetIdleCurrentFactor(float f) noexcept
 	reprap.MoveUpdated();
 
 #if SUPPORT_CAN_EXPANSION
-	CanDriversData canDriversToUpdate;
+	CanDriversData<float> canDriversToUpdate;
 #endif
 	for (size_t axisOrExtruder = 0; axisOrExtruder < MaxAxesPlusExtruders; ++axisOrExtruder)
 	{
@@ -2913,7 +2954,7 @@ bool Platform::SetDriverMicrostepping(size_t driver, unsigned int microsteps, in
 		}
 #elif defined(__ALLIGATOR__)
 		return Microstepping::Set(driver, microsteps); // no mode in Alligator board
-#elif defined(__LPC17xx__)
+#elif __LPC17xx__
 		return Microstepping::Set(driver, microsteps);
 #else
 		// Assume only x16 microstepping supported
@@ -2923,37 +2964,16 @@ bool Platform::SetDriverMicrostepping(size_t driver, unsigned int microsteps, in
 	return false;
 }
 
-// Set the microstepping, returning true if successful. All drivers for the same axis must use the same microstepping.
+// Set the microstepping for local drivers, returning true if successful. All drivers for the same axis must use the same microstepping.
+// Caller must deal with remote drivers.
 bool Platform::SetMicrostepping(size_t axisOrExtruder, int microsteps, bool interp, const StringRef& reply) noexcept
 {
 	//TODO check that it is a valid microstep setting
 	microstepping[axisOrExtruder] = (interp) ? microsteps | 0x8000 : microsteps;
 	reprap.MoveUpdated();
 	bool ok = true;
-#if SUPPORT_CAN_EXPANSION
-	CanDriversData canDriversToUpdate;
-	IterateDrivers(axisOrExtruder,
-					[this, microsteps, interp, &ok, reply](uint8_t driver)
-					{
-						if (!SetDriverMicrostepping(driver, microsteps, interp))
-						{
-							reply.lcatf("Driver %u does not support x%u microstepping", driver, microsteps);
-							if (interp)
-							{
-								reply.cat(" with interpolation");
-							}
-							ok = false;
-						}
-					},
-					[microsteps, interp, &canDriversToUpdate](DriverId driver)
-					{
-						canDriversToUpdate.AddEntry(driver, (interp) ? microsteps | 0x8000 : microsteps);
-					}
-				  );
-	return CanInterface::SetRemoteDriverMicrostepping(canDriversToUpdate, reply) && ok;
-#else
-	IterateDrivers(axisOrExtruder,
-					[this, microsteps, interp, &ok, reply](uint8_t driver)
+	IterateLocalDrivers(axisOrExtruder,
+					[this, microsteps, interp, &ok, reply](uint8_t driver) noexcept
 					{
 						if (!SetDriverMicrostepping(driver, microsteps, interp))
 						{
@@ -2966,15 +2986,14 @@ bool Platform::SetMicrostepping(size_t axisOrExtruder, int microsteps, bool inte
 						}
 					}
 				  );
-#endif
 	return ok;
 }
 
 // Get the microstepping for an axis or extruder
-unsigned int Platform::GetMicrostepping(size_t drive, bool& interpolation) const noexcept
+unsigned int Platform::GetMicrostepping(size_t axisOrExtruder, bool& interpolation) const noexcept
 {
-	interpolation = (microstepping[drive] & 0x8000) != 0;
-	return microstepping[drive] & 0x7FFF;
+	interpolation = (microstepping[axisOrExtruder] & 0x8000) != 0;
+	return microstepping[axisOrExtruder] & 0x7FFF;
 }
 
 void Platform::SetEnableValue(size_t driver, int8_t eVal) noexcept
@@ -3016,6 +3035,34 @@ void Platform::SetAxisDriversConfig(size_t axis, size_t numValues, const DriverI
 		}
 	}
 	driveDriverBits[axis] = bitmap;
+}
+
+// Set the characteristics of an axis
+void Platform::SetAxisType(size_t axis, AxisWrapType wrapType, bool isNistRotational) noexcept
+{
+	if (isNistRotational)
+	{
+		rotationalAxes.SetBit(axis);
+	}
+	else
+	{
+		linearAxes.SetBit(axis);
+	}
+
+	switch (wrapType)
+	{
+#if 0	// shortcut axes not implemented yet
+	case AxisWrapType::wrapWithShortcut:
+		shortcutAxes.SetBit(axis);
+		// no break
+#endif
+	case AxisWrapType::wrapAt360:
+		continuousAxes.SetBit(axis);
+		break;
+
+	default:
+		break;
+	}
 }
 
 // Map an extruder to a driver
@@ -3166,9 +3213,9 @@ void Platform::RawMessage(MessageType type, const char *message) noexcept
 {
 #if HAS_MASS_STORAGE
 	// Deal with logging
-	if ((type & LogMessage) != 0 && logger != nullptr)
+	if (logger != nullptr)
 	{
-		logger->LogMessage(realTime, message);
+		logger->LogMessage(realTime, message, type);
 	}
 #endif
 
@@ -3247,9 +3294,9 @@ void Platform::Message(const MessageType type, OutputBuffer *buffer) noexcept
 {
 #if HAS_MASS_STORAGE
 	// First deal with logging because it doesn't hang on to the buffer
-	if ((type & LogMessage) != 0 && logger != nullptr)
+	if (logger != nullptr)
 	{
-		logger->LogMessage(realTime, buffer);
+		logger->LogMessage(realTime, buffer, type);
 	}
 #endif
 
@@ -3405,6 +3452,8 @@ void Platform::SendAlert(MessageType mt, const char *message, const char *title,
 		reprap.SetAlert(message, title, sParam, tParam, controls);		// make the RepRap class cache this message until it's picked up by the HTTP clients and/or PanelDue
 	}
 
+	MessageF(MessageType::LogInfo, "M291: - %s - %s", (strlen(title) > 0 ? title : "[no title]"), message);
+
 	mt = (MessageType)(mt & (UsbMessage | TelnetMessage));
 	if (mt != 0)
 	{
@@ -3432,16 +3481,17 @@ GCodeResult Platform::ConfigureLogging(GCodeBuffer& gb, const StringRef& reply) 
 	if (gb.Seen('S'))
 	{
 		StopLogging();
-		if (gb.GetIValue() > 0)
+		const auto logLevel = (LogLevel) gb.GetLimitedUIValue('S', LogLevel::NumValues, LogLevel::off);
+		if (logLevel > LogLevel::off)
 		{
 			// Start logging
 			if (logger == nullptr)
 			{
-				logger = new Logger();
+				logger = new Logger(logLevel);
 			}
 			else
 			{
-				StopLogging();
+				logger->SetLogLevel(logLevel);
 			}
 
 			char buf[MaxFilenameLength + 1];
@@ -3459,7 +3509,15 @@ GCodeResult Platform::ConfigureLogging(GCodeBuffer& gb, const StringRef& reply) 
 	}
 	else
 	{
-		reply.printf("Event logging is %s", (logger != nullptr && logger->IsActive()) ? "enabled" : "disabled");
+		if (logger == nullptr || !logger->IsActive())
+		{
+			reply.copy("Event logging is disabled");
+		}
+		else
+		{
+			const auto logLevel = logger->GetLogLevel();
+			reply.printf("Event logging is enabled at log level %s", logLevel.ToString());
+		}
 	}
 	return GCodeResult::ok;
 }
@@ -3471,6 +3529,16 @@ const char *Platform::GetLogFileName() const noexcept
 }
 
 #endif
+
+const char *Platform::GetLogLevel() const noexcept
+{
+	static const LogLevel off = LogLevel::off;	// need to have an instance otherwise it will fail .ToString() below
+#if HAS_MASS_STORAGE
+	return (logger == nullptr) ? off.ToString() : logger->GetLogLevel().ToString();
+#else
+	return off.ToString();
+#endif
+}
 
 // This is called from EmergencyStop. It closes the log file and stops logging.
 void Platform::StopLogging() noexcept
@@ -3485,21 +3553,21 @@ void Platform::StopLogging() noexcept
 
 bool Platform::AtxPower() const noexcept
 {
-#ifdef __LPC17xx__
-	const bool val = IoPort::ReadPin(ATX_POWER_PIN);
-	return (ATX_POWER_INVERTED) ? !val : val;
+#if __LPC17xx__ || STM32F4
+	return ATX_POWER_STATE;
 #else
-    return IoPort::ReadPin(ATX_POWER_PIN);
+	return IoPort::ReadPin(ATX_POWER_PIN);
 #endif
 }
 
 void Platform::AtxPowerOn() noexcept
 {
 	deferredPowerDown = false;
-#ifdef __LPC17xx__
-    IoPort::WriteDigital(ATX_POWER_PIN, (ATX_POWER_INVERTED==false)?true:false);
+#if __LPC17xx__ || STM32F4
+	IoPort::WriteDigital(ATX_POWER_PIN, !ATX_POWER_INVERTED);
+	ATX_POWER_STATE = true;
 #else
-    IoPort::WriteDigital(ATX_POWER_PIN, true);
+	IoPort::WriteDigital(ATX_POWER_PIN, true);
 #endif
 }
 
@@ -3511,13 +3579,14 @@ void Platform::AtxPowerOff(bool defer) noexcept
 #if HAS_MASS_STORAGE
 		if (logger != nullptr)
 		{
-			logger->LogMessage(realTime, "Power off commanded");
+			logger->LogMessage(realTime, "Power off commanded", LogWarn);
 			logger->Flush(true);
 			// We don't call logger->Stop() here because we don't know whether turning off the power will work
 		}
 #endif
-#ifdef __LPC17xx__
+#if __LPC17xx__ || STM32F4
 		IoPort::WriteDigital(ATX_POWER_PIN, ATX_POWER_INVERTED);
+		ATX_POWER_STATE = false;
 #else
 		IoPort::WriteDigital(ATX_POWER_PIN, false);
 #endif
@@ -3529,7 +3598,7 @@ GCodeResult Platform::SetPressureAdvance(float advance, GCodeBuffer& gb, const S
 	GCodeResult rslt = GCodeResult::ok;
 
 #if SUPPORT_CAN_EXPANSION
-	CanDriversData canDriversToUpdate;
+	CanDriversData<float> canDriversToUpdate;
 #endif
 
 	if (gb.Seen('D'))
@@ -3550,7 +3619,7 @@ GCodeResult Platform::SetPressureAdvance(float advance, GCodeBuffer& gb, const S
 #if SUPPORT_CAN_EXPANSION
 			if (extruderDrivers[extruder].IsRemote())
 			{
-				canDriversToUpdate.AddEntry(extruderDrivers[extruder], (uint16_t)(advance * 1000.0));
+				canDriversToUpdate.AddEntry(extruderDrivers[extruder], advance);
 			}
 #endif
 		}
@@ -3571,7 +3640,7 @@ GCodeResult Platform::SetPressureAdvance(float advance, GCodeBuffer& gb, const S
 										pressureAdvance[extruder] = advance;
 										if (extruderDrivers[extruder].IsRemote())
 										{
-											canDriversToUpdate.AddEntry(extruderDrivers[extruder], (uint16_t)(advance * 1000.0));
+											canDriversToUpdate.AddEntry(extruderDrivers[extruder], advance);
 										}
 									}
 								);
@@ -3586,8 +3655,7 @@ GCodeResult Platform::SetPressureAdvance(float advance, GCodeBuffer& gb, const S
 	}
 
 #if SUPPORT_CAN_EXPANSION
-	const bool remoteOk = CanInterface::SetRemotePressureAdvance(canDriversToUpdate, reply);
-	return (remoteOk) ? rslt : GCodeResult::error;
+	return max(rslt, CanInterface::SetRemotePressureAdvance(canDriversToUpdate, reply));
 #else
 	return rslt;
 #endif
@@ -3653,7 +3721,7 @@ void Platform::ResetChannel(size_t chan) noexcept
 		SERIAL_MAIN_DEVICE.end();
 #if SAME5x
         SERIAL_MAIN_DEVICE.Start();
-#elif defined(__LPC17xx__) || defined(STM32F4)
+#elif __LPC17xx__ || STM32F4
 		SERIAL_MAIN_DEVICE.begin(baudRates[0]);
 #else
         SERIAL_MAIN_DEVICE.Start(UsbVBusPin);
@@ -3668,22 +3736,30 @@ void Platform::ResetChannel(size_t chan) noexcept
 #endif
 }
 
+// Set the board type. This must be called quite early, because for some builds it relies on pins not having been programmed for their intended use yet.
 void Platform::SetBoardType(BoardType bt) noexcept
 {
 	if (bt == BoardType::Auto)
 	{
-#if defined(DUET_5LC)
+#if defined(DUET3MINI_V02)
 		// Test whether this is a WiFi or an Ethernet board. Currently we do this based on the processor type.
 		const uint16_t deviceId = DSU->DID.reg >> 16;
-		board = (deviceId == 0x6184)						// if SAME54P20A
-				? BoardType::Duet5LC_Ethernet
-				: (deviceId == 0x6006)						// SAMD51P20A rev D
-				  ? BoardType::Duet5LC_WiFi
-					: BoardType::Duet5LC_Unknown;
+		board = (deviceId == 0x6184)							// if SAME54P20A
+				? BoardType::Duet3Mini_Ethernet
+				: (deviceId == 0x6006)							// SAMD51P20A rev D
+				  ? BoardType::Duet3Mini_WiFi
+					: BoardType::Duet3Mini_Unknown;
+#elif defined(DUET3MINI_V04)
+		// Test whether this is a WiFi or an Ethernet board by testing for a pulldown resistor on Dir1
+		pinMode(DIRECTION_PINS[1], INPUT_PULLUP);
+		delayMicroseconds(20);									// give the pullup resistor time to work
+		board = (digitalRead(DIRECTION_PINS[1]))				// if SAME54P20A
+					? BoardType::Duet3Mini_WiFi
+						: BoardType::Duet3Mini_Ethernet;
 #elif defined(DUET3)
 		// Driver 0 direction has a pulldown resistor on v0.6 and v1.0 boards, but won't on v1.01 boards
 		pinMode(DIRECTION_PINS[0], INPUT_PULLUP);
-		delayMicroseconds(20);										// give the pullup resistor time to work
+		delayMicroseconds(20);									// give the pullup resistor time to work
 		board = (digitalRead(DIRECTION_PINS[0])) ? BoardType::Duet3_v101 : BoardType::Duet3_v06_100;
 #elif defined(SAME70XPLD)
 		board = BoardType::SAME70XPLD_0;
@@ -3756,10 +3832,10 @@ const char* Platform::GetElectronicsString() const noexcept
 {
 	switch (board)
 	{
-#if defined(DUET_5LC)
-	case BoardType::Duet5LC_Unknown:		return "Duet 3 " BOARD_SHORT_NAME " unknown variant";
-	case BoardType::Duet5LC_WiFi:			return "Duet 3 " BOARD_SHORT_NAME " WiFi";
-	case BoardType::Duet5LC_Ethernet:		return "Duet 3 " BOARD_SHORT_NAME " Ethernet";
+#if defined(DUET3MINI)
+	case BoardType::Duet3Mini_Unknown:		return "Duet 3 " BOARD_SHORT_NAME " unknown variant";
+	case BoardType::Duet3Mini_WiFi:			return "Duet 3 " BOARD_SHORT_NAME " WiFi";
+	case BoardType::Duet3Mini_Ethernet:		return "Duet 3 " BOARD_SHORT_NAME " Ethernet";
 #elif defined(DUET3)
 	case BoardType::Duet3_v06_100:			return "Duet 3 " BOARD_SHORT_NAME " v0.6 or 1.0";
 	case BoardType::Duet3_v101:				return "Duet 3 " BOARD_SHORT_NAME " v1.01 or later";
@@ -3803,10 +3879,10 @@ const char* Platform::GetBoardString() const noexcept
 {
 	switch (board)
 	{
-#if defined(DUET_5LC)
-	case BoardType::Duet5LC_Unknown:		return "duet5lcunknown";
-	case BoardType::Duet5LC_WiFi:			return "duet5lcwifi";
-	case BoardType::Duet5LC_Ethernet:		return "duet5lcethernet";
+#if defined(DUET3MINI)
+	case BoardType::Duet3Mini_Unknown:		return "duet5lcunknown";
+	case BoardType::Duet3Mini_WiFi:			return "duet5lcwifi";
+	case BoardType::Duet3Mini_Ethernet:		return "duet5lcethernet";
 #elif defined(DUET3)
 	case BoardType::Duet3_v06_100:			return "duet3mb6hc100";
 	case BoardType::Duet3_v101:				return "duet3mb6hc101";
@@ -3868,12 +3944,12 @@ const char *Platform::GetBoardShortName() const noexcept
 
 #endif
 
-#ifdef DUET_5LC
+#ifdef DUET3MINI
 
 // Return true if this is a Duet WiFi, false if it is a Duet Ethernet
 bool Platform::IsDuetWiFi() const noexcept
 {
-	return board == BoardType::Duet5LC_WiFi || board == BoardType::Duet5LC_Unknown;
+	return board == BoardType::Duet3Mini_WiFi || board == BoardType::Duet3Mini_Unknown;
 }
 
 #endif
@@ -4129,22 +4205,22 @@ MinMaxCurrent Platform::GetV12Voltages() const noexcept
 #if HAS_SMART_DRIVERS
 
 // TMC driver temperatures
-float Platform::GetTmcDriversTemperature(unsigned int board) const noexcept
+float Platform::GetTmcDriversTemperature(unsigned int boardNumber) const noexcept
 {
-#if defined(DUET_5LC)
-	const DriversBitmap mask = (board == 0)
+#if defined(DUET3MINI)
+	const DriversBitmap mask = (boardNumber == 0)
 							? DriversBitmap::MakeLowestNBits(5)							// drivers 0-4 are on the main board
 								: DriversBitmap::MakeLowestNBits(3).ShiftUp(5);			// drivers 5-7 are on the daughter board
 #elif defined(DUET3)
 	const DriversBitmap mask = DriversBitmap::MakeLowestNBits(6);						// there are 6 drivers, only one board
 #elif defined(DUET_NG)
-	const DriversBitmap mask = DriversBitmap::MakeLowestNBits(5).ShiftUp(5 * board);	// there are 5 drivers on each board
+	const DriversBitmap mask = DriversBitmap::MakeLowestNBits(5).ShiftUp(5 * boardNumber);	// there are 5 drivers on each board
 #elif defined(DUET_M)
-	const DriversBitmap mask = (board == 0)
+	const DriversBitmap mask = (boardNumber == 0)
 							? DriversBitmap::MakeLowestNBits(5)							// drivers 0-4 are on the main board
 								: DriversBitmap::MakeLowestNBits(2).ShiftUp(5);			// drivers 5-6 are on the daughter board
 #elif defined(PCCB_10)
-	const DriversBitmap mask = (board == 0)
+	const DriversBitmap mask = (boardNumber == 0)
 							? DriversBitmap::MakeLowestNBits(2)							// drivers 0,1 are on-board
 								: DriversBitmap::MakeLowestNBits(5).ShiftUp(2);			// drivers 2-7 are on the DueX5
 #elif defined(PCCB_08_X5)
@@ -4362,7 +4438,7 @@ bool Platform::SetDateTime(time_t time) noexcept
 
 		// Write a log message, giving the time since power up in same format as the logger does
 		const uint32_t timeSincePowerUp = (uint32_t)(millis64()/1000u);
-		MessageF(LogMessage, "Date and time set at power up + %02" PRIu32 ":%02" PRIu32 ":%02" PRIu32 "\n", timeSincePowerUp/3600u, (timeSincePowerUp % 3600u)/60u, timeSincePowerUp % 60u);
+		MessageF(LogWarn, "Date and time set at power up + %02" PRIu32 ":%02" PRIu32 ":%02" PRIu32 "\n", timeSincePowerUp/3600u, (timeSincePowerUp % 3600u)/60u, timeSincePowerUp % 60u);
 		timeLastUpdatedMillis = millis();
 	}
 	return ok;
@@ -4424,6 +4500,20 @@ void Platform::HandleRemoteGpInChange(CanAddress src, uint8_t handleMajor, uint8
 	}
 }
 
+GCodeResult Platform::UpdateRemoteStepsPerMmAndMicrostepping(AxesBitmap axesAndExtruders, const StringRef& reply) noexcept
+{
+	CanDriversData<StepsPerUnitAndMicrostepping> data;
+	axesAndExtruders.Iterate([this, &data](unsigned int axisOrExtruder, unsigned int count) noexcept
+								{
+									const StepsPerUnitAndMicrostepping driverData(this->driveStepsPerUnit[axisOrExtruder], this->microstepping[axisOrExtruder]);
+									this->IterateRemoteDrivers(axisOrExtruder, [&data, &driverData](DriverId driver) noexcept
+											{
+												data.AddEntry(driver, driverData);
+											});
+								});
+	return CanInterface::SetRemoteDriverStepsPerMmAndMicrostepping(data, reply);
+}
+
 #endif
 
 // Configure the ancillary PWM
@@ -4437,7 +4527,7 @@ GCodeResult Platform::GetSetAncillaryPwm(GCodeBuffer& gb, const StringRef& reply
 		{
 			return GCodeResult::error;
 		}
-		const PwmFrequency freq = (gb.Seen('F')) ? gb.GetPwmFrequency() : DefaultPinWritePwmFreq;
+		const PwmFrequency freq = (gb.Seen('Q') || gb.Seen('F')) ? gb.GetPwmFrequency() : DefaultPinWritePwmFreq;
 		extrusionAncilliaryPwmPort.SetFrequency(freq);
 	}
 	if (gb.Seen('S'))
@@ -4600,7 +4690,7 @@ void Platform::Tick() noexcept
 	case 3:
 		{
 #if !SAME70
-#ifdef __LPC17xx__
+#if __LPC17xx__ || STM32F4
 			if(filteredAdcChannels[currentFilterNumber] != NO_ADC)
 			{
 #endif
@@ -4608,7 +4698,7 @@ void Platform::Tick() noexcept
 			// Because we are in the tick ISR and no other ISR reads the averaging filter, we can cast away 'volatile' here.
 			ThermistorAveragingFilter& currentFilter = const_cast<ThermistorAveragingFilter&>(adcFilters[currentFilterNumber]);		// cast away 'volatile'
 			currentFilter.ProcessReading(AnalogInReadChannel(filteredAdcChannels[currentFilterNumber]));
-#ifdef __LPC17xx__
+#if __LPC17xx__ || STM32F4
 			}
 #endif
 			++currentFilterNumber;

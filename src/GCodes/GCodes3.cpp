@@ -96,10 +96,15 @@ GCodeResult GCodes::SetPositions(GCodeBuffer& gb) THROWS(GCodeException)
 			ToolOffsetInverseTransform(moveBuffer.coords, currentUserPosition);		// make sure the limits are reflected in the user position
 		}
 		reprap.GetMove().SetNewPosition(moveBuffer.coords, true);
-		axesHomed |= reprap.GetMove().GetKinematics().AxesAssumedHomed(axesIncluded);
-		if (axesIncluded.IsBitSet(Z_AXIS))
+		if (simulationMode == 0)
 		{
-			zDatumSetByProbing -= false;
+			axesHomed |= reprap.GetMove().GetKinematics().AxesAssumedHomed(axesIncluded);
+			axesVirtuallyHomed = axesHomed;
+			if (axesIncluded.IsBitSet(Z_AXIS))
+			{
+				zDatumSetByProbing = false;
+			}
+			reprap.MoveUpdated();				// because we may have updated axesHomed or zDatumSetByProbing
 		}
 
 #if SUPPORT_ROLAND
@@ -116,7 +121,6 @@ GCodeResult GCodes::SetPositions(GCodeBuffer& gb) THROWS(GCodeException)
 #endif
 	}
 
-	reprap.MoveUpdated();		// I'm not sure this is necessary because the position and homed fields in the OM are flagged 'frequent'; but we may have changed zDatumSetByProbing
 	return GCodeResult::ok;
 }
 
@@ -180,6 +184,9 @@ GCodeResult GCodes::GetSetWorkplaceCoordinates(GCodeBuffer& gb, const StringRef&
 		if (seen)
 		{
 			reprap.MoveUpdated();
+			String<StringLengthLoggedCommand> scratch;
+			gb.AppendFullCommand(scratch.GetRef());
+			platform.Message(MessageType::LogInfo, scratch.c_str());
 		}
 		else
 		{
@@ -266,6 +273,8 @@ GCodeResult GCodes::DefineGrid(GCodeBuffer& gb, const StringRef &reply)
 
 	if (!seenX && !seenY && !seenR && !seenS && !seenP)
 	{
+		ReadLocker rlocker(reprap.GetMove().heightMapLock);
+
 		// Just print the existing grid parameters
 		if (defaultGrid.IsValid())
 		{
@@ -353,6 +362,7 @@ GCodeResult GCodes::DefineGrid(GCodeBuffer& gb, const StringRef &reply)
 		}
 	}
 
+	WriteLocker locker(reprap.GetMove().heightMapLock);
 	const bool ok = defaultGrid.Set(xValues, yValues, radius, spacings);
 	reprap.MoveUpdated();
 	if (ok)
@@ -389,24 +399,23 @@ GCodeResult GCodes::SimulateFile(GCodeBuffer& gb, const StringRef &reply, const 
 	{
 		if (simulationMode == 0)
 		{
-			axesHomedBeforeSimulation = axesHomed;
-			axesHomed = AxesBitmap::MakeLowestNBits(numVisibleAxes);	// pretend all axes are homed
+			axesVirtuallyHomed = AxesBitmap::MakeLowestNBits(numVisibleAxes);	// pretend all axes are homed
 			SavePosition(simulationRestorePoint, gb);
 			simulationRestorePoint.feedRate = gb.MachineState().feedRate;
 		}
 		simulationTime = 0.0;
 		exitSimulationWhenFileComplete = true;
-#if HAS_LINUX_INTERFACE
+# if HAS_LINUX_INTERFACE
 		updateFileWhenSimulationComplete = updateFile && !reprap.UsingLinuxInterface();
-#else
+# else
 		updateFileWhenSimulationComplete = updateFile;
-#endif
+# endif
 		simulationMode = 1;
 		reprap.GetMove().Simulate(simulationMode);
 		reprap.GetPrintMonitor().StartingPrint(file.c_str());
-#if HAS_LINUX_INTERFACE
+# if HAS_LINUX_INTERFACE
 		if (!reprap.UsingLinuxInterface())
-#endif
+# endif
 		{
 			// If using a SBC, this is already called when the print file info is set
 			StartPrinting(true);
@@ -437,8 +446,7 @@ GCodeResult GCodes::ChangeSimulationMode(GCodeBuffer& gb, const StringRef &reply
 			if (simulationMode == 0)
 			{
 				// Starting a new simulation, so save the current position
-				axesHomedBeforeSimulation = axesHomed;
-				axesHomed = AxesBitmap::MakeLowestNBits(numVisibleAxes);	// pretend all axes are homed
+				axesVirtuallyHomed = AxesBitmap::MakeLowestNBits(numVisibleAxes);	// pretend all axes are homed
 				SavePosition(simulationRestorePoint, gb);
 			}
 			simulationTime = 0.0;
@@ -474,16 +482,16 @@ GCodeResult GCodes::WaitForPin(GCodeBuffer& gb, const StringRef &reply)
 	}
 
 	const bool activeHigh = (!gb.Seen('S') || gb.GetUIValue() >= 1);
-	Platform& platform = reprap.GetPlatform();
-	const bool ok = endstopsToWaitFor.IterateWhile([&platform, activeHigh](unsigned int axis, unsigned int)->bool
+	Platform& pfm = platform;
+	const bool ok = endstopsToWaitFor.IterateWhile([&pfm, activeHigh](unsigned int axis, unsigned int)->bool
 								{
-									const bool stopped = platform.GetEndstops().Stopped(axis) == EndStopHit::atStop;
+									const bool stopped = pfm.GetEndstops().Stopped(axis) == EndStopHit::atStop;
 									return stopped == activeHigh;
 								}
 							 )
-				&& portsToWaitFor.IterateWhile([&platform, activeHigh](unsigned int port, unsigned int)->bool
+				&& portsToWaitFor.IterateWhile([&pfm, activeHigh](unsigned int port, unsigned int)->bool
 								{
-									return (port >= MaxGpInPorts || platform.GetGpInPort(port).GetState() == activeHigh);
+									return (port >= MaxGpInPorts || pfm.GetGpInPort(port).GetState() == activeHigh);
 								}
 							 );
 	return (ok) ? GCodeResult::ok : GCodeResult::notFinished;
@@ -529,12 +537,20 @@ GCodeResult GCodes::DoDriveMapping(GCodeBuffer& gb, const StringRef& reply) THRO
 		return GCodeResult::notFinished;
 	}
 
-	bool seen = false;
+	bool seen = false, seenExtrude = false;
+	GCodeResult rslt = GCodeResult::ok;
+
 	const size_t originalVisibleAxes = numVisibleAxes;
 	const char *lettersToTry = AllowedAxisLetters;
 	char c;
 
-	const bool newAxesAreContinuousRotation = (gb.Seen('R') && gb.GetIValue() > 0);
+#if SUPPORT_CAN_EXPANSION
+	AxesBitmap axesToUpdate;
+#endif
+
+	const AxisWrapType newAxesType = (gb.Seen('R')) ? (AxisWrapType)gb.GetLimitedUIValue('R', (unsigned int)AxisWrapType::undefined) : AxisWrapType::undefined;
+	const bool seenS = gb.Seen('S');
+	const bool newAxesAreNistRotational = seenS && gb.GetLimitedUIValue('S', 2) == 1;
 	while ((c = *lettersToTry) != 0)
 	{
 		if (gb.Seen(c))
@@ -545,6 +561,47 @@ GCodeResult GCodes::DoDriveMapping(GCodeBuffer& gb, const StringRef& reply) THRO
 			DriverId drivers[MaxDriversPerAxis];
 			gb.GetDriverIdArray(drivers, numValues);
 
+			// Check the driver array for out-of-range drives
+			for (size_t i = 0; i < numValues; )
+			{
+				const DriverId driver = drivers[i];
+				bool deleteItem = false;
+#if SUPPORT_CAN_EXPANSION
+				if (driver.IsRemote())
+				{
+					// Currently we don't have a way of determining how many drivers each board has, but we have a limit of 3 per board
+					const ExpansionBoardData * const data = reprap.GetExpansion().GetBoardDetails(driver.boardAddress);
+					if (data != nullptr && driver.localDriver >= data->numDrivers)
+					{
+						deleteItem = true;
+					}
+				}
+				else
+#endif
+				if (driver.localDriver >= NumDirectDrivers)
+				{
+					deleteItem = true;
+				}
+
+				if (deleteItem)
+				{
+#if SUPPORT_CAN_EXPANSION
+					reply.lcatf("Driver %u.%u does not exist", driver.boardAddress, driver.localDriver);
+#else
+					reply.lcatf("Driver %u does not exist", driver.localDriver);
+#endif
+					rslt = GCodeResult::error;
+					--numValues;
+					for (size_t j = i; j < numValues; ++j)
+					{
+						drivers[j] = drivers[j + 1];
+					}
+				}
+				else
+				{
+					++i;
+				}
+			}
 			// Find the drive number allocated to this axis, or allocate a new one if necessary
 			size_t drive = 0;
 			while (drive < numTotalAxes && axisLetters[drive] != c)
@@ -557,10 +614,11 @@ GCodeResult GCodes::DoDriveMapping(GCodeBuffer& gb, const StringRef& reply) THRO
 				{
 					// We are creating a new axis
 					axisLetters[drive] = c;								// assign the drive to this drive letter
-					if (newAxesAreContinuousRotation)
-					{
-						continuousRotationAxes.SetBit(drive);
-					}
+					const AxisWrapType wrapType = (newAxesType != AxisWrapType::undefined) ? newAxesType
+													: (c >= 'A' && c <= 'D') ? AxisWrapType::wrapAt360			// default A thru D to rotational but not continuous
+														: AxisWrapType::noWrap;									// default other axes to linear
+					const bool isNistRotational = (seenS) ? newAxesAreNistRotational : (c >= 'A' && c <= 'D');
+					platform.SetAxisType(drive, wrapType, isNistRotational);
 					++numTotalAxes;
 					if (numTotalAxes + numExtruders > MaxAxesPlusExtruders)
 					{
@@ -574,6 +632,9 @@ GCodeResult GCodes::DoDriveMapping(GCodeBuffer& gb, const StringRef& reply) THRO
 					reprap.MoveUpdated();
 				}
 				platform.SetAxisDriversConfig(drive, numValues, drivers);
+#if SUPPORT_CAN_EXPANSION
+				axesToUpdate.SetBit(drive);
+#endif
 			}
 		}
 		++lettersToTry;
@@ -581,7 +642,7 @@ GCodeResult GCodes::DoDriveMapping(GCodeBuffer& gb, const StringRef& reply) THRO
 
 	if (gb.Seen(extrudeLetter))
 	{
-		seen = true;
+		seenExtrude = true;
 		size_t numValues = MaxExtruders;
 		DriverId drivers[MaxExtruders];
 		gb.GetDriverIdArray(drivers, numValues);
@@ -589,6 +650,13 @@ GCodeResult GCodes::DoDriveMapping(GCodeBuffer& gb, const StringRef& reply) THRO
 		for (size_t i = 0; i < numValues; ++i)
 		{
 			platform.SetExtruderDriver(i, drivers[i]);
+#if SUPPORT_CAN_EXPANSION
+			axesToUpdate.SetBit(ExtruderToLogicalDrive(i));
+#endif
+		}
+		if (FilamentMonitor::CheckDriveAssignments(reply) && rslt == GCodeResult::ok)
+		{
+			rslt = GCodeResult::warning;
 		}
 	}
 
@@ -602,12 +670,12 @@ GCodeResult GCodes::DoDriveMapping(GCodeBuffer& gb, const StringRef& reply) THRO
 		}
 		else
 		{
-			reply.copy("Invalid number of visible axes");
-			return GCodeResult::error;
+			reply.lcat("Invalid number of visible axes");
+			rslt = GCodeResult::error;
 		}
 	}
 
-	if (seen)
+	if (seen || seenExtrude)
 	{
 		reprap.MoveUpdated();
 		if (numVisibleAxes > originalVisibleAxes)
@@ -617,48 +685,61 @@ GCodeResult GCodes::DoDriveMapping(GCodeBuffer& gb, const StringRef& reply) THRO
 			ToolOffsetTransform(currentUserPosition, moveBuffer.coords);	// ensure that the position of any new axes are updated in moveBuffer
 			reprap.GetMove().SetNewPosition(moveBuffer.coords, true);		// tell the Move system where the axes are
 		}
-	}
-	else
-	{
-		reply.copy("Driver assignments:");
-		bool printed = false;
-		for (size_t drive = 0; drive < numTotalAxes; ++ drive)
-		{
-			reply.cat(' ');
-			const AxisDriversConfig& axisConfig = platform.GetAxisDriversConfig(drive);
-			if (reprap.GetMove().GetKinematics().IsContinuousRotationAxis(drive))
-			{
-				reply.cat('r');
-			}
-			char c = axisLetters[drive];
-			for (size_t i = 0; i < axisConfig.numDrivers; ++i)
-			{
-				printed = true;
-				const DriverId id = axisConfig.driverNumbers[i];
-				reply.catf("%c" PRIdriverId, c, DRIVER_ID_PRINT_ARGS(id));
-				c = ':';
-			}
-		}
-		if (numExtruders != 0)
-		{
-			reply.cat(' ');
-			char c = extrudeLetter;
-			for (size_t extruder = 0; extruder < numExtruders; ++extruder)
-			{
-				const DriverId id = platform.GetExtruderDriver(extruder);
-				reply.catf("%c" PRIdriverId, c, DRIVER_ID_PRINT_ARGS(id));
-				c = ':';
-			}
-		}
-		if (!printed)
-		{
-			reply.cat(" none");
-		}
-		reply.catf(", %u axes visible", numVisibleAxes);
+#if SUPPORT_CAN_EXPANSION
+		rslt = max(rslt, platform.UpdateRemoteStepsPerMmAndMicrostepping(axesToUpdate, reply));
+#endif
+		return rslt;
 	}
 
+	reply.copy("Driver assignments:");
+	bool printed = false;
+	for (size_t axis = 0; axis < numTotalAxes; ++ axis)
+	{
+		reply.cat(' ');
+		const AxisDriversConfig& axisConfig = platform.GetAxisDriversConfig(axis);
+		if (platform.IsAxisRotational(axis))
+		{
+			reply.cat("(r)");
+		}
+		if (platform.IsAxisContinuous(axis))
+		{
+			reply.cat("(c)");
+		}
+#if 0	// shortcut axes not implemented yet
+		if (platform.IsAxisShortcutAllowed(axis))
+		{
+			reply.cat("(s)");
+		}
+#endif
+
+		char c = axisLetters[axis];
+		for (size_t i = 0; i < axisConfig.numDrivers; ++i)
+		{
+			printed = true;
+			const DriverId id = axisConfig.driverNumbers[i];
+			reply.catf("%c" PRIdriverId, c, DRIVER_ID_PRINT_ARGS(id));
+			c = ':';
+		}
+	}
+	if (numExtruders != 0)
+	{
+		reply.cat(' ');
+		char c = extrudeLetter;
+		for (size_t extruder = 0; extruder < numExtruders; ++extruder)
+		{
+			const DriverId id = platform.GetExtruderDriver(extruder);
+			reply.catf("%c" PRIdriverId, c, DRIVER_ID_PRINT_ARGS(id));
+			c = ':';
+		}
+	}
+	if (!printed)
+	{
+		reply.cat(" none");
+	}
+	reply.catf(", %u axes visible", numVisibleAxes);
 	return GCodeResult::ok;
 }
+
 // Handle G38.[2-5]
 GCodeResult GCodes::StraightProbe(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {

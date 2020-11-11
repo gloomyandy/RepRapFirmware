@@ -211,9 +211,10 @@ ObjectModel::ObjectModel() noexcept
 
 // ObjectExplorationContext members
 
-ObjectExplorationContext::ObjectExplorationContext(const char *reportFlags, bool wal, unsigned int initialMaxDepth, int p_line, int p_col) noexcept
-	: maxDepth(initialMaxDepth), currentDepth(0), numIndicesProvided(0), numIndicesCounted(0),
-	  line(p_line), column(p_col),
+// Constructor used when reporting the OM as JSON
+ObjectExplorationContext::ObjectExplorationContext(bool wal, const char *reportFlags, unsigned int initialMaxDepth) noexcept
+	: startMillis(millis()), maxDepth(initialMaxDepth), currentDepth(0), numIndicesProvided(0), numIndicesCounted(0),
+	  line(-1), column(-1),
 	  shortForm(false), onlyLive(false), includeVerbose(false), wantArrayLength(wal), includeNulls(false)
 {
 	while (true)
@@ -250,6 +251,14 @@ ObjectExplorationContext::ObjectExplorationContext(const char *reportFlags, bool
 			break;
 		}
 	}
+}
+
+// Constructor when evaluating expressions
+ObjectExplorationContext::ObjectExplorationContext(bool wal, int p_line, int p_col) noexcept
+	: startMillis(millis()), maxDepth(99), currentDepth(0), numIndicesProvided(0), numIndicesCounted(0),
+	  line(p_line), column(p_col),
+	  shortForm(false), onlyLive(false), includeVerbose(true), wantArrayLength(wal), includeNulls(false)
+{
 }
 
 int32_t ObjectExplorationContext::GetIndex(size_t n) const THROWS(GCodeException)
@@ -353,7 +362,7 @@ void ObjectModel::ReportAsJson(OutputBuffer* buf, ObjectExplorationContext& cont
 void ObjectModel::ReportAsJson(OutputBuffer *buf, const char *filter, const char *reportFlags, bool wantArrayLength) const THROWS(GCodeException)
 {
 	const unsigned int defaultMaxDepth = (wantArrayLength) ? 99 : (filter[0] == 0) ? 1 : 99;
-	ObjectExplorationContext context(reportFlags, wantArrayLength, defaultMaxDepth);
+	ObjectExplorationContext context(wantArrayLength, reportFlags, defaultMaxDepth);
 	ReportAsJson(buf, context, nullptr, 0, filter);
 }
 
@@ -370,16 +379,20 @@ inline void ObjectModel::ReportItemAsJson(OutputBuffer *buf, ObjectExplorationCo
 	}
 	else if (val.GetType() == TypeCode::ObjectModel)
 	{
-		if (*filter == '.')
+		if (  (*filter != '.' && *filter != 0)		// we should have reached the end of the filter or a '.', error if not
+			|| val.omVal == nullptr					// OM arrays may contain null entries, so we need to handle them here
+		   )
 		{
-			++filter;
+			buf->cat("null");
 		}
-		else if (*filter != 0)
+		else
 		{
-			buf->cat("null");						// error, should have reached the end of the filter or a '.'
-			return;
+			if (*filter == '.')
+			{
+				++filter;
+			}
+			val.omVal->ReportAsJson(buf, context, (val.omVal == this) ? classDescriptor : nullptr, val.param, filter);
 		}
-		val.omVal->ReportAsJson(buf, context, (val.omVal == this) ? classDescriptor : nullptr, val.param, filter);
 	}
 	else
 	{
