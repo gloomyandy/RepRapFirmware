@@ -416,6 +416,7 @@ constexpr BoardEntry LPC_Boards[] =
     {"azteegx5mini_1.1", PinTable_AzteegX5MiniV1_1, ARRAY_SIZE(PinTable_AzteegX5MiniV1_1), azteegX5Mini1_1Defaults},
 	{"azteegx5mini_2",   PinTable_AzteegX5MiniV2,   ARRAY_SIZE(PinTable_AzteegX5MiniV2),   azteegX5Mini2Defaults},
     {"azteegx5mini_3",   PinTable_AzteegX5MiniV3,   ARRAY_SIZE(PinTable_AzteegX5MiniV3),   azteegX5Mini3Defaults},
+	{"fly_cdy",          PinTable_FLY_CDY,          ARRAY_SIZE(PinTable_FLY_CDY),          FLY_CDY_Defaults},
 #endif
 };
 
