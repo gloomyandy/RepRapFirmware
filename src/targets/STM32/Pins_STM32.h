@@ -382,6 +382,7 @@ constexpr BoardEntry LPC_Boards[] =
     {"fly_e3",      PinTable_FLY_E3,    ARRAY_SIZE(PinTable_FLY_E3),    fly_e3_Defaults},
     {"fly_cdyv2",      PinTable_FLY_CDYV2,    ARRAY_SIZE(PinTable_FLY_CDYV2),    fly_cdyv2_Defaults},
     {"biquskr_rrf_e3_1.0",      PinTable_BTT_RRF_E3_v1_0,    ARRAY_SIZE(PinTable_BTT_RRF_E3_v1_0),    btt_rrf_e3_1_0_Defaults},
+    {"biquskr_2",      PinTable_BTT_SKR_2,    ARRAY_SIZE(PinTable_BTT_SKR_2),    btt_skr_2_Defaults},
     
 };
 

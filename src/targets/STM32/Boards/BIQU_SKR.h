@@ -218,7 +218,7 @@ constexpr PinEntry PinTable_BIQU_GTR_v1_0[] =
 	{PA_9, PinCapability::rwpwm, "PA9"},
 	
 	//SPI
-	{PC_14, PinCapability::rwpwm, "X-CS,PC10"},
+	{PC_14, PinCapability::rwpwm, "X-CS,PC14"},
 	{PE_1, PinCapability::rwpwm, "Y-CS,PE1"},
 	{PB_5, PinCapability::rwpwm, "Z-CS,PB5"},
 	{PG_10, PinCapability::rwpwm, "E0-CS,PG10"},
@@ -341,6 +341,102 @@ constexpr BoardDefaults btt_rrf_e3_1_0_Defaults = {
 #if TMC_SOFT_UART
 	{PD_6, PD_1, PD_15, PD_11},	// uartpins
     4,							// Smart drivers
+#endif
+    0							// digiPot Factor
+};
+
+constexpr PinEntry PinTable_BTT_SKR_2[] =
+{
+    //Thermistors
+    {PA_1, PinCapability::ainrw, "bedtemp,tb"},
+    {PA_2, PinCapability::ainrw, "e0temp,th0"},
+    {PA_3, PinCapability::ainrw, "e1temp,th1"},
+
+    //Endstops
+    {PC_1, PinCapability::rwpwm, "xstop,x-stop"},
+    {PC_3, PinCapability::rwpwm, "ystop,y-stop"},
+    {PC_0, PinCapability::rwpwm, "zstop,z-stop"},
+    {PC_2, PinCapability::rwpwm, "e0stop,e0det"},
+    {PA_0, PinCapability::rwpwm, "e1stop,e1det"},
+
+    //Servos
+    {PE_5,  PinCapability::rwpwm, "servo0" },
+
+    //Probe
+    {PE_4, PinCapability::rwpwm, "probe"},
+
+    //Heaters and Fans (Big and Small Mosfets}
+    {PD_7,  PinCapability::wpwm, "bed,hbed" },
+    {PB_3,  PinCapability::wpwm, "e0heat,heat0" },
+    {PB_4,  PinCapability::wpwm, "e1heat,heat1" },
+    {PB_7,  PinCapability::wpwm, "fan0,fan" },
+    {PB_6,  PinCapability::wpwm, "fan1" },
+    {PB_5,  PinCapability::wpwm, "fan2" },
+
+    //EXP1
+    {PB_1, PinCapability::rwpwm, "LCDCS"},
+    {PB_2, PinCapability::rwpwm, "LCDENCA"},
+    {PE_7, PinCapability::rwpwm, "LCDENCB"},
+    {PC_5, PinCapability::rwpwm, "LCDBEEP"},
+    {PB_0, PinCapability::rwpwm, "LCDBTN"},
+    {PE_10, PinCapability::rwpwm, "LCDD4"},
+    {PB_1, PinCapability::rwpwm, "LCDEN"},
+
+    //Neopixel
+    {PE_6, PinCapability::rwpwm, "Neopixel,PE6"},
+
+    //TFT
+    {PA_9, PinCapability::rwpwm, "TX1,tft-tx"},
+    {PA_10, PinCapability::rwpwm, "RX1,tft-rx"},
+
+    //WIFI UART
+    {PD_8, PinCapability::rwpwm, "PD8"},
+    {PD_9, PinCapability::rwpwm, "PD9"},
+
+    //SPI
+    {PE_0, PinCapability::rwpwm, "X-CS,PE0"},
+    {PD_3, PinCapability::rwpwm, "Y-CS,PD3"},
+    {PD_0, PinCapability::rwpwm, "Z-CS,PD0"},
+    {PC_6, PinCapability::rwpwm, "E0-CS,PC6"},
+    {PD_12, PinCapability::rwpwm, "E1-CS,PD12"},
+    {PA_14, PinCapability::rwpwm, "MISO,PA14"},
+    {PE_14, PinCapability::rwpwm, "MOSI,PE14"},
+    {PE_15, PinCapability::rwpwm, "SCK,PE15"},
+
+    //I2C
+    {PB_8, PinCapability::rwpwm, "SCL1,PB8"},
+    {PB_9, PinCapability::rwpwm, "SDA1,PB9"},
+
+    //WIFI
+    {PC_14, PinCapability::rwpwm, "PC14"}, //RST
+    {PB_10, PinCapability::rwpwm, "PB10"}, //IO0
+    {PB_11, PinCapability::rwpwm, "PB11"}, //IO4
+    {PB_12, PinCapability::rwpwm, "PB12"}, //CS
+    {PB_13, PinCapability::rwpwm, "PB13"}, //CLK
+    {PB_14, PinCapability::rwpwm, "PB14"}, //MISO
+    {PB_15, PinCapability::rwpwm, "PB15"}, //MOSI
+
+    //PSON
+    {PE_8, PinCapability::rwpwm, "PSON,PE8"},
+
+    //PWRDET
+    {PC_15, PinCapability::rwpwm, "PWRDET,PC15"},
+
+    //Status LED
+    {PA_13, PinCapability::rwpwm, "LED,PA13"},
+
+    //Safe power
+    {PC_13, PinCapability::rwpwm, "SP,PC13"},
+};
+
+constexpr BoardDefaults btt_skr_2_Defaults = {
+    5,							// Number of drivers
+    {PE_3, PD_6, PD_1, PC_7, PD_13}, // enablePins
+    {PE_2, PD_5, PA_15, PD_15, PD_11},  // stepPins
+    {PE_1, PD_4, PA_8, PD_14, PD_10},	// dirPins
+#if TMC_SOFT_UART
+    {PE_0, PD_3, PD_0, PC_6, PD_12},	// uartpins
+    5,							// Smart drivers
 #endif
     0							// digiPot Factor
 };
