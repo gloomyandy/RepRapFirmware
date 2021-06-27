@@ -1405,7 +1405,7 @@ void GCodes::SaveResumeInfo(bool wasPowerFailure) noexcept
 			const Tool * const ct = reprap.GetCurrentTool();
 			if (ok && ct != nullptr)
 			{
-				buf.printf("T-1 P0\nT%u P6\n", ct->Number());				// deselect the current tool without running tfree, and select it running tpre and tpost
+				buf.printf("T-1 P0\nT%u P0\n", ct->Number());				// deselect the current tool without running tfree, and select it running tpre and tpost
 				ok = f->Write(buf.c_str());									// write tool selection
 			}
 
