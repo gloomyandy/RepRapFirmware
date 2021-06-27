@@ -283,7 +283,7 @@ bool ObjectTracker::WriteObjectDirectory(FileStore *f) const noexcept
 #else
 	{
 		String<StringLength20> buf;
-		buf.printf("M486 T%u", numObjects);
+		buf.printf("M486 T%u\n", numObjects);
 		ok = f->Write(buf.c_str());
 	}
 #endif
@@ -303,7 +303,7 @@ bool ObjectTracker::WriteObjectDirectory(FileStore *f) const noexcept
 	if (ok)
 	{
 		String<StringLength20> buf;
-		buf.printf("M486 S%d", currentObjectNumber);
+		buf.printf("M486 S%d\n", currentObjectNumber);
 		ok = f->Write(buf.c_str());
 	}
 
