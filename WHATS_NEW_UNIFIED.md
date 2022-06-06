@@ -1,5 +1,9 @@
+Version 3.4.1_102
+=================
+* Fixed bug when freeing attached I/O pin
+
 Version 3.4.1_101
-====================
+==================
 * Duet3D 3.4.1
 * Fix pins for Fly e3_prov3
 * Firmware filenames are now mcu specific (firmware.bin -> firmware-stm32h7.bin/firmware-stm32f4.bin)
