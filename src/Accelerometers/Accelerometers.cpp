@@ -6,6 +6,7 @@
  */
 
 #include "Accelerometers.h"
+#include "LIS3DH.h"
 
 #if SUPPORT_ACCELEROMETERS
 
@@ -54,14 +55,14 @@ static unsigned int GetDecimalPlaces(uint8_t dataResolution) noexcept
 
 // Local accelerometer handling
 
-#include "LIS3DH.h"
+#include "SpiAccelerometer.h"
 
 constexpr uint8_t DefaultResolution = 10;
 
 constexpr size_t AccelerometerTaskStackWords = 400;			// big enough to handle printf and file writes
 static Task<AccelerometerTaskStackWords> *accelerometerTask;
 
-static LIS3DH *accelerometer = nullptr;
+static SpiAccelerometer *accelerometer = nullptr;
 
 static uint16_t samplingRate = 0;							// 0 means use the default
 static volatile uint32_t numSamplesRequested;
@@ -167,7 +168,7 @@ static uint8_t TranslateAxes(uint8_t axes) noexcept
 									{
 										dataVal = (dataVal == 0x8000) ? ~dataVal : ~dataVal + 1;
 									}
-									dataVal >>= (16u - resolution);					// data from LIS3DH is left justified
+									dataVal >>= (16u - resolution);					// data from accelerometer is left justified
 
 									// Sign-extend it
 									if (dataVal & (1u << (resolution - 1)))
@@ -310,7 +311,17 @@ GCodeResult Accelerometers::ConfigureAccelerometer(GCodeBuffer& gb, const String
 		}
 
 		const uint32_t spiFrequency = (gb.Seen('Q')) ? gb.GetLimitedUIValue('Q', 500000, 10000001) : DefaultAccelerometerSpiFrequency;
-		auto temp = new LIS3DH(SharedSpiDevice::GetMainSharedSpiDevice(), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin());
+		// Get the type
+		String<StringLength20> typeName;
+		if (gb.Seen('Y'))
+			gb.GetReducedString(typeName.GetRef());
+		else
+			typeName.copy(LIS3DH::TypeNameLIS3AutoDetect);		// default is to autodetect LIS3 for compatibility
+				
+		auto temp = SpiAccelerometer::Create(typeName.c_str(), SharedSpiDevice::GetMainSharedSpiDevice(), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin(), reply);
+		if (!temp)
+			return GCodeResult::error;
+ 
 		if (temp->CheckPresent())
 		{
 			accelerometer = temp;

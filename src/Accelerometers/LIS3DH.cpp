@@ -20,8 +20,8 @@ const SpiMode lisMode = SpiMode::mode3;
 static constexpr uint8_t WhoAmIValue_3DH = 0x33;
 static constexpr uint8_t WhoAmIValue_3DSH = 0x3F;
 
-LIS3DH::LIS3DH(SharedSpiDevice& dev, uint32_t freq, Pin p_csPin, Pin p_int1Pin) noexcept
-	: SharedSpiClient(dev, freq, lisMode, p_csPin, false), taskWaiting(nullptr), is3DSH(false), int1Pin(p_int1Pin)
+LIS3DH::LIS3DH(SharedSpiDevice& dev, uint32_t freq, Pin p_csPin, Pin p_int1Pin, LisType reqType) noexcept
+	: SpiAccelerometer(dev, freq, lisMode, p_csPin, false), taskWaiting(nullptr), lisType(reqType), int1Pin(p_int1Pin)
 {
 }
 
@@ -31,14 +31,14 @@ bool LIS3DH::CheckPresent() noexcept
 	uint8_t val;
 	if (ReadRegister(LisRegister::WhoAmI, val))
 	{
-		if (val == WhoAmIValue_3DH)
+		if ((lisType == LisType::automatic || lisType == LisType::lis3dh) &&  val == WhoAmIValue_3DH)
 		{
-			is3DSH = false;
+			lisType = LisType::lis3dh;
 			return true;
 		}
-		else if (val == WhoAmIValue_3DSH)
+		else if ((lisType == LisType::automatic || lisType == LisType::lis3dsh) &&val == WhoAmIValue_3DSH)
 		{
-			is3DSH = true;
+			lisType = LisType::lis3dsh;
 			return true;
 		}
 	}
@@ -48,7 +48,7 @@ bool LIS3DH::CheckPresent() noexcept
 // Return the type name of the accelerometer. Only valid after checkPresent returns true.
 const char *LIS3DH::GetTypeName() const noexcept
 {
-	return (is3DSH) ? "LIS3DSH" : "LIS3DH";
+	return (lisType == LisType::lis3dsh) ? "LIS3DSH" : (lisType == LisType::lis3dh) ? "LIS3DH" : "unknown";
 }
 
 uint8_t LIS3DH::ReadStatus() noexcept
@@ -62,7 +62,7 @@ uint8_t LIS3DH::ReadStatus() noexcept
 bool LIS3DH::Configure(uint16_t& samplingRate, uint8_t& resolution) noexcept
 {
 	bool ok;
-	if (is3DSH)
+	if (lisType == LisType::lis3dsh)
 	{
 		resolution = 16;
 		// We first need to make sure that the address increment bit in control register 6 is set
@@ -260,7 +260,7 @@ bool LIS3DH::ReadRegisters(LisRegister reg, size_t numToRead) noexcept
 	// On the LIS3DH, bit 6 must be set to 1 to auto-increment the address when doing reading multiple registers
 	// On the LIS3DSH, bit 6 is an extra register address bit, so we must not set it.
 	// So that we can read the WHO_AM_I register of both chips before we know which chip we have, only set bit 6 if we have a LIS3DH and we are reading multiple registers.
-	transferBuffer[1] = (uint8_t)reg | ((numToRead > 1 && !is3DSH) ? 0xC0 : 0x80);
+	transferBuffer[1] = (uint8_t)reg | ((numToRead > 1 && lisType == LisType::lis3dh) ? 0xC0 : 0x80);
 	const bool ret = TransceivePacket(transferBuffer + 1, transferBuffer + 1, 1 + numToRead);
 	Deselect();
 	return ret;
@@ -277,7 +277,8 @@ bool LIS3DH::WriteRegisters(LisRegister reg, size_t numToWrite) noexcept
 	{
 		return false;
 	}
-	transferBuffer[1] = (numToWrite < 2 || is3DSH) ? (uint8_t)reg : (uint8_t)reg | 0x40;		// set auto increment bit if LIS3DH
+	delayMicroseconds(1);
+	transferBuffer[1] = (numToWrite < 2 || lisType == LisType::lis3dsh) ? (uint8_t)reg : (uint8_t)reg | 0x40;		// set auto increment bit if LIS3DH
 	const bool ret = TransceivePacket(transferBuffer + 1, transferBuffer + 1, 1 + numToWrite);
 	Deselect();
 	return ret;
