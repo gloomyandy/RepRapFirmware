@@ -30,13 +30,11 @@ bool ADXL345::CheckPresent() noexcept
 	uint8_t val;
 	if (ReadRegister(AdxlRegister::WhoAmI, val))
 	{
-		debugPrintf("Read who ami returns %x\n", val);
 		if (val == WhoAmIValue_ADXL)
 		{
 			return true;
 		}
 	}
-	debugPrintf("who am i fails\n");
 	return false;
 }
 
@@ -112,7 +110,6 @@ bool ADXL345:: StartCollecting(uint8_t axes) noexcept
 		}
 		cnt++;
 	}
-	debugPrintf("ADXL: discarded %d samples\n", cnt);
 	if (cnt == 128) debugPrintf("ADXL: Warning unable to clear fifo\n");
 	totalNumRead = 0;
 
@@ -156,7 +153,6 @@ unsigned int ADXL345::CollectData(const uint16_t **collectedData, uint16_t &data
 		debugPrintf("ADXL: No data to read\n");
 	else
 	{
-		debugPrintf("ADXL: Collect %d samples\n", numToRead);
 		if (numToRead >= 31)
 		{
 			overflowed = true;
