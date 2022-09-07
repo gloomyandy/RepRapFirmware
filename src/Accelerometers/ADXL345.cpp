@@ -110,7 +110,6 @@ bool ADXL345:: StartCollecting(uint8_t axes) noexcept
 		}
 		cnt++;
 	}
-	if (cnt == 128) debugPrintf("ADXL: Warning unable to clear fifo\n");
 	totalNumRead = 0;
 
 	// Before we enable data collection, check that the interrupt line is low
@@ -119,7 +118,6 @@ bool ADXL345:: StartCollecting(uint8_t axes) noexcept
 	interruptError = digitalRead(int1Pin);
 	if (interruptError)
 	{
-		debugPrintf("ADXL: Error int pin already set\n");
 		return false;
 	}
 
@@ -144,14 +142,11 @@ unsigned int ADXL345::CollectData(const uint16_t **collectedData, uint16_t &data
 	uint8_t fifoStatus;
 	if (!ReadRegister(AdxlRegister::FifoStatus, fifoStatus))
 	{
-		debugPrintf("ADXL: Failed to read fifo status\n");
 		return 0;
 	}
 
 	uint8_t numToRead = fifoStatus & 0x3F;
-	if (numToRead == 0)
-		debugPrintf("ADXL: No data to read\n");
-	else
+	if (numToRead != 0)
 	{
 		if (numToRead >= 31)
 		{
@@ -167,7 +162,6 @@ unsigned int ADXL345::CollectData(const uint16_t **collectedData, uint16_t &data
 			// Note we need a delay of at least 5uS between reads. The end of a read is marked by reading reg 0x38
 			if (!ReadRegisters(AdxlRegister::DataX0, 7))
 			{
-				debugPrintf("ADXL: failed to read fifo\n");
 				return 0;
 			}
 			delayMicroseconds(5);

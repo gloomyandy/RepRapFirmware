@@ -314,13 +314,19 @@ GCodeResult Accelerometers::ConfigureAccelerometer(GCodeBuffer& gb, const String
 		// Get the type
 		String<StringLength20> typeName;
 		if (gb.Seen('Y'))
+		{
 			gb.GetReducedString(typeName.GetRef());
+		}
 		else
+		{
 			typeName.copy(LIS3DH::TypeNameLIS3AutoDetect);		// default is to autodetect LIS3 for compatibility
+		}
 				
 		auto temp = SpiAccelerometer::Create(typeName.c_str(), SharedSpiDevice::GetMainSharedSpiDevice(), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin(), reply);
 		if (!temp)
+		{
 			return GCodeResult::error;
+		}
  
 		if (temp->CheckPresent())
 		{

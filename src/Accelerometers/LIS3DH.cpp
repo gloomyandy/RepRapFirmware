@@ -31,12 +31,12 @@ bool LIS3DH::CheckPresent() noexcept
 	uint8_t val;
 	if (ReadRegister(LisRegister::WhoAmI, val))
 	{
-		if ((lisType == LisType::automatic || lisType == LisType::lis3dh) &&  val == WhoAmIValue_3DH)
+		if ((lisType == LisType::automatic || lisType == LisType::lis3dh) && val == WhoAmIValue_3DH)
 		{
 			lisType = LisType::lis3dh;
 			return true;
 		}
-		else if ((lisType == LisType::automatic || lisType == LisType::lis3dsh) &&val == WhoAmIValue_3DSH)
+		else if ((lisType == LisType::automatic || lisType == LisType::lis3dsh) && val == WhoAmIValue_3DSH)
 		{
 			lisType = LisType::lis3dsh;
 			return true;
