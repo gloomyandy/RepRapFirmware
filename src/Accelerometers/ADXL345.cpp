@@ -152,7 +152,9 @@ unsigned int ADXL345::CollectData(const uint16_t **collectedData, uint16_t &data
 		{
 			overflowed = true;
 			if (numToRead > 32)
+			{
 				numToRead = 32;
+			}
 		}
 		else
 			overflowed = false;
