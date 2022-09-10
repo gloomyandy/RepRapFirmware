@@ -69,10 +69,11 @@ private:
 	uint32_t firstInterruptTime;
 	uint32_t lastInterruptTime;
 	uint32_t totalNumRead;
+	uint32_t fifoReadDelay;
 	bool interruptError;
 	uint8_t currentAxis;
 	Pin int1Pin;
-	alignas(2) uint8_t transferBuffer[2 + 7];			// 1 dummy byte for alignment, one register address byte, 6 data bytes to read one FIFO entry + 1 extra reg
+	alignas(2) uint8_t transferBuffer[2 + 6];			// 1 dummy byte for alignment, one register address byte, 6 data bytes to read one FIFO entry
 	uint8_t* const dataBuffer = transferBuffer + 2;
 	uint16_t data[32*3];
 };
