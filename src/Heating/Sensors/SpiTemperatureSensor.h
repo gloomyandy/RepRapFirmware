@@ -28,11 +28,9 @@ protected:
 	void InitSpi() noexcept;
 	TemperatureError DoSpiTransaction(const uint8_t dataOut[], size_t nbytes, uint32_t& rslt) const noexcept
 		pre(nbytes <= 8);
+	TemperatureError DoSpiTransaction(const uint8_t dataOut[], uint8_t dataIn[], size_t nbytes) const noexcept;
 
 	SharedSpiClient device;
-	uint32_t lastReadingTime;
-	float lastTemperature;
-	TemperatureError lastResult;
 };
 
 #endif // SUPPORT_SPI_SENSORS

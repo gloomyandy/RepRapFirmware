@@ -43,6 +43,7 @@ constexpr uint32_t IAP_IMAGE_START = 0x20458000;		// last 32kb of RAM
 #define SUPPORT_LASER			1					// support laser cutters and engravers using G1 S parameter
 #define SUPPORT_IOBITS			1					// set to support P parameter in G0/G1 commands
 #define SUPPORT_DHT_SENSOR		1					// set nonzero to support DHT temperature/humidity sensors
+#define SUPPORT_BME280			1
 #define SUPPORT_ACCELEROMETERS	1
 #define SUPPORT_WORKPLACE_COORDINATES	1			// set nonzero to support G10 L2 and G53..59
 #define SUPPORT_OBJECT_MODEL	1
@@ -146,7 +147,8 @@ constexpr Pin SpiTempSensorCsPins[] = { PortAPin(5), PortAPin(6), PortDPin(20), 
 // Analogue pin numbers
 constexpr Pin PowerMonitorVinDetectPin = PortAPin(20);
 constexpr Pin PowerMonitorV12DetectPin = PortEPin(4);
-constexpr float PowerMonitorVoltageRange = (60.4 + 4.7)/4.7 * 3.3;			// voltage divider ratio times the reference voltage
+constexpr float PowerMonitorVoltageRange_v102 = (100.0 + 5.1)/5.1 * 3.3;	// voltage divider ratio times the reference voltage
+constexpr float PowerMonitorVoltageRange_v101 = (60.4 + 4.7)/4.7 * 3.3;		// voltage divider ratio times the reference voltage
 constexpr float V12MonitorVoltageRange = (60.4 + 4.7)/4.7 * 3.3;			// voltage divider ratio times the reference voltage
 
 // Digital pin number to turn the IR LED on (high) or off (low), also controls the DIAG LED

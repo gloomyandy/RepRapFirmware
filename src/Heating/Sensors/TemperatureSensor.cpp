@@ -6,6 +6,7 @@
 #include "CurrentLoopTemperatureSensor.h"
 #include "LinearAnalogSensor.h"
 #include "RemoteSensor.h"
+#include "BME280.h"
 #include "GCodes/GCodeBuffer/GCodeBuffer.h"
 
 #if SUPPORT_REMOTE_COMMANDS
@@ -66,7 +67,10 @@ TemperatureSensor::~TemperatureSensor() noexcept
 // Return the latest temperature reading
 TemperatureError TemperatureSensor::GetLatestTemperature(float& t, uint8_t outputNumber) noexcept
 {
-	if (millis() - whenLastRead > TemperatureReadingTimeout)
+	// We must read whenLastRead *before* we call millis(). Otherwise, a task switch to the heater task could occur after we call millis and before we read whenLastRead,
+	// so that when we read whenLastRead its value is greater than the result from millis().
+	const uint32_t wlr = whenLastRead;
+	if (millis() - wlr > TemperatureReadingTimeout)
 	{
 		lastTemperature = BadErrorTemperature;
 		lastResult = TemperatureError::timeout;
@@ -233,6 +237,20 @@ TemperatureSensor *TemperatureSensor::Create(unsigned int sensorNum, const char 
 	else if (ReducedStringEquals(typeName, DhtHumiditySensor::TypeName))
 	{
 		ts = new DhtHumiditySensor(sensorNum);
+	}
+#endif
+#if SUPPORT_BME280
+	else if (ReducedStringEquals(typeName, BME280TemperatureSensor::TypeName))
+	{
+		ts = new BME280TemperatureSensor(sensorNum);
+	}
+	else if (ReducedStringEquals(typeName, BME280PressureSensor::TypeName))
+	{
+		ts = new BME280PressureSensor(sensorNum);
+	}
+	else if (ReducedStringEquals(typeName, BME280HumiditySensor::TypeName))
+	{
+		ts = new BME280HumiditySensor(sensorNum);
 	}
 #endif
 #if HAS_CPU_TEMP_SENSOR
