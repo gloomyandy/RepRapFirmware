@@ -189,7 +189,9 @@ unsigned int ADXL345::CollectData(const uint16_t **collectedData, uint16_t &data
 			}
 		}
 		else
+		{
 			overflowed = false;
+		}
 		for(size_t cnt = 0; cnt < numToRead; cnt++)
 		{
 			delayMicroseconds(fifoReadDelay);
