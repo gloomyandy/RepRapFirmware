@@ -319,7 +319,7 @@ typedef double floatc_t;							// type of matrix element used for calibration
 typedef float floatc_t;								// type of matrix element used for calibration
 #endif
 
-#if defined(DUET3) || defined(DUET3MINI) || STM32H7
+#if SUPPORT_CAN_EXPANSION
 typedef Bitmap<uint32_t> AxesBitmap;				// Type of a bitmap representing a set of axes, and sometimes extruders too
 #else
 typedef Bitmap<uint16_t> AxesBitmap;				// Type of a bitmap representing a set of axes, and sometimes extruders too
@@ -360,10 +360,14 @@ static_assert(MaxTriggers <= TriggerNumbersBitmap::MaxBits());
 static_assert(MaxTools <= ToolNumbersBitmap::MaxBits());
 static_assert(MaxAxes + 17 <= ParameterLettersBitmap::MaxBits());	// so that we have enough letters available for all the axes
 
-typedef uint16_t Pwm_t;							// Type of a PWM value when we don't want to use floats
+#if SUPPORT_REMOTE_COMMANDS
+static_assert(MaxExtruders >= NumDirectDrivers);					// so that we get enough ExtruderShapers and nonlinear extrusion data when in expansion mode
+#endif
+
+typedef uint16_t Pwm_t;						// Type of a PWM value when we don't want to use floats
 
 #if SUPPORT_IOBITS
-typedef uint16_t IoBits_t;						// Type of the port control bitmap (G1 P parameter)
+typedef uint16_t IoBits_t;					// Type of the port control bitmap (G1 P parameter)
 #endif
 
 #if SUPPORT_LASER || SUPPORT_IOBITS
@@ -645,22 +649,32 @@ const NvicPriority NvicPrioritySpi = 7;				// SPI is used for network transfers 
 
 #elif __NVIC_PRIO_BITS >= 4
 // We have at least 16 priority levels
-// Use priority 4 or lower for interrupts where low latency is critical and FreeRTOS calls are not needed.
 #if STM32
+// Use priority 4 or lower for interrupts where low latency is critical and FreeRTOS calls are not needed.
 const NvicPriority NvicPriorityWatchdog = 0;		// the secondary watchdog has the highest priority
 const NvicPriority NvicPriorityTimerPWM = 1;		// Run PWM timing as high as we can to avoid jitter
 const NvicPriority NvicPriorityDriversSerialTMC = 5;// STM uses a software UART, make this a very high priority
 const NvicPriority NvicPriorityAuxUart = 3;			// UART is next
 const NvicPriority NvicPrioritySDIO = 9;
-#else
-const NvicPriority NvicPriorityAuxUart = 3;			// UART is highest to avoid character loss (it has only a 1-character receive buffer)
-# endif
 const NvicPriority NvicPriorityCan = 6;				// CAN interface
 const NvicPriority NvicPriorityPins = 6;			// priority for GPIO pin interrupts - filament sensors must be higher than step
 const NvicPriority NvicPriorityStep = 7;			// step interrupt is next highest, it can preempt most other interrupts
 const NvicPriority NvicPriorityWiFiUart = 8;		// UART used to receive debug data from the WiFi module
 const NvicPriority NvicPriorityUSB = 8;				// USB interrupt
 const NvicPriority NvicPriorityHSMCI = 8;			// HSMCI command complete interrupt
+const NvicPriority NvicPrioritySpi = 8;				// SPI is used for network transfers on Duet WiFi/Duet vEthernet
+const NvicPriority NvicPriorityTwi = 9;				// TWI is used to read endstop and other inputs on the DueXn
+#else
+// Use priority 2 or lower for interrupts where low latency is critical and FreeRTOS calls are not needed.
+# if SAM4E
+const NvicPriority NvicPriorityWatchdog = 0;		// the secondary watchdog has the highest priority
+# endif
+const NvicPriority NvicPriorityDriversSerialTMC = 5; // USART or UART used to control and monitor the smart drivers
+const NvicPriority NvicPriorityPins = 5;			// priority for GPIO pin interrupts - filament sensors must be higher than step
+const NvicPriority NvicPriorityStep = 6;			// step interrupt is next highest, it can preempt most other interrupts
+const NvicPriority NvicPriorityWiFiUart = 7;		// UART used to receive debug data from the WiFi module
+const NvicPriority NvicPriorityUSB = 7;				// USB interrupt
+const NvicPriority NvicPriorityHSMCI = 7;			// HSMCI command complete interrupt
 
 # if HAS_LWIP_NETWORKING
 const NvicPriority NvicPriorityNetworkTick = 8;		// priority for network tick interrupt (to be replaced by a FreeRTOS task)
@@ -669,7 +683,7 @@ const NvicPriority NvicPriorityEthernet = 8;		// priority for Ethernet interface
 
 const NvicPriority NvicPrioritySpi = 8;				// SPI is used for network transfers on Duet WiFi/Duet vEthernet
 const NvicPriority NvicPriorityTwi = 9;				// TWI is used to read endstop and other inputs on the DueXn
-
+#endif
 #endif
 
 #endif

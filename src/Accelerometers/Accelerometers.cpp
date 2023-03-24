@@ -500,7 +500,7 @@ GCodeResult Accelerometers::StartAccelerometer(GCodeBuffer& gb, const StringRef&
 		{
 			accelerometerFile->Close();
 			accelerometerFile = nullptr;
-			MassStorage::Delete(accelerometerFileName.c_str(), false);
+			(void)MassStorage::Delete(accelerometerFileName.GetRef(), ErrorMessageMode::messageAlways);
 			reprap.GetExpansion().AddAccelerometerRun(device.boardAddress, 0);
 		}
 		return rslt;
@@ -530,7 +530,7 @@ GCodeResult Accelerometers::StartAccelerometer(GCodeBuffer& gb, const StringRef&
 	{
 		accelerometerFile->Close();
 		accelerometerFile = nullptr;
-		MassStorage::Delete(accelerometerFileName.c_str(), false);
+		(void)MassStorage::Delete(accelerometerFileName.GetRef(), ErrorMessageMode::messageAlways);
 	}
 	return GCodeResult::error;
 }

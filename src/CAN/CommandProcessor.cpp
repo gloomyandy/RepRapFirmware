@@ -471,7 +471,13 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				return;							// no reply needed
 
 			case CanMessageType::movementLinear:
+				//TODO check seq
 				reprap.GetMove().AddMoveFromRemote(buf->msg.moveLinear);
+				return;							// no reply needed
+
+			case CanMessageType::movementLinearShaped:
+				//TODO check seq
+				reprap.GetMove().AddMoveFromRemote(buf->msg.moveLinearShaped);
 				return;							// no reply needed
 
 			case CanMessageType::stopMovement:
@@ -595,6 +601,11 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 			case CanMessageType::setPressureAdvance:
 				requestId = buf->msg.multipleDrivesRequestFloat.requestId;
 				rslt = reprap.GetMove().EutSetRemotePressureAdvance(buf->msg.multipleDrivesRequestFloat, buf->dataLength, replyRef);
+				break;
+
+			case CanMessageType::setInputShaping:
+				requestId = buf->msg.setInputShaping.requestId;
+				rslt = reprap.GetMove().EutSetInputShaping(buf->msg.setInputShaping, buf->dataLength, replyRef);
 				break;
 
 			case CanMessageType::m569:

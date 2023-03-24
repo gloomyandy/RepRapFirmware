@@ -281,7 +281,6 @@ constexpr ObjectModelTableEntry RepRap::objectModelTable[] =
 	{ "gCodes",					OBJECT_MODEL_FUNC_NOSELF(Platform::GetGCodeDir()),						ObjectModelEntryFlags::verbose },
 	{ "macros",					OBJECT_MODEL_FUNC_NOSELF(Platform::GetMacroDir()),						ObjectModelEntryFlags::verbose },
 	{ "menu",					OBJECT_MODEL_FUNC_NOSELF(MENU_DIR),										ObjectModelEntryFlags::verbose },
-	{ "scans",					OBJECT_MODEL_FUNC_NOSELF(SCANS_DIRECTORY),								ObjectModelEntryFlags::verbose },
 	{ "system",					OBJECT_MODEL_FUNC_NOSELF(ExpressionValue::SpecialType::sysDir, 0),		ObjectModelEntryFlags::none },
 	{ "web",					OBJECT_MODEL_FUNC_NOSELF(Platform::GetWebDir()),						ObjectModelEntryFlags::verbose },
 #endif
@@ -411,7 +410,7 @@ constexpr uint8_t RepRap::objectModelTableDescriptor[] =
 	7,																						// number of sub-tables
 	15 + (HAS_MASS_STORAGE | HAS_EMBEDDED_FILES | HAS_SBC_INTERFACE),						// root
 #if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES || HAS_SBC_INTERFACE
-	8, 																						// directories
+	7, 																						// directories
 #else
 	0,																						// directories
 #endif
@@ -703,7 +702,7 @@ bool RepRap::RunStartupFile(const char *filename) noexcept
 		platform->MessageF(UsbMessage, "Executing %s... ", filename);
 		do
 		{
-			// GCodes::Spin will process the macro file and ensure IsDaemonBusy returns false when it's done
+			// GCodes::Spin will process the macro file and ensure IsTriggerBusy returns false when it's done
 			Spin();
 		} while (gCodes->IsTriggerBusy());
 		platform->Message(UsbMessage, "Done!\n");
@@ -713,7 +712,7 @@ bool RepRap::RunStartupFile(const char *filename) noexcept
 
 void RepRap::Exit() noexcept
 {
-#if HAS_HIGH_SPEED_SD && !SAME5x		// SAME5x MCI driver is RTOS_aware, so it doesn't need this
+#if HAS_HIGH_SPEED_SD && !SAME5x		// SAME5x MCI driver is RTOS-aware so it doesn't need this
 	hsmci_set_idle_func(nullptr);
 #endif
 	active = false;
@@ -1090,12 +1089,36 @@ void RepRap::Tick() noexcept
 				heat->SwitchOffAllLocalFromISR();								// can't call SwitchOffAll because remote heaters can't be turned off from inside a ISR
 				platform->EmergencyDisableDrivers();
 
-				// We now save the stack when we get stuck in a spin loop
-				__asm volatile("mrs r2, psp");
-				register const uint32_t * stackPtr asm ("r2");					// we want the PSP not the MSP
-				SoftwareReset(
-					(heatTaskStuck) ? SoftwareResetReason::heaterWatchdog : SoftwareResetReason::stuckInSpin,
-					stackPtr + 5);												// discard uninteresting registers, keep LR PC PSR
+				// Save the stack of the stuck task when we get stuck in a spin loop
+				const uint32_t *relevantStackPtr;
+				const TaskHandle relevantTask = (heatTaskStuck) ? Heat::GetHeatTask() : Tasks::GetMainTask();
+				if (relevantTask == RTOSIface::GetCurrentTask())
+				{
+					__asm volatile("mrs r2, psp");
+					register const uint32_t * stackPtr asm ("r2");				// we want the PSP not the MSP
+					relevantStackPtr = stackPtr + 5;							// discard uninteresting registers, keep LR PC PSR
+				}
+				else
+				{
+					relevantStackPtr = const_cast<const uint32_t*>(pxTaskGetLastStackTop(relevantTask->GetFreeRTOSHandle()));
+					// All registers were saved on the stack, so to get useful return addresses we need to skip most of them.
+					// See the port.c files in FreeRTOS for the stack layouts
+#if SAME70 || SAM4E || SAME5x
+					// ARM Cortex M7 with double precision floating point, or ARM Cortex M4F
+					if ((relevantStackPtr[8] & 0x10) == 0)						// test EXC_RETURN FP bit
+					{
+						relevantStackPtr += 9 + 16;								// skip r4-r11 and r14 and s16-s31
+					}
+					else
+					{
+						relevantStackPtr += 9;									// skip r4-r11 and r14
+					}
+#else
+					// ARM Cortex M3 or M4 without floating point
+					relevantStackPtr += 8;										// skip r4-r11
+#endif
+				}
+				SoftwareReset((heatTaskStuck) ? SoftwareResetReason::heaterWatchdog : SoftwareResetReason::stuckInSpin, relevantStackPtr);
 			}
 		}
 	}
@@ -2728,7 +2751,6 @@ void RepRap::StartIap(const char *filename) noexcept
 	__asm volatile ("bx r1");
 	for (;;) { }							// to keep gcc happy
 }
-
 
 // Helper function for diagnostic tests in Platform.cpp, to cause a deliberate divide-by-zero
 /*static*/ uint32_t RepRap::DoDivide(uint32_t a, uint32_t b) noexcept

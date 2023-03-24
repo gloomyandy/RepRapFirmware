@@ -108,6 +108,10 @@ public:
 
 #if SUPPORT_REMOTE_COMMANDS
 	GCodeResult EutSetRemotePressureAdvance(const CanMessageMultipleDrivesRequest<float>& msg, size_t dataLength, const StringRef& reply) noexcept;
+	GCodeResult EutSetInputShaping(const CanMessageSetInputShaping& msg, size_t dataLength, const StringRef& reply) noexcept
+	{
+		return axisShaper.EutSetInputShaping(msg, dataLength, reply);
+	}
 #endif
 
 	AxisShaper& GetAxisShaper() noexcept { return axisShaper; }
@@ -213,6 +217,12 @@ public:
 
 #if SUPPORT_REMOTE_COMMANDS
 	void AddMoveFromRemote(const CanMessageMovementLinear& msg) noexcept					// add a move from the ATE to the movement queue
+	{
+		rings[0].AddMoveFromRemote(msg);
+		MoveAvailable();
+	}
+
+	void AddMoveFromRemote(const CanMessageMovementLinearShaped& msg) noexcept				// add a move from the ATE to the movement queue
 	{
 		rings[0].AddMoveFromRemote(msg);
 		MoveAvailable();

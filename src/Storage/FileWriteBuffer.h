@@ -17,10 +17,12 @@
 constexpr size_t NumFileWriteBuffers = 2;					// Number of write buffers
 constexpr size_t FileWriteBufLen = 8192;					// Size of each write buffer
 constexpr size_t SbcFileWriteBufLen = 4192;					// Available size of each write buffer in SBC mode
-#else
+#elif (STM32 && HAS_SBC_INTERFACE)
 constexpr size_t NumFileWriteBuffers = 1;
 constexpr size_t FileWriteBufLen = 4096;
 constexpr size_t SbcFileWriteBufLen = 3072;
+#else
+# error Unsupported processor
 #endif
 static_assert(FileWriteBufLen >= SbcFileWriteBufLen, "File write buffer must be at least as big as the configured SBC threshold");
 

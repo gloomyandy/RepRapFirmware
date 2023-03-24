@@ -56,7 +56,11 @@
 #endif
 constexpr uint32_t MaxHighPrioritySpinTime = 500/StepClocksToMillis;	
 
+#if defined(DEBUG)
+constexpr size_t NetworkStackWords = 1000;				// needs to be enough to support rr_model
+#else
 constexpr size_t NetworkStackWords = 600;				// needs to be enough to support rr_model
+#endif
 
 static TASKMEM Task<NetworkStackWords> networkTask;
 

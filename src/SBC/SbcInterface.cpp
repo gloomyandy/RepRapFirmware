@@ -38,7 +38,11 @@ const ObjectModelClassDescriptor *SbcInterface::GetObjectModelClassDescriptor() 
 // The SBC task's stack size needs to be enough to support rr_model and expression evaluation
 // In RRF 3.3beta3, 744 is only just enough for simple expression evaluation in a release build when using globals
 // In 3.3beta3.1 we have saved ~151 bytes (37 words) of stack compared to 3.3beta3
+#if defined(DEBUG)
+constexpr size_t SBCTaskStackWords = 1200;			// debug builds use more stack
+#else
 constexpr size_t SBCTaskStackWords = 1000;			// increased from 820 so that we can evaluate "abs(move.calibration.initial.deviation - move.calibration.final.deviation) < 0.000"
+#endif
 
 constexpr uint32_t SbcYieldTimeout = 10;
 

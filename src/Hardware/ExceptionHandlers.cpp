@@ -150,20 +150,15 @@ extern "C" [[noreturn]] __attribute__((externally_visible)) void wdtFaultDispatc
 }
 
 
-#if STM32
-extern "C" void WWDG_IRQHandler() noexcept __attribute__((naked));
-void WWDG_IRQHandler() noexcept
-{
-#else
-# if SAME70		// SAME70 has a separate interrupt line for the RSWDT
+#if !STM32
+#if SAME70		// SAME70 has a separate interrupt line for the RSWDT
 extern "C" void RSWDT_Handler() noexcept __attribute__((naked));
 void RSWDT_Handler() noexcept
-# else
+#else
 extern "C" void WDT_Handler() noexcept __attribute__((naked));
 void WDT_Handler() noexcept
-# endif
-{
 #endif
+{
 	__asm volatile
 	(
 		" tst lr, #4                                                \n"		/* test bit 2 of the EXC_RETURN in LR to determine which stack was in use */
@@ -176,6 +171,7 @@ void WDT_Handler() noexcept
 		" handler_wdt_address_const: .word wdtFaultDispatcher       \n"
 	);
 }
+#endif
 
 extern "C" [[noreturn]] __attribute__((externally_visible)) void otherFaultDispatcher(const uint32_t *pulFaultStackAddress) noexcept
 {

@@ -22,8 +22,8 @@ HardwareTimer STimer(STEP_TC);
 TIM_HandleTypeDef *STHandle;
 #elif SAME5x
 # include <CoreIO.h>
-#else
 # include <hri_tc_e54.h>
+#else
 # include <tc/tc.h>
 # if SAME70 || SAM4E || SAM4S
 #  include <pmc/pmc.h>

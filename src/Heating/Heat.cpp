@@ -59,6 +59,11 @@ constexpr uint32_t HeaterTaskStackWords = 420;			// task stack size in dwords, m
 
 static TASKMEM Task<HeaterTaskStackWords> heaterTask;
 
+TaskHandle Heat::GetHeatTask() noexcept
+{
+	return &heaterTask;
+}
+
 extern "C" [[noreturn]] void HeaterTaskStart(void * pvParameters) noexcept
 {
 	reprap.GetHeat().HeaterTask();
@@ -336,7 +341,7 @@ void Heat::SendHeatersStatus(CanMessageBuffer& buf) noexcept
 		}
 
 #if SUPPORT_CAN_EXPANSION
-		CanMessageBuffer buf(nullptr);
+		CanMessageBuffer buf;
 #endif
 
 #if SUPPORT_REMOTE_COMMANDS

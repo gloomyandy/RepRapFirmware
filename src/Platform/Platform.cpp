@@ -1161,7 +1161,7 @@ void Platform::Spin() noexcept
 	// Diagnostics test
 	if (debugCode == (unsigned int)DiagnosticTestType::TestSpinLockup)
 	{
-		for (;;) {}
+		delay(30000);
 	}
 
 	// Check whether the TMC drivers need to be initialised.
@@ -1737,7 +1737,7 @@ void Platform::InitialiseInterrupts() noexcept
 # error Unsupported processor
 #endif
 
-#if defined(DUET_NG) || defined(DUET_M) || defined(DUET_06_085)
+#if defined(DUET_NG) || defined(DUET_M)
 	NVIC_SetPriority(I2C_IRQn, NvicPriorityTwi);
 #endif
 
@@ -1756,7 +1756,7 @@ void Platform::InitialiseInterrupts() noexcept
 # endif
 #endif
 
-    // Tick interrupt for ADC conversions
+	// Tick interrupt for ADC conversions
 	tickState = 0;
 	currentFilterNumber = 0;
 }
@@ -3087,7 +3087,6 @@ void Platform::UpdateMotorCurrent(size_t driver, float current) noexcept
 		{
 			SmartDrivers::SetCurrent(driver, current);
 		}
-
 #else
 		// otherwise we can't set the motor current
 #endif
@@ -3179,8 +3178,6 @@ bool Platform::SetDriverMicrostepping(size_t driver, unsigned int microsteps, in
 			// We ignore the interpolation on/off parameter so that e.g. M350 I1 E16:128 won't give an error if E1 supports interpolation but E0 doesn't.
 			return microsteps == 16;
 		}
-#elif defined(__ALLIGATOR__)
-		return Microstepping::Set(driver, microsteps); // no mode in Alligator board
 #else
 		// Assume only x16 microstepping supported
 		return microsteps == 16;
@@ -4103,15 +4100,6 @@ void Platform::SetBoardType(BoardType bt) noexcept
 # endif
 #elif defined(DUET_M)
 		board = BoardType::DuetM_10;
-#elif defined(DUET_06_085)
-		// Determine whether this is a Duet 0.6 or a Duet 0.8.5 board.
-		// If it is a 0.85 board then DAC0 (AKA digital pin 67) is connected to ground via a diode and a 2.15K resistor.
-		// So we enable the pullup (value 100K-150K) on pin 67 and read it, expecting a LOW on a 0.8.5 board and a HIGH on a 0.6 board.
-		// This may fail if anyone connects a load to the DAC0 pin on a Duet 0.6, hence we implement board selection in M115 as well.
-		pinMode(Dac0DigitalPin, INPUT_PULLUP);
-		delayMicroseconds(10);
-		board = (digitalRead(Dac0DigitalPin)) ? BoardType::Duet_06 : BoardType::Duet_085;
-		pinMode(Dac0DigitalPin, INPUT);			// turn pullup off
 #elif defined(PCCB_10)
 		board = BoardType::PCCB_v10;
 #elif defined(__STM32F4__)
@@ -4163,7 +4151,6 @@ const char *_ecv_array Platform::GetElectronicsString() const noexcept
 	case BoardType::Stm32F4:				return STM_ELECTRONICS_STRING;
 #elif defined(__STM32H7__)
 	case BoardType::Stm32H7:				return STM_ELECTRONICS_STRING;
-
 #else
 # error Undefined board type
 #endif
@@ -4251,13 +4238,13 @@ bool Platform::IsDuetWiFi() const noexcept
 bool Platform::Delete(const char *_ecv_array folder, const char *_ecv_array filename) const noexcept
 {
 	String<MaxFilenameLength> location;
-	return MassStorage::CombineName(location.GetRef(), folder, filename) && MassStorage::Delete(location.c_str(), true);
+	return MassStorage::CombineName(location.GetRef(), folder, filename) && MassStorage::Delete(location.GetRef(), ErrorMessageMode::messageUnlessMissing);
 }
 
 bool Platform::DeleteSysFile(const char *_ecv_array filename) const noexcept
 {
 	String<MaxFilenameLength> location;
-	return MakeSysFileName(location.GetRef(), filename) && MassStorage::Delete(location.c_str(), true);
+	return MakeSysFileName(location.GetRef(), filename) && MassStorage::Delete(location.GetRef(), ErrorMessageMode::messageUnlessMissing);
 }
 
 #endif
@@ -4963,10 +4950,45 @@ GCodeResult Platform::UpdateRemoteStepsPerMmAndMicrostepping(AxesBitmap axesAndE
 
 void Platform::OnProcessingCanMessage() noexcept
 {
-#if SUPPORT_CAN_EXPANSION
 	whenLastCanMessageProcessed = millis();
 	digitalWrite(ActLedPin, ActOnPolarity);				// turn the ACT LED on
-#endif
+}
+
+GCodeResult Platform::UpdateRemoteInputShaping(unsigned int numExtraImpulses, const float coefficients[], const float durations[], const StringRef& reply) const noexcept
+{
+	const ExpansionManager& expansion = reprap.GetExpansion();
+	GCodeResult res = GCodeResult::ok;
+	if (expansion.GetNumExpansionBoards() != 0)
+	{
+		// Build a CAN message to update the remote drivers
+		for (uint8_t addr = 0; addr < CanId::MaxCanAddress; ++addr)
+		{
+			if (addr != CanInterface::GetCanAddress())
+			{
+				const ExpansionBoardData *boardData = expansion.GetBoardDetails(addr);
+				if (boardData != nullptr && boardData->numDrivers != 0)
+				{
+					CanMessageBuffer *const buf = CanMessageBuffer::BlockingAllocate();
+					const CanRequestId rid = CanInterface::AllocateRequestId(addr, buf);
+					auto msg = buf->SetupRequestMessage<CanMessageSetInputShaping>(rid, CanInterface::GetCanAddress(), addr);
+					msg->numExtraImpulses = numExtraImpulses;
+					for (unsigned int i = 0; i < numExtraImpulses; ++i)
+					{
+						msg->impulses[i].coefficient = coefficients[i];
+						msg->impulses[i].duration = durations[i];
+					}
+					buf->dataLength = msg->GetActualDataLength();
+					msg->SetRequestId(rid);
+					const GCodeResult rslt = CanInterface::SendRequestAndGetStandardReply(buf, rid, reply, 0);
+					if (rslt > res)
+					{
+						res = rslt;
+					}
+				}
+			}
+		}
+	}
+	return res;
 }
 
 #endif
