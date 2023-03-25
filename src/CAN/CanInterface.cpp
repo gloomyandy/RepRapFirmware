@@ -32,6 +32,9 @@
 #if SUPPORT_REMOTE_COMMANDS
 # include <Version.h>
 # include <InputMonitors/InputMonitor.h>
+# if SUPPORT_SPICAN
+#  include "CanSpi.h"
+# endif
 #endif
 
 #include <memory>
@@ -421,13 +424,19 @@ static void ReInit() noexcept
 
 void CanInterface::SwitchToExpansionMode(CanAddress addr, bool useTestMode) noexcept
 {
+#if SUPPORT_SPICAN
+	DRV_SPI_Select();
+#else
 	TaskCriticalSectionLocker lock;
-
+#endif
 	myAddress = addr;
 	inExpansionMode = true;
 	inTestMode = useTestMode;
 	reprap.GetGCodes().SwitchToExpansionMode();
 	ReInit();										// reset the CAN filters to account for our new CAN address
+#if SUPPORT_SPICAN
+	DRV_SPI_Deselect();
+#endif
 }
 
 // Send an announcement message if we haven't had an announce acknowledgement from a main board. On return the buffer is available to use again.
