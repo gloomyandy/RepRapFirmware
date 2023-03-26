@@ -1,12 +1,16 @@
-Version 3.5beta2_105
-====================
+Version 3.5beta2+_106
+=====================
+* Apply cold extrusion fix
+* Note this version is held on aseparate RRF branch v3.5-cold-extrude-fix
+
+Version 3.5beta2+_105
+=====================
 * Fixed crash when using laser mode
 * Fixed H723 based boards not showing input voltage correctly
 * Fixed display not beeping
-* Adjusted default hardware Neopixel timing to match Duet boards
 
-Version 3.5beta2_102
-====================
+Version 3.5beta2+_102
+=====================
 * Duet3d 3.5beta2
 * Enable MQTT support (requires ESP firmware >= V2.1b3)
 * STM32F4: Add support for MCP2518FD SP CAN-FD interfaces
