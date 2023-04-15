@@ -243,9 +243,9 @@ static void DmaInterrupt(DMA_HandleTypeDef *_hdma)
         if (NeoAddToBuffer(NEO_BYTES_PER_BUFF)) SUState = (SUStates)((int)SUState+1);
         break;
     case SUStates::neowrite3:
+        SUState = SUStates::complete;
         SUTimer.pause();
         HAL_DMA_Abort_IT(&SUDma);
-        SUState = SUStates::complete;
         TaskBase::GiveFromISR(SUWaitingTask);
         break;
     }
@@ -301,7 +301,16 @@ bool TMCSoftUARTTransfer(Pin pin, volatile uint8_t *WritePtr, uint32_t WriteCnt,
         SUReadCnt = ReadCnt;
         SUWaitingTask = TaskBase::GetCallerTaskHandle();
         DmaStart();
-        TaskBase::Take(timeout);
+        while (SUState != SUStates::complete)
+        {
+            if (!TaskBase::Take(timeout))
+            {
+                debugPrintf("TMC UART timeout\n");
+                SUTimer.pause();
+                HAL_DMA_Abort_IT(&SUDma);
+                break;
+            }
+        }
         SUWaitingTask = 0;
         if (SUState == SUStates::complete)
         {
@@ -410,8 +419,17 @@ bool NeopixelDMAWrite(Pin pin, uint32_t freq, uint8_t *bits, uint32_t cnt, uint3
     HAL_DMA_Start_IT(&SUDma, (uint32_t)SUDmaBits, (uint32_t)SUPinSetClrPtr, NEO_BYTES_PER_BUFF*NEO_WORDS_PER_BYTE*2);
     SUTimer.setOverflow(period, TICK_FORMAT);
     SUTimer.setCount(0, TICK_FORMAT);
-    SUTimer.resume();    
-    TaskBase::Take(timeout);
+    SUTimer.resume();
+    while(SUState != SUStates::complete)
+    {
+        if (!TaskBase::Take(timeout))
+        {
+            debugPrintf("DMABitIO timeout\n");
+            SUTimer.pause();
+            HAL_DMA_Abort_IT(&SUDma);
+            break;
+        }
+    }
     SUWaitingTask = 0;
     SUState = SUStates::idle;
     return true;
