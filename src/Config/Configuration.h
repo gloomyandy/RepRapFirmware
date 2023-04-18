@@ -115,36 +115,25 @@ constexpr float DefaultZProbeTemperature = 25.0;
 constexpr float DefaultZDive = 5.0;						// Millimetres
 constexpr float DefaultProbingSpeed = 2.0;				// Default Z probing speed mm/sec
 constexpr float DefaultZProbeTravelSpeed = 100.0;		// Default speed for travel to probe points
-
-#if !defined(DUET3) && !defined(DUET3MINI) && !STM32				// for Duet 3 these are defined in Duet3Common.h in project CANLib
-constexpr size_t MaxZProbeProgramBytes = 8;				// Maximum number of bytes in a Z probe program
-#endif
-
 constexpr float DefaultZProbeTolerance = 0.03;			// How close the Z probe trigger height from consecutive taps must be
 constexpr uint8_t DefaultZProbeTaps = 1;				// The maximum number of times we probe each point
 constexpr int DefaultZProbeADValue = 500;				// Default trigger threshold
 
-constexpr float TRIANGLE_ZERO = -0.001;					// Millimetres
 constexpr float SILLY_Z_VALUE = -9999.0;				// Millimetres
 
 // String lengths. Try not to have too many different ones, because each one causes an instantiation of the String template
 constexpr size_t MaxMessageLength = 256;
 constexpr size_t MaxTitleLength = 61;
 
-#if SAM4E || SAM4S || SAME70 || SAME5x || defined(ESP_NETWORKING)
 constexpr size_t MaxFilenameLength = 120;				// Maximum length of a filename including the path
 constexpr size_t MaxVariableNameLength = 120;
-#else
-constexpr size_t MaxFilenameLength = 100;
-constexpr size_t MaxVariableNameLength = 100;
-#endif
 
 // Standard string lengths, to avoid having too many different instantiations of the String<n> template
 constexpr size_t StringLength20 = 20;
 constexpr size_t StringLength50 = 50;					// Used for pin names
 constexpr size_t StringLength100 = 100;					// Used for error messages
 constexpr size_t StringLength500 = 500;					// Used when writing the height map
-constexpr size_t StringLength256 = 256;
+constexpr size_t StringLength256 = 256;					// used for various thinhs
 
 constexpr size_t MaxHeaterNameLength = StringLength20;	// Maximum number of characters in a heater name
 constexpr size_t MaxFanNameLength = StringLength20;		// Maximum number of characters in a fan name
@@ -160,14 +149,11 @@ constexpr size_t RepRapPasswordLength = StringLength20;
 constexpr size_t MediumStringLength = MaxFilenameLength;
 constexpr size_t M117StringLength = MediumStringLength;
 constexpr size_t StringLengthLoggedCommand = StringLength100;	// Length of a string buffer for a command to be logged
+constexpr size_t MaxStringExpressionLength = StringLength256;
 
-#if SAM4E || SAM4S || SAME70 || SAME5x || defined(ESP_NETWORKING) || STM32
-// Increased GCODE_LENGTH on the SAM4 because M587 and M589 commands on the Duet WiFi can get very long and GCode meta commands can get even longer
+// Increased GCODE_LENGTH because M587 and M589 commands on the Duet WiFi can get very long and GCode meta commands can get even longer
 // Also if HAS_SBC_INTERFACE is enabled then it needs to be large enough to hold SBC commands sent in binary mode, see GCodeBuffer.h
 constexpr size_t MaxGCodeLength = 256;					// maximum number of non-comment characters in a line of GCode including the null terminator
-#else
-constexpr size_t MaxGCodeLength = 101;					// maximum number of non-comment characters in a line of GCode including the null terminator
-#endif
 
 // Define the maximum length of a GCode that we can queue to synchronise it to a move. Long enough for M150 R255 U255 B255 P255 S255 F1 encoded in binary mode (64 bytes).
 constexpr size_t ShortGCodeLength = 64;
@@ -204,6 +190,8 @@ constexpr unsigned int MaxFilaments = 20;
 #else
 constexpr unsigned int MaxFilaments = 8;
 #endif
+
+constexpr size_t MaxLaserPixelsPerMove = 8;				// How many S parameters you can use on a single G1 command when laser engraving
 
 // Move system
 constexpr float DefaultFeedRate = 3000.0;				// The initial requested feed rate after resetting the printer, in mm/min

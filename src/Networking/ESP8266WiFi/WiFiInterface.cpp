@@ -1033,16 +1033,16 @@ const char* WiFiInterface::TranslateEspResetReason(uint32_t reason) noexcept
 
 void WiFiInterface::Diagnostics(MessageType mtype) noexcept
 {
-	platform.MessageF(mtype, "= WiFi =\nNetwork state is %s\n", GetStateName());
-	platform.MessageF(mtype, "WiFi module is %s\n", TranslateWiFiState(currentMode));
-	platform.MessageF(mtype, "Failed messages: pending %u, notready %u, noresp %u\n", transferAlreadyPendingCount, readyTimeoutCount, responseTimeoutCount);
+	platform.MessageF(mtype,
+						"= WiFi =\nNetwork state is %s\n"
+						"Module is %s\n"
+						"Failed messages: pending %u, notready %u, noresp %u\n",
+						 	 GetStateName(),
+							 TranslateWiFiState(currentMode),
+							 transferAlreadyPendingCount, readyTimeoutCount, responseTimeoutCount
+					 );
 #if STM32
 	platform.MessageF(mtype, "Bad header: %u/%u\n", badHeaderCount, actualBadHeaderCount);
-#endif
-
-#if 0
-	// The underrun/overrun counters don't work at present
-	platform.MessageF(mtype, "SPI underruns %u, overruns %u\n", spiTxUnderruns, spiRxOverruns);
 #endif
 
 	if (GetState() != NetworkState::disabled && GetState() != NetworkState::starting1 && GetState() != NetworkState::starting2)
@@ -1053,11 +1053,11 @@ void WiFiInterface::Diagnostics(MessageType mtype) noexcept
 		{
 			NetworkStatusResponse& r = status.Value();
 			r.versionText[ARRAY_UPB(r.versionText)] = 0;
-			platform.MessageF(mtype, "WiFi firmware version %s\n", r.versionText);
-			platform.MessageF(mtype, "WiFi MAC address %02x:%02x:%02x:%02x:%02x:%02x\n",
+			platform.MessageF(mtype, "Firmware version %s\n", r.versionText);
+			platform.MessageF(mtype, "MAC address %02x:%02x:%02x:%02x:%02x:%02x\n",
 								r.macAddress[0], r.macAddress[1], r.macAddress[2], r.macAddress[3], r.macAddress[4], r.macAddress[5]);
-			platform.MessageF(mtype, "WiFi Vcc %.2f, reset reason %s\n", (double)((float)r.vcc/1024), TranslateEspResetReason(r.resetReason));
-			platform.MessageF(mtype, "WiFi flash size %" PRIu32 ", free heap %" PRIu32 "\n", r.flashSize, r.freeHeap);
+			platform.MessageF(mtype, "Module reset reason: %s, Vcc %.2f, flash size %" PRIu32 ", free heap %" PRIu32 "\n",
+								TranslateEspResetReason(r.resetReason), (double)((float)r.vcc/1024), r.flashSize, r.freeHeap);
 
 			if (currentMode == WiFiState::connected || currentMode == WiFiState::runningAsAccessPoint)
 			{
@@ -2037,8 +2037,7 @@ int32_t WiFiInterface::SendCommand(NetworkCommand cmd, SocketNumber socketNum, u
 	digitalWrite(SamTfrReadyPin, true);
 
 	// Wait until the DMA transfer is complete, with timeout
-	// On factory reset, use the startup timeout, as it involves re-formatting the SPIFFS
-	// partition.
+	// On factory reset, use the startup timeout, as it involves re-formatting the SPIFFS partition.
 	const uint32_t timeout = (cmd == NetworkCommand::networkFactoryReset) ? WiFiStartupMillis :
 		(cmd == NetworkCommand::networkAddSsid || cmd == NetworkCommand::networkDeleteSsid ||
 		 cmd == NetworkCommand::networkConfigureAccessPoint || cmd == NetworkCommand::networkRetrieveSsidData

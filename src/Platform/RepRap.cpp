@@ -602,7 +602,7 @@ void RepRap::Init() noexcept
 			network->CreateAdditionalInterface();		// do this now because config.g may refer to it
 # endif
 			// Run the configuration file
-			if (!RunStartupFile(GCodes::CONFIG_FILE) && !RunStartupFile(GCodes::CONFIG_BACKUP_FILE))
+			if (!RunStartupFile(GCodes::CONFIG_FILE, true) && !RunStartupFile(GCodes::CONFIG_BACKUP_FILE, true))
 			{
 				platform->Message(AddWarning(UsbMessage), "no configuration file found\n");
 			}
@@ -655,9 +655,9 @@ void RepRap::Init() noexcept
 		}
 		BoardConfig::LoadBoardConfigFromSBC();
 		// Run config.g or config.g.bak
-		if (!RunStartupFile(GCodes::CONFIG_FILE))
+		if (!RunStartupFile(GCodes::CONFIG_FILE, true))
 		{
-			RunStartupFile(GCodes::CONFIG_BACKUP_FILE);
+			RunStartupFile(GCodes::CONFIG_BACKUP_FILE, true);
 		}
 		// runonce.g is executed by the SBC as soon as processingConfig is set to false.
 		// As we are running the SBC, save RAM by not activating the network
@@ -668,7 +668,7 @@ void RepRap::Init() noexcept
 		network->Activate();							// need to do this here, as the configuration GCodes may set IP address etc.
 #if HAS_MASS_STORAGE
 		// If we are running from SD card, run the runonce.g file if it exists, then delete it
-		if (RunStartupFile(GCodes::RUNONCE_G))
+		if (RunStartupFile(GCodes::RUNONCE_G, false))
 		{
 			platform->DeleteSysFile(GCodes::RUNONCE_G);
 		}
@@ -677,6 +677,7 @@ void RepRap::Init() noexcept
 	processingConfig = false;
 
 #if HAS_HIGH_SPEED_SD && !SAME5x
+	// Switch to giving up the CPU while waiting for a SD operation to complete
 	hsmci_set_idle_func(hsmciIdle);
 	HSMCI->HSMCI_IDR = 0xFFFFFFFF;						// disable all HSMCI interrupts
 	NVIC_EnableIRQ(HSMCI_IRQn);
@@ -694,9 +695,9 @@ void RepRap::Init() noexcept
 }
 
 // Run a startup file
-bool RepRap::RunStartupFile(const char *filename) noexcept
+bool RepRap::RunStartupFile(const char *filename, bool isMainConfigFile) noexcept
 {
-	bool rslt = gCodes->RunConfigFile(filename);
+	const bool rslt = gCodes->RunConfigFile(filename, isMainConfigFile);
 	if (rslt)
 	{
 		platform->MessageF(UsbMessage, "Executing %s... ", filename);
