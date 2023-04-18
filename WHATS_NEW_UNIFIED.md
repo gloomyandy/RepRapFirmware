@@ -2,6 +2,7 @@ Version 3.5beta2+_108
 =====================
 * Add code to display extended WiFi info from 2.1beta4
 * Add Expansion board to build
+* Improve timeout handling - possibly fix DMA neopixel bug
 
 Version 3.5beta2+_107
 =====================
