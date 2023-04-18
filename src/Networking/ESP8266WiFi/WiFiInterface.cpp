@@ -1066,9 +1066,9 @@ void WiFiInterface::Diagnostics(MessageType mtype) noexcept
 
 			if (currentMode == WiFiState::connected)
 			{
-				constexpr const char* SleepModes[4] = { "unknown", "none", "light", "modem" };
 				constexpr const char* ConnectionModes[4] =  { "none", "802.11b", "802.11g", "802.11n" };
-				platform.MessageF(mtype, "WiFi signal strength %ddBm, mode %s, reconnections %u, sleep mode %s\n", (int)r.rssi, ConnectionModes[r.phyMode], reconnectCount, SleepModes[r.sleepMode]);
+				platform.MessageF(mtype, "Signal strength %ddBm, channel %u, mode %s, reconnections %u\n",
+											(int)r.rssi, r.channel, ConnectionModes[r.phyMode], reconnectCount);
 			}
 			else if (currentMode == WiFiState::runningAsAccessPoint)
 			{
@@ -1336,13 +1336,17 @@ GCodeResult WiFiInterface::HandleWiFiCode(int mcode, GCodeBuffer &gb, const Stri
 							{
 								longReply->cat(',');
 							}
+							const WiFiScanData& rec = data[i];
 							longReply->catf((jsonFormat)
-											? "{\"ssid\":\"%s\",\"rssi\":\"%d\",\"phymode\":\"%s\",\"auth\":\"%s\"}"
-											: "\nssid=%s rssi=%d phymode=%s auth=%s",
-												data[i].ssid,
-												data[i].rssi,
-												data[i].phymode == EspWiFiPhyMode::N ? "n" : data[i].phymode == EspWiFiPhyMode::G ? "g" : "b",
-												GetWiFiAuthFriendlyStr(data[i].auth));
+											? "{\"ssid\":\"%s\",\"chan\":%u,\"rssi\":\%d,\"phymode\":\"%s\",\"auth\":\"%s\",\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\"}"
+											: "\nssid=%s chan=%u rssi=%d phymode=%s auth=%s mac=%02x:%02x:%02x:%02x:%02x:%02x",
+												rec.ssid,
+												rec.primaryChannel,
+												rec.rssi,
+												rec.phymode == EspWiFiPhyMode::N ? "n" : rec.phymode == EspWiFiPhyMode::G ? "g" : "b",
+												GetWiFiAuthFriendlyStr(rec.auth),
+												rec.mac[0], rec.mac[1], rec.mac[2], rec.mac[3], rec.mac[4], rec.mac[5]
+											);
 							found = true;
 						}
 
