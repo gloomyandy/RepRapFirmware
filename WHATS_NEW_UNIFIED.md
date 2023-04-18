@@ -1,7 +1,17 @@
+Version 3.5beta2+_108
+=====================
+* Add code to display extended WiFi info from 2.1beta4
+* Add Expansion board to build
+
+Version 3.5beta2+_107
+=====================
+* Add Duet3D pre-beta 3 code PA/IS now on toolboard
+
+
 Version 3.5beta2+_106
 =====================
 * Apply cold extrusion fix
-* Note this version is held on aseparate RRF branch v3.5-cold-extrude-fix
+* Note this version is held on a separate RRF branch v3.5-cold-extrude-fix
 
 Version 3.5beta2+_105
 =====================
