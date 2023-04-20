@@ -35,7 +35,7 @@ constexpr PinEntry PinTable_FLY_SUPER5[] =
     //Heaters and Fans (Big and Small Mosfets}
     {PD_12,  "heat0" },
     {PD_13,  "heat1" },
-    {PE_5,  "bedout,bed" }, 
+    {PB_0,  "bedout,bed" }, 
     {PA_0,  "fan0" },
     {PA_1,  "fan1" },
     {PA_2,  "fan2" },
