@@ -1,3 +1,14 @@
+Version 3.5.0-beta.3+100
+========================
+* Duet3d 3.5.0-beta.3
+* Fly Super8 fixed pin
+* BTT added board "biquskr_3_ez_h723"
+* RP2040 Expansion Added support for MCP251XFD (CAN-FD via SPI)
+* RP2040 Expansion Store reset data in flash
+* RP2040 Expansion Store CAN-FD address in flash
+* RP2040 Expansion Allow firmware update via CAN-FD
+
+
 Version 3.5beta2+_108
 =====================
 * Add code to display extended WiFi info from 2.1beta4
