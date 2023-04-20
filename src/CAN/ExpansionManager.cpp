@@ -256,6 +256,7 @@ GCodeResult ExpansionManager::UpdateRemoteFirmware(uint32_t boardAddress, GCodeB
 	}
 
 	String<StringLength50> firmwareFilename;
+	String<StringLength50> firmwareFilename2;
 	#if STM32
 	// allow use of non Duet firmware
 	if (!strncmp("stm", reply.c_str(), 3))
@@ -268,14 +269,17 @@ GCodeResult ExpansionManager::UpdateRemoteFirmware(uint32_t boardAddress, GCodeB
 		firmwareFilename.copy((moduleNumber == 3) ? "Duet3Bootloader-" : "Duet3Firmware_");
 	}
 	firmwareFilename.cat(reply.c_str());
-	firmwareFilename.cat((strcmp(reply.c_str(), "Mini5plus") == 0) ? ".uf2" : ".bin");
+	firmwareFilename2.copy(firmwareFilename.c_str());
+	firmwareFilename.cat(".bin");
+	firmwareFilename2.cat(".uf2");
 
 	reply.Clear();
 
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE
-	if (!reprap.GetPlatform().FileExists(FIRMWARE_DIRECTORY, firmwareFilename.c_str()))
+	if (!reprap.GetPlatform().FileExists(FIRMWARE_DIRECTORY, firmwareFilename.c_str()) &&
+		!reprap.GetPlatform().FileExists(FIRMWARE_DIRECTORY, firmwareFilename2.c_str()))
 	{
-		reply.printf("Firmware file %s not found", firmwareFilename.c_str());
+		reply.printf("Firmware file %s/%s not found", firmwareFilename.c_str(), firmwareFilename2.c_str());
 		return GCodeResult::error;
 	}
 #endif
