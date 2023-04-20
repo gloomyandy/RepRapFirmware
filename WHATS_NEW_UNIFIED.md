@@ -1,7 +1,7 @@
 Version 3.5.0-beta.3+100
 ========================
 * Duet3d 3.5.0-beta.3
-* Fly Super8 fixed pin
+* Fly Super5 fixed pin
 * BTT added board "biquskr_3_ez_h723"
 * RP2040 Expansion Added support for MCP251XFD (CAN-FD via SPI)
 * RP2040 Expansion Store reset data in flash
