@@ -1,3 +1,8 @@
+Version 3.4.5+_105
+==================
+* Fixed Fly Super 5 pin
+* Added BTT biquskr_3_ez_h723
+
 Version 3.4.5+_104
 ==================
 * Fixed crash when using laser mode
