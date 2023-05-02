@@ -22,6 +22,13 @@
 #include "TMC51xxDriver.h"
 #include <functional>
 
+// On some processors we need to ensure that memory mapped I/O operations are synced to the hardware
+# if STM32H7
+# define SYNC_GPIO() __DSB()
+#else
+# define SYNC_GPIO() 
+# endif
+
 static inline const Move& GetMoveInstance() noexcept { return reprap.GetMove(); }
 
 //#define TMC_TYPE	5130
@@ -1100,10 +1107,16 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 			{
 				if (driverStates[i].IsReady())
 				{
-					driverStates[i].GetSpiCommand(sendData);
 					fastDigitalWriteLow(TMC_PINS[i+baseDriveNo]);
+					SYNC_GPIO();
+					driverStates[i].GetSpiCommand(sendData);
+					if (SmartDriversSpiCsDelay) 
+					{
+						delay(SmartDriversSpiCsDelay);
+					}
 					spiDevice->TransceivePacket(sendData, rcvData, 5);
 					fastDigitalWriteHigh(TMC_PINS[i+baseDriveNo]);
+					SYNC_GPIO();
 					driverStates[i].TransferSucceeded(rcvData);
 				}
 			}

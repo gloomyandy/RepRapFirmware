@@ -50,7 +50,7 @@ constexpr PinEntry PinTable_FLY_SUPER5[] =
     {PA_8, "BEEP"},    {PA_13, "BTNENC"},
     {PA_15, "LCDEN"}, {PA_14, "LCDRS"},
     {PD_0, "LCDD4"},  {PD_1, "LCDD5"},
-    {PD_4, "LCDD6"},  {PD_2, "LCDD7"},
+    {PD_4, "LCDD6"},  {PD_3, "LCDD7"},
 	//GND 
 
     //EXP2

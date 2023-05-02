@@ -1,3 +1,9 @@
+Version 3.4.5+_106
+==================
+* Added support for Fysetc H723 module
+* Added optional SPI CS delay when switching between 5160 drivers
+* Fixed Fly Super 5 pin
+
 Version 3.4.5+_105
 ==================
 * Fixed Fly Super 5 pin

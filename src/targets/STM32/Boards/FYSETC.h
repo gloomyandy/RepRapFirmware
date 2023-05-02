@@ -114,7 +114,8 @@ constexpr BoardDefaults fysetc_spider_Defaults = {
     NoPin, NoPin, SSPNONE,
 #endif
 };
-
+#endif
+# if STM32F4 || STM32H723xx
 constexpr PinEntry PinTable_FYSETC_SPIDER_KING407[] =
 {
     //Thermistors

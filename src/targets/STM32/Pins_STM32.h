@@ -274,6 +274,7 @@ extern Pin DriverDiagPins[NumDirectDrivers];
 extern size_t totalSmartDrivers;
 extern size_t num5160SmartDrivers;
 extern SSPChannel SmartDriversSpiChannel;
+extern uint32_t SmartDriversSpiCsDelay;
 #endif
 #if TMC_SOFT_UART
     constexpr Pin GlobalTmc22xxEnablePin = NoPin;			// The pin that drives ENN of all drivers
