@@ -1165,9 +1165,9 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 					fastDigitalWriteLow(TMC_PINS[i+baseDriveNo]);
 					SYNC_GPIO();
 					driverStates[i].GetSpiCommand(sendData);
-					if (SmartDeriversSpiCsDelay) 
+					if (SmartDriversSpiCsDelay) 
 					{
-						delay(SmartDeriversSpiCsDelay);
+						delay(SmartDriversSpiCsDelay);
 					}
 					spiDevice->TransceivePacket(sendData, rcvData, 5);
 					fastDigitalWriteHigh(TMC_PINS[i+baseDriveNo]);

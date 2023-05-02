@@ -98,7 +98,7 @@ Pin TMC_PINS[NumDirectDrivers];
 size_t totalSmartDrivers;
 size_t num5160SmartDrivers = 0;
 SSPChannel SmartDriversSpiChannel = SSPNONE;
-uint32_t SmartDeriversSpiCsDelay = 0;
+uint32_t SmartDriversSpiCsDelay = 0;
 #endif
 
 uint32_t STEP_DRIVER_MASK = 0;                          //SD: mask of the step pins on Port 2 used for writing to step pins in parallel
