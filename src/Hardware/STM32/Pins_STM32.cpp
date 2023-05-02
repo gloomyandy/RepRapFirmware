@@ -20,6 +20,7 @@ constexpr BoardEntry LPC_Boards[] =
     {{"fly_super5_h723"},      PinTable_FLY_SUPER5,    ARRAY_SIZE(PinTable_FLY_SUPER5),    fly_super5_Defaults},
     { {"fly_super8_pro_h723"},      PinTable_FLY_SUPER8H7,    ARRAY_SIZE(PinTable_FLY_SUPER8H7),    fly_super8h7_Defaults},
     {{"biquskr_3_h723", "biquskr_3_ez_h723"},      PinTable_BTT_SKR_3,    ARRAY_SIZE(PinTable_BTT_SKR_3),    btt_skr_3_Defaults},
+    {{"fysetc_spider_king723"}, PinTable_FYSETC_SPIDER_KING407, ARRAY_SIZE(PinTable_FYSETC_SPIDER_KING407), fysetc_spider_king407_Defaults},
 # endif
 #else
     {{"biquskrpro_1.1"},      PinTable_BIQU_SKR_PRO_v1_1,    ARRAY_SIZE(PinTable_BIQU_SKR_PRO_v1_1),    biquskr_pro_1_1_Defaults},
@@ -97,6 +98,7 @@ Pin TMC_PINS[NumDirectDrivers];
 size_t totalSmartDrivers;
 size_t num5160SmartDrivers = 0;
 SSPChannel SmartDriversSpiChannel = SSPNONE;
+uint32_t SmartDeriversSpiCsDelay = 0;
 #endif
 
 uint32_t STEP_DRIVER_MASK = 0;                          //SD: mask of the step pins on Port 2 used for writing to step pins in parallel

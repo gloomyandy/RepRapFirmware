@@ -71,6 +71,7 @@ static const boardConfigEntry_t boardConfigs[]=
 #if SUPPORT_TMC51xx
     {"stepper.num5160Drivers", &num5160SmartDrivers, nullptr, cvUint32Type},
     {"stepper.spiChannel", &SmartDriversSpiChannel, nullptr, cvUint8Type},
+    {"stepper.csDelay", &SmartDeriversSpiCsDelay, nullptr, cvUint32Type},
 #endif
 #if HAS_STALL_DETECT && SUPPORT_TMC22xx
     {"stepper.TmcDiagPins", DriverDiagPins, &NumDirectDrivers, cvPinType},

@@ -22,6 +22,13 @@
 #include "TMC51xxDriver.h"
 #include <functional>
 
+// On some processors we need to ensure that memory mapped I/O operations are synced to the hardware
+# if STM32H7
+# define SYNC_GPIO() __DSB()
+#else
+# define SYNC_GPIO() 
+# endif
+
 static inline const Move& GetMoveInstance() noexcept { return reprap.GetMove(); }
 
 //#define TMC_TYPE	5130
@@ -995,10 +1002,6 @@ void Tmc51xxDriverState::TransferSucceeded(const uint8_t *rcvDataBlock) noexcept
 			// Only add bits to the accumulator if they appear in 2 successive samples. This is to avoid seeing transient S2G, S2VS, STST and open load errors.
 			const uint32_t oldDrvStat = readRegisters[ReadDrvStat];
 			readRegisters[ReadDrvStat] = regVal;
-if (regVal & TMC51xx_RR_S2G)
-{
-	debugPrintf("Status returns possible short val 0x%x prev reading 0x%x combined 0x%x\n", (unsigned)regVal, (unsigned)oldDrvStat, (unsigned)(regVal & oldDrvStat));
-}
 			regVal &= oldDrvStat;
 			lastValidDriveStatus = regVal;
 			accumulatedDriveStatus |= regVal;
@@ -1159,10 +1162,16 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 			{
 				if (driverStates[i].IsReady())
 				{
-					driverStates[i].GetSpiCommand(sendData);
 					fastDigitalWriteLow(TMC_PINS[i+baseDriveNo]);
+					SYNC_GPIO();
+					driverStates[i].GetSpiCommand(sendData);
+					if (SmartDeriversSpiCsDelay) 
+					{
+						delay(SmartDeriversSpiCsDelay);
+					}
 					spiDevice->TransceivePacket(sendData, rcvData, 5);
 					fastDigitalWriteHigh(TMC_PINS[i+baseDriveNo]);
+					SYNC_GPIO();
 					driverStates[i].TransferSucceeded(rcvData);
 				}
 			}
