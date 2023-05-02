@@ -46,6 +46,17 @@ Version 3.5beta1_102
 * Duet3D 3.5beta1
 * Removed LPC17xx support from source
 
+Version 3.4.5+_106
+==================
+* Added support for Fysetc H723 module
+* Added optional SPI CS delay when switching between 5160 drivers
+* Fixed Fly Super 5 pin
+
+Version 3.4.5+_105
+==================
+* Fixed Fly Super 5 pin
+* Added BTT biquskr_3_ez_h723
+
 Version 3.4.5+_104
 ==================
 * Fixed crash when using laser mode
