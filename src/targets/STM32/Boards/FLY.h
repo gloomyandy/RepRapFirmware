@@ -119,10 +119,10 @@ constexpr PinEntry PinTable_FLY_SUPER8H7[] =
     {PD_7, "io4"},
     {PD_6, "io5"},
     {PA_8, "io6"},
-    {PF_8, "in7,pwmout1,pwm1,out1"},
+    {PF_8, "in7,pwmout1,pwm1"},
     {PF_3, "hvin"},
     // Servo
-    {PC_6,  "pwmout0,pwm0,servo,out0" },
+    {PC_6,  "pwmout0,pwm0,servo" },
 
    // Probe
     {PC_3, "probe"},
@@ -615,10 +615,10 @@ constexpr PinEntry PinTable_FLY_SUPER8[] =
     {PD_7, "io4"},
     {PD_6, "io5"},
     {PA_8, "io6"},
-    {PF_8, "in7,pwmout1,pwm1,out1"},
+    {PF_8, "in7,pwmout1,pwm1"},
     {PF_3, "hvin"},
     // Servo
-    {PC_6,  "pwmout0,pwm0,servo,out0" },
+    {PC_6,  "pwmout0,pwm0,servo" },
 
     // Probe
     {PC_3, "probe"},
