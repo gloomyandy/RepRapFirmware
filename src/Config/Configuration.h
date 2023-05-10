@@ -104,6 +104,8 @@ constexpr float DefaultGridSpacing = 20.0;				// Default bed probing grid spacin
 
 static_assert(MaxCalibrationPoints <= MaxProbePoints, "MaxCalibrationPoints must be <= MaxProbePoints");
 
+constexpr size_t MaxScanningProbeCalibrationPoints = 33;	// The maximum number of heights we measure when calibrating a scanning probe. Use an odd number.
+
 // SD card
 constexpr uint32_t SdCardDetectDebounceMillis = 200;	// How long we give the SD card to settle in the socket
 constexpr unsigned int MaxSdCardTries = 5;				// Number of read or write attempts before giving up
@@ -201,9 +203,9 @@ constexpr float DefaultRetractSpeed = 1000.0;			// The default firmware retracti
 constexpr float DefaultRetractLength = 2.0;
 
 constexpr float MaxArcDeviation = 0.005;				// maximum deviation from ideal arc due to segmentation
-constexpr float MinArcSegmentLength = 0.1;				// G2 and G3 arc movement commands get split into segments at least this long
+constexpr float MinArcSegmentLength = 0.02;				// G2 and G3 arc movement commands get split into segments at least this long
 constexpr float MaxArcSegmentLength = 1.0;				// G2 and G3 arc movement commands get split into segments at most this long
-constexpr float MinArcSegmentsPerSec = 200.0;
+constexpr float MaxArcSegmentsPerSec = 200.0;
 constexpr float SegmentsPerFulArcCalculation = 8.0;		// we do the full sine/cosine calculation every this number of segments
 
 constexpr uint32_t DefaultIdleTimeout = 30000;			// Milliseconds

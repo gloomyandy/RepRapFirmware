@@ -153,6 +153,7 @@ public:
 	void GlobalUpdated() noexcept { ++globalSeq; }
 	void HeatUpdated() noexcept { ++heatSeq; }
 	void InputsUpdated() noexcept { ++inputsSeq; }
+	void LedStripsUpdated() noexcept { ++ledStripsSeq; }
 	void JobUpdated() noexcept { ++jobSeq; }
 	void MoveUpdated() noexcept { ++moveSeq; }
 	void NetworkUpdated() noexcept { ++networkSeq; }
@@ -182,8 +183,9 @@ private:
 	const char* GetStatusString() const noexcept;
 	bool RunStartupFile(const char *filename, bool isMainConfigFile) noexcept;
 
-	static constexpr uint32_t MaxTicksInSpinState = 20000;	// timeout before we reset the processor
-	static constexpr uint32_t HighTicksInSpinState = 16000;	// how long before we warn that timeout is approaching
+	static constexpr uint32_t MaxHeatTaskTicksInSpinState = 4000;	// timeout before we reset the processor if the heat task doesn't run
+	static constexpr uint32_t MaxMainTaskTicksInSpinState = 20000;	// timeout before we reset the processor if the main task doesn't run
+	static constexpr uint32_t HighMainTaskTicksInSpinState = 16000;	// how long before we warn that timeout is approaching
 
 	Platform* platform;
 	Network* network;
@@ -214,7 +216,7 @@ private:
  	ExpansionManager *expansion;
 #endif
 
-	uint16_t boardsSeq, directoriesSeq, fansSeq, heatSeq, inputsSeq, jobSeq, moveSeq, globalSeq;
+	uint16_t boardsSeq, directoriesSeq, fansSeq, heatSeq, inputsSeq, jobSeq, ledStripsSeq, moveSeq, globalSeq;
 	uint16_t networkSeq, scannerSeq, sensorsSeq, spindlesSeq, stateSeq, toolsSeq, volumesSeq;
 
 	GlobalVariables globalVariables;
