@@ -478,6 +478,39 @@ struct BoardEntry
 extern const BoardEntry LPC_Boards[];
 extern const size_t NumBoardEntries;
 
+// Enum to represent allowed types of pin access
+// We don't have a separate bit for servo, because Duet PWM-capable ports can be used for servos if they are on the Duet main board
+enum class PinCapability: uint8_t
+{
+	// Individual capabilities
+	none = 0u,
+	read = 1u,				// digital read
+	ain = 2u,				// analog read
+	write = 4u,				// digital write
+	pwm = 8u,				// PWM write
+	npDma = 16u,			// Neopixel output using DMA e.g. using SPI MOSI
+
+	// Combinations
+	ainr = 1u|2u,
+	rw = 1u|4u,
+	wpwm = 4u|8u,
+	rwpwm = 1u|4u|8u,
+	ainrw = 1u|2u|4u,
+	ainrwpwm = 1u|2u|4u|8u,
+	npDmaW = 4u | 16u,
+    all = 1u|2u|4u|8u|16u
+};
+
+constexpr inline PinCapability operator|(PinCapability a, PinCapability b) noexcept
+{
+	return (PinCapability)((uint8_t)a | (uint8_t)b);
+}
+
+constexpr inline PinCapability operator&(PinCapability a, PinCapability b) noexcept
+{
+	return (PinCapability)((uint8_t)a & (uint8_t)b);
+}
+
 //This needs to be const as its used in other places to create arrays
 constexpr unsigned int NumNamedPins = P_END;
 

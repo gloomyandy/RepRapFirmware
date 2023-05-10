@@ -498,7 +498,12 @@ Pin IoPort::GetPin() const noexcept
 // Get the capabilities of the pin
 PinCapability IoPort::GetCapability() const noexcept
 {
+#if STM32
+	// TODO: Although consider adding pin specific data from CoreNG tables
+	return (IsValid()) ? PinCapability::all : PinCapability::none;
+#else
 	return (IsValid()) ? PinTable[GetPinNoCheck()].cap : PinCapability::none;
+#endif
 }
 
 bool IoPort::ReadDigital() const noexcept

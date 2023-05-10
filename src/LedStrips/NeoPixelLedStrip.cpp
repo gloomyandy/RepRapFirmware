@@ -113,11 +113,16 @@ GCodeResult NeoPixelLedStrip::HandleM150(GCodeBuffer &gb, const StringRef &reply
 size_t NeoPixelLedStrip::GetBytesPerLed() const noexcept
 {
 	const size_t bytesPerLed = (isRGBW) ? 4 : 3;
+#if STM32
+	return bytesPerLed;
+#else
 	return (useDma) ? bytesPerLed * 4 : bytesPerLed;
+#endif
 }
 
 #if SUPPORT_DMA_NEOPIXEL
 
+#if !STM32
 // Encode one NeoPixel byte into the buffer.
 // A 0 bit is encoded as 1000
 // A 1 bit is encoded as 1110
@@ -139,10 +144,28 @@ static void EncodeNeoPixelByte(uint8_t *p, uint8_t val) noexcept
 	*p++ = EncodedByte[val & 3];
 # endif
 }
+#endif
 
 // Send data to NeoPixel LEDs by DMA to SPI
 GCodeResult NeoPixelLedStrip::SpiSendNeoPixelData(const LedParams& params) noexcept
 {
+#if STM32
+	const unsigned int bytesPerLed = (isRGBW) ? 4 : 3;
+	unsigned int numLeds = params.numLeds;
+	uint8_t *p = chunkBuffer + (bytesPerLed * numAlreadyInBuffer);
+	while (numLeds != 0 && p + bytesPerLed <= chunkBuffer + chunkBufferSize)
+	{
+		*p++ = (uint8_t)params.green;
+		*p++ = (uint8_t)params.red;
+		*p++ = (uint8_t)params.blue;
+		if (isRGBW)
+		{
+			*p++ = (uint8_t)params.white;
+		}
+		--numLeds;
+		++numAlreadyInBuffer;
+	}
+#else
 	const unsigned int bytesPerLed = (isRGBW) ? 16 : 12;
 	unsigned int numLeds = params.numLeds;
 	uint8_t *p = chunkBuffer + (bytesPerLed * numAlreadyInBuffer);
@@ -162,7 +185,7 @@ GCodeResult NeoPixelLedStrip::SpiSendNeoPixelData(const LedParams& params) noexc
 		--numLeds;
 		++numAlreadyInBuffer;
 	}
-
+#endif
 	if (!params.following)
 	{
 		DmaSendChunkBuffer(bytesPerLed * numAlreadyInBuffer);		// send data by DMA to SPI
@@ -173,11 +196,13 @@ GCodeResult NeoPixelLedStrip::SpiSendNeoPixelData(const LedParams& params) noexc
 }
 #endif
 
+#if !STM32
 // Bit bang data to Neopixels
 constexpr uint32_t NanosecondsToCycles(uint32_t ns) noexcept
 {
 	return (ns * (uint64_t)SystemCoreClockFreq)/1000000000u;
 }
+#endif
 
 constexpr uint32_t T0H = NanosecondsToCycles(350);
 constexpr uint32_t T0L = NanosecondsToCycles(850);

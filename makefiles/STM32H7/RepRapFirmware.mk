@@ -6,9 +6,9 @@ RRF_SRC_DIRS += Movement Movement/BedProbing Movement/Kinematics Movement/Height
 RRF_SRC_DIRS += Storage Libraries/sha1 Comms Platform PrintMonitor Accelerometers
 RRF_SRC_DIRS += Heating/Sensors Fans ObjectModel Endstops Hardware Hardware/Spi Tools
 RRF_SRC_DIRS += Display Display/Lcd Display/Lcd/Fonts Display/Lcd/ST7567 Display/Lcd/ST7920 GPIO bossa
-RRF_SRC_DIRS += CAN ClosedLoop InputMonitors
+RRF_SRC_DIRS += CAN ClosedLoop InputMonitors LedStrips
 #STM RRF Addons
-RRF_SRC_DIRS += Hardware/STM32 Hardware/STM32/Libraries/Fatfs Hardware/STM32/Fans
+RRF_SRC_DIRS += Hardware/STM32 Hardware/STM32/Libraries/Fatfs
 RRF_SRC_DIRS += Hardware/STM32/Hardware
 
 #networking support?
