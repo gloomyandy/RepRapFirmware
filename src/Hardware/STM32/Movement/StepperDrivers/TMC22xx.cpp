@@ -890,6 +890,8 @@ uint32_t Tmc22xxDriverState::GetRegister(SmartDriverRegister reg) const noexcept
 	}
 }
 
+// Read any register from a driver
+// This will return GCodeResult:notFinished for at least the first call, so it must be called repeatedly until it returns a different value.
 GCodeResult Tmc22xxDriverState::GetAnyRegister(const StringRef& reply, uint8_t regNum) noexcept
 {
 	if (specialReadRegisterNumber == 0xFE)
