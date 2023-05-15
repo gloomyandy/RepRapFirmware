@@ -765,6 +765,10 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				Event::Add(buf->msg.event, buf->id.Src(), buf->dataLength);
 				break;
 
+			case CanMessageType::debugText:
+				reprap.GetPlatform().MessageF(GenericMessage, "Debug from %u: %.*s\n", buf->id.Src(), buf->msg.debugText.GetMaxTextLength(buf->dataLength), buf->msg.debugText.text);
+				break;
+
 #if SUPPORT_ACCELEROMETERS
 			case CanMessageType::accelerometerData:
 				Accelerometers::ProcessReceivedData(buf->id.Src(), buf->msg.accelerometerData, buf->dataLength);
