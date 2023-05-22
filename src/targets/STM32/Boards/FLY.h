@@ -208,7 +208,73 @@ constexpr BoardDefaults fly_super8h7_Defaults = {
 #endif
 };
 
+# if STM32H723xx
+constexpr PinEntry PinTable_FLY_OPENPNP_TOOL[] =
+{
+
+    //Thermistors
+    {PC_6, "chamber_temp"},
+
+    //Endstops
+    {PB_10, "io0"},
+    {PC_3, "io1"},
+    {PC_4, "io2"},
+    {PD_14, "diag0"},
+    {PE_7, "diag1"},
+    {PE_12, "diag2"},
+
+    // RGB
+    {PE_14, "rgb"},
+
+    //Heaters and Fans (Big and Small Mosfets}
+    {PA_3,  "fan0,fan"   },
+    {PA_2,  "fan1"      },
+    {PA_1,  "fan2"      },
+    {PA_0,  "fan3"      },
+
+
+    //SD
+    {PC_9, "SDD1"   },
+    {PC_8, "SDD0"   },
+    {PC_12, "SDSCK" },
+    {PD_2, "SDCMD"  },
+    {PC_11, "SDD3"  },
+    {PC_10, "SDD2"  },
+
+
+};
+
+constexpr BoardDefaults fly_openpnp_tool_Defaults = {
+    {0x8a5f5551, 0xd0c680ae},                    // Signatures
+    SD_SDIO,                                    // SD Card access
+    {   //CLK, MISO, MOSI
+        {PA_5, PA_6, PA_7},                     //SPI0 EXP SD
+        {PB_13, PB_14, PB_15},                  //SPI1 Wifi module
+        {PB_3, PB_4, PB_5},                     //SPI2 MOT
+        {NoPin, NoPin, NoPin},                  //SPI3 MAX31855 MAX31865
+        {NoPin, NoPin, NoPin},                  //SPI4 used for single wire ender displays
+        {NoPin, NoPin, NoPin},                  //SPI5
+    },
+    3,                                            // Number of drivers
+    {PD_15, PE_8, PE_13, NoPin },           //enablePins
+    {PD_12, PB_0, PE_10, NoPin},        //stepPins
+    {PD_11, PC_5, PE_9, NoPin},        //dirPins
+#if HAS_SMART_DRIVERS
+    {PD_13, PB_1, PE_11, NoPin},
+     3,                                      //uartPins                                              // Smart drivers
 #endif
+    0,
+#if HAS_VOLTAGE_MONITOR
+    PC_7,
+#endif
+    NoPin,
+#if HAS_SBC_INTERFACE
+    NoPin, NoPin, SSPNONE,
+#endif
+};
+# endif
+#endif
+
 #if STM32F4
 
 constexpr PinEntry PinTable_FLY_F407ZG[] =
