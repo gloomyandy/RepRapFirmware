@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 Version 3.5.0-beta.3+100
 ========================
 * Duet3d 3.5.0-beta.3
@@ -47,8 +46,6 @@ Version 3.5beta1_102
 * Duet3D 3.5beta1
 * Removed LPC17xx support from source
 
-=======
->>>>>>> v3.4-dev
 Version 3.4.5+_106
 ==================
 * Added support for Fysetc H723 module

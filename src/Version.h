@@ -10,11 +10,7 @@
 
 #ifndef VERSION
 // Note: the complete VERSION string must be in standard version number format and must not contain spaces! This is so that DWC can parse it.
-<<<<<<< HEAD
-# define MAIN_VERSION	"3.5.0-beta.3+102"
-=======
-# define MAIN_VERSION	"3.4.5+_106"
->>>>>>> v3.4-dev
+# define MAIN_VERSION	"3.5.0-beta.3+103"
 # ifdef USE_CAN0
 #  define VERSION_SUFFIX	"(CAN0)"
 # else
