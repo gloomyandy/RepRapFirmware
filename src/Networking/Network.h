@@ -72,6 +72,7 @@ public:
 	[[noreturn]] void Spin() noexcept;
 #endif
 	void Diagnostics(MessageType mtype) noexcept;
+	unsigned int GetNumNetworkInterfaces() const noexcept;
 	bool IsWiFiInterface(unsigned int interface) const noexcept;
 
 #if defined(DUET3_MB6HC)
@@ -127,7 +128,6 @@ protected:
 	DECLARE_OBJECT_MODEL_WITH_ARRAYS
 
 private:
-	unsigned int GetNumNetworkInterfaces() const noexcept;
 	WiFiInterface *FindWiFiInterface() const noexcept;
 
 	Platform& platform;

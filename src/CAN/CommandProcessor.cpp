@@ -801,7 +801,7 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 #endif
 
 			default:
-				if (reprap.Debug(Module::Can))
+				if (reprap.Debug(Module::CAN))
 				{
 					buf->DebugPrint("Rec: ");
 				}
