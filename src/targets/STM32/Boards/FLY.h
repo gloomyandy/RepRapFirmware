@@ -245,7 +245,7 @@ constexpr PinEntry PinTable_FLY_OPENPNP_TOOL[] =
 };
 
 constexpr BoardDefaults fly_openpnp_tool_Defaults = {
-    {0x8a5f5551, 0xd0c680ae},                    // Signatures
+    {0x69632a35, 0x8a5f5551, 0xd0c680ae},       // Signatures
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
         {PA_5, PA_6, PA_7},                     //SPI0 EXP SD
