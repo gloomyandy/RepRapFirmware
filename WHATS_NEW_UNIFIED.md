@@ -1,4 +1,4 @@
-Version 3.4.5+_106
+Version 3.4.5+_107
 ==================
 * Added support for fly_openpnp_tool board
 
