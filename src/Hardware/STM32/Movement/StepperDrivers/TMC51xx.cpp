@@ -957,7 +957,7 @@ void Tmc51xxDriverState::GetSpiCommand(uint8_t *sendDataBlock) noexcept
 		const size_t regNum = LowestSetBit(registersToUpdate);
 		regIndexBeingUpdated = regNum;
 		sendDataBlock[0] = ((regNum == WriteSpecial) ? specialWriteRegisterNumber : WriteRegNumbers[regNum]) | 0x80;
-		StoreBE32(sendDataBlock + 1, writeRegisters[regNum]);
+		StoreBEU32(sendDataBlock + 1, writeRegisters[regNum]);
 	}
 }
 
@@ -977,7 +977,7 @@ void Tmc51xxDriverState::TransferSucceeded(const uint8_t *rcvDataBlock) noexcept
 	if (previousRegIndexRequested <= NumReadRegisters)
 	{
 		++numReads;
-		uint32_t regVal = LoadBE32(rcvDataBlock + 1);
+		uint32_t regVal = LoadBEU32(rcvDataBlock + 1);
 		if (previousRegIndexRequested == ReadDrvStat)
 		{
 			// We treat the DRV_STATUS register separately
@@ -1020,7 +1020,7 @@ void Tmc51xxDriverState::TransferSucceeded(const uint8_t *rcvDataBlock) noexcept
 	else if (previousRegIndexRequested != NoRegIndex)
 	{
 		// we have read the result from a previous write, validate it
-		uint32_t regVal = LoadBE32(rcvDataBlock + 1);
+		uint32_t regVal = LoadBEU32(rcvDataBlock + 1);
 		previousRegIndexRequested -= (NumReadRegisters + 1);
 		if (writeRegisters[previousRegIndexRequested] != regVal)
 		{
