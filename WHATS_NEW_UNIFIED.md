@@ -1,3 +1,7 @@
+Version 3.5.0-beta.3+103
+========================
+* Latest updates from Duet3D (including extrusion changes)
+
 Version 3.5.0-beta.3+100
 ========================
 * Duet3d 3.5.0-beta.3
@@ -40,11 +44,14 @@ Version 3.5beta2+_102
 * Increase open files to 20
 * Ensure ESP32 modules are fully disabled by M552 s-1
 
-
 Version 3.5beta1_102
 ====================
 * Duet3D 3.5beta1
 * Removed LPC17xx support from source
+
+Version 3.4.5+_107
+==================
+* Added support for fly_openpnp_tool board
 
 Version 3.4.5+_106
 ==================
