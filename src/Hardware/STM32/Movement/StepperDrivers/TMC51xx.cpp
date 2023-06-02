@@ -305,7 +305,7 @@ public:
 	float GetMaxCurrent() const noexcept;
 	void SetMaxCurrent(float value) noexcept;
 	void AppendDriverStatus(const StringRef& reply) noexcept;
-	bool UpdatePending() const noexcept { return (registersToUpdate | newRegistersToUpdate) != 0; }
+	bool UpdatePending() const noexcept { return (registersToUpdate | newRegistersToUpdate.load()) != 0; }
 #if HAS_STALL_DETECT
 	void SetStallDetectThreshold(int sgThreshold) noexcept;
 	void SetStallDetectFilter(bool sgFilter) noexcept;
@@ -386,7 +386,7 @@ private:
 	uint32_t maxStallStepInterval;							// maximum interval between full steps to take any notice of stall detection
 	uint32_t minSgLoadRegister;								// the minimum value of the StallGuard bits we read
 
-	volatile uint32_t newRegistersToUpdate;					// bitmap of register indices whose values need to be sent to the driver chip
+	std::atomic<uint32_t> newRegistersToUpdate;				// bitmap of register indices whose values need to be sent to the driver chip
 	uint32_t registersToUpdate;								// bitmap of register indices whose values need to be sent to the driver chip
 	DriversBitmap driverBit;								// a bitmap containing just this driver number
 	uint32_t axisNumber;									// the axis number of this driver as used to index the DriveMovements in the DDA
@@ -434,7 +434,7 @@ const uint8_t Tmc51xxDriverState::ReadRegNumbers[NumReadRegisters] =
 };
 
 Tmc51xxDriverState::Tmc51xxDriverState() noexcept : TmcDriverState(), accumulatedDriveStatus(0), configuredChopConfReg(0), maxStallStepInterval(0),
-	minSgLoadRegister(0), newRegistersToUpdate(0), registersToUpdate(0), axisNumber(0), microstepShiftFactor(0),
+	minSgLoadRegister(0), registersToUpdate(0), axisNumber(0), microstepShiftFactor(0),
 	motorCurrent(0), enabled(0), maxCurrent(0), senseResistor(0)
 {
 }
@@ -448,7 +448,8 @@ pre(!driversPowered)
 	axisNumber = p_driverNumber;										// axes are mapped straight through to drivers initially
 	driverBit = DriversBitmap::MakeFromBits(p_driverNumber);
 	enabled = false;
-	registersToUpdate = newRegistersToUpdate = 0;
+	registersToUpdate = 0;
+	newRegistersToUpdate.store(0);
 	specialReadRegisterNumber = specialWriteRegisterNumber = 0xFF;
 	motorCurrent = 0;
 	senseResistor = DefaultSenseResistor;
@@ -490,7 +491,7 @@ pre(!driversPowered)
 void Tmc51xxDriverState::UpdateRegister(size_t regIndex, uint32_t regVal) noexcept
 {
 	writeRegisters[regIndex] = regVal;
-	newRegistersToUpdate |= (1u << regIndex);							// flag it for sending
+	newRegistersToUpdate.fetch_or(1u << regIndex);							// flag it for sending
 }
 
 // Calculate the chopper control register and flag it for sending
@@ -507,7 +508,7 @@ inline void Tmc51xxDriverState::SetAxisNumber(size_t p_axisNumber) noexcept
 // Write all registers. This is called when the drivers are known to be powered up.
 inline void Tmc51xxDriverState::WriteAll() noexcept
 {
-	newRegistersToUpdate = (1u << NumWriteRegisters) - 1;
+	newRegistersToUpdate.store((1u << NumWriteRegisters) - 1);
 }
 
 float Tmc51xxDriverState::GetStandstillCurrentPercent() const noexcept
@@ -517,11 +518,11 @@ float Tmc51xxDriverState::GetStandstillCurrentPercent() const noexcept
 
 void Tmc51xxDriverState::SetStandstillCurrentPercent(float percent) noexcept
 {
-	standstillCurrentFraction = (uint16_t)constrain<long>(lrintf((percent * 256)/100), 0, 255);
+	standstillCurrentFraction = (uint16_t)constrain<long>(lrintf((percent * 256)/100.0), 0, 256);
 	UpdateCurrent();
 }
 
-// Set the microstepping and microstep interpolation. The desired microstepping is (1 << shift).
+// Set the microstepping and microstep interpolation. The desired microstepping is (1 << shift) where shift is in 0..8.
 bool Tmc51xxDriverState::SetMicrostepping(uint32_t shift, bool interpolate) noexcept
 {
 	microstepShiftFactor = shift;
@@ -537,7 +538,7 @@ bool Tmc51xxDriverState::SetMicrostepping(uint32_t shift, bool interpolate) noex
 // Get microstepping or chopper control register
 unsigned int Tmc51xxDriverState::GetMicrostepping(bool& interpolation) const noexcept
 {
-	interpolation = (writeRegisters[WriteChopConf] & CHOPCONF_INTPOL) != 0;
+	interpolation = (configuredChopConfReg & CHOPCONF_INTPOL) != 0;
 	return 1u << microstepShiftFactor;
 }
 
@@ -680,28 +681,40 @@ bool Tmc51xxDriverState::SetDriverMode(unsigned int mode) noexcept
 	switch (mode)
 	{
 	case (unsigned int)DriverMode::spreadCycle:
-		UpdateRegister(WriteGConf, writeRegisters[WriteGConf] & ~GCONF_STEALTHCHOP);
+		UpdateRegister(WriteGConf, writeRegisters[WriteGConf] & ~(GCONF_DIRECT_MODE | GCONF_STEALTHCHOP));
+#if TMC_TYPE == 5130
+		configuredChopConfReg = &= ~(CHOPCONF_CHM | CHOPCONF_5130_RNDTOFF);
+#else
+		configuredChopConfReg &= ~CHOPCONF_CHM;
+#endif
+		UpdateChopConfRegister();
 		return true;
 
 	case (unsigned int)DriverMode::stealthChop:
-		UpdateRegister(WriteGConf, writeRegisters[WriteGConf] | GCONF_STEALTHCHOP);
+		UpdateRegister(WriteGConf, (writeRegisters[WriteGConf] & ~GCONF_DIRECT_MODE) | GCONF_STEALTHCHOP);
+#if TMC_TYPE == 5130
+		configuredChopConfReg = &= ~(CHOPCONF_CHM | CHOPCONF_5130_RNDTOFF);
+#else
+		configuredChopConfReg &= ~CHOPCONF_CHM;
+#endif
+		UpdateChopConfRegister();
 		return true;
 
 	case (unsigned int)DriverMode::constantOffTime:
-		UpdateRegister(WriteGConf, writeRegisters[WriteGConf] & ~GCONF_STEALTHCHOP);
-		UpdateRegister(WriteChopConf,
+		UpdateRegister(WriteGConf, writeRegisters[WriteGConf] & ~(GCONF_DIRECT_MODE | GCONF_STEALTHCHOP));
 #if TMC_TYPE == 5130
-			(writeRegisters[WriteChopConf] | CHOPCONF_CHM) & ~CHOPCONF_5130_RNDTOFF
+		configuredChopConfReg = (configuredChopConfReg & ~CHOPCONF_5130_RNDTOFF) | CHOPCONF_CHM;
 #else
-			writeRegisters[WriteChopConf] | CHOPCONF_CHM
+		configuredChopConfReg |= CHOPCONF_CHM;
 #endif
-			);
+		UpdateChopConfRegister();
 		return true;
 
 #if TMC_TYPE == 5130
 	case (unsigned int)DriverMode::randomOffTime:
 		UpdateRegister(WriteGConf, writeRegisters[WriteGConf] & ~GCONF_STEALTHCHOP);
-		UpdateRegister(WriteChopConf, writeRegisters[WriteChopConf] | CHOPCONF_CHM | CHOPCONF_5130_RNDTOFF);
+		configuredChopConfReg |= CHOPCONF_CHM | CHOPCONF_5130_RNDTOFF;
+		UpdateChopConfRegister();
 		return true;
 #endif
 
@@ -714,9 +727,9 @@ bool Tmc51xxDriverState::SetDriverMode(unsigned int mode) noexcept
 DriverMode Tmc51xxDriverState::GetDriverMode() const noexcept
 {
 	return ((writeRegisters[WriteGConf] & GCONF_STEALTHCHOP) != 0) ? DriverMode::stealthChop
-		: ((writeRegisters[WriteChopConf] & CHOPCONF_CHM) == 0) ? DriverMode::spreadCycle
+		: ((configuredChopConfReg & CHOPCONF_CHM) == 0) ? DriverMode::spreadCycle
 #if TMC_TYPE == 5130
-			: ((writeRegisters[WriteChopConf] & CHOPCONF_5130_RNDTOFF) != 0) ? DriverMode::randomOffTime
+			: ((configuredChopConfReg & CHOPCONF_5130_RNDTOFF) != 0) ? DriverMode::randomOffTime
 #endif
 				: DriverMode::constantOffTime;
 }
@@ -822,12 +835,12 @@ StandardDriverStatus Tmc51xxDriverState::ReadStatus(bool accumulated, bool clear
 	{
 		AtomicCriticalSectionLocker lock;
 
-		status = accumulatedDriveStatus;
+		// In the following we must or-in the current drive status, otherwise an error such as S2G may appear to go away between two successive calls
+		status = accumulatedDriveStatus | readRegisters[ReadDrvStat];
 		if (clearAccumulated)
 		{
-			// In the following we can't just copy readRegisters[ReadDrvStat] into accumulatedDriveStatus,
-			// because we only want to set certain bits in accumulatedDriveStatus when they occur in 2 successive samples.
-			// So clear it instead.
+			// In the following we can't just copy readRegisters[ReadDrvStat] into accumulatedDriveStatus, because we only want to set bits in accumulatedDriveStatus
+			// when they occur in 2 successive samples. So clear it instead.
 			accumulatedDriveStatus = 0;
 		}
 	}
@@ -877,7 +890,7 @@ void Tmc51xxDriverState::SetStallDetectThreshold(int sgThreshold) noexcept
 {
 	const uint32_t sgVal = ((uint32_t)constrain<int>(sgThreshold, -64, 63)) & 127u;
 	writeRegisters[WriteCoolConf] = (writeRegisters[WriteCoolConf] & ~COOLCONF_SGT_MASK) | (sgVal << COOLCONF_SGT_SHIFT);
-	newRegistersToUpdate |= 1u << WriteCoolConf;
+	newRegistersToUpdate.fetch_or(1u << WriteCoolConf);
 }
 
 void Tmc51xxDriverState::SetStallDetectFilter(bool sgFilter) noexcept
@@ -890,7 +903,7 @@ void Tmc51xxDriverState::SetStallDetectFilter(bool sgFilter) noexcept
 	{
 		writeRegisters[WriteCoolConf] &= ~COOLCONF_SGFILT;
 	}
-	newRegistersToUpdate |= 1u << WriteCoolConf;
+	newRegistersToUpdate.fetch_or(1u << WriteCoolConf);
 }
 
 void Tmc51xxDriverState::SetStallMinimumStepsPerSecond(unsigned int stepsPerSecond) noexcept
@@ -924,8 +937,7 @@ void Tmc51xxDriverState::GetSpiCommand(uint8_t *sendDataBlock) noexcept
 	// Find which register to send. The common case is when no registers need to be updated.
 	{
 		TaskCriticalSectionLocker lock;
-		registersToUpdate |= newRegistersToUpdate;
-		newRegistersToUpdate = 0;
+		registersToUpdate |= newRegistersToUpdate.exchange(0);
 	}
 
 	if (registersToUpdate == 0)
