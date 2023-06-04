@@ -269,6 +269,10 @@ public:
 	void ResetReportDueTimer() noexcept { whenReportDueTimerStarted = millis(); };
 	bool IsReportDue() noexcept;
 
+	bool IsWaitingForTemperatures() const noexcept;
+	void CancelWaitForTemperatures() noexcept { cancelWait = true; }
+	bool IsCancelWaitRequested() noexcept;
+
 	void RestartFrom(FilePosition pos) noexcept;
 
 #if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
@@ -338,6 +342,7 @@ private:
 
 	bool timerRunning;									// true if we are waiting
 	bool motionCommanded;								// true if this GCode stream has commanded motion since it last waited for motion to stop
+	bool cancelWait;									// true to stop waiting for temperatures to be reached
 
 	alignas(4) char buffer[MaxGCodeLength];				// must be aligned because in SBC binary mode we do dword fetches from it
 
@@ -352,7 +357,7 @@ private:
 	// Accessed only when the GB mutex is acquired
 	String<MaxFilenameLength> requestedMacroFile;
 	bool isBinaryBuffer;
-	uint8_t
+	uint16_t
 		macroJustStarted : 1,		// Whether the GB has just started a macro file
 		macroFileError : 1,			// Whether the macro file could be opened or if an error occurred
 		macroFileEmpty : 1,			// Whether the macro file is actually empty
@@ -445,6 +450,13 @@ inline bool GCodeBuffer::IsDoingLocalFile() const noexcept
 #else
 	return IsDoingFile();
 #endif
+}
+
+inline bool GCodeBuffer::IsCancelWaitRequested() noexcept
+{
+	const bool b = cancelWait;
+	cancelWait = false;
+	return b;
 }
 
 #endif /* SRC_GCODES_GCODEBUFFER_GCODEBUFFER_H */
