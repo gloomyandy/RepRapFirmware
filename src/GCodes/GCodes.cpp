@@ -4313,20 +4313,20 @@ void GCodes::StopPrint(StopPrintReason reason) noexcept
 	CancelWaitForTemperatures(true);
 	reprap.GetPrintMonitor().StoppedPrint();				// must do this after printing the simulation details not before, because it clears the filename and pause time
 	buildObjects.Init();
-	FileGCode()->OriginalMachineState().variables.Clear();	// delete any local variables that the job file created
+	FileGCode()->OriginalMachineState().ClearBlocks();		// delete any local variables that the job file created
 #if SUPPORT_ASYNC_MOVES
-	File2GCode()->OriginalMachineState().variables.Clear();	// delete any local variables that the job file created
+	File2GCode()->OriginalMachineState().ClearBlocks();		// delete any local variables that the job file created
 #endif
 }
 
 // Return true if all the heaters for the specified tool are at their set temperatures
-bool GCodes::ToolHeatersAtSetTemperatures(const Tool *tool, bool waitWhenCooling, float tolerance) const noexcept
+bool GCodes::ToolHeatersAtSetTemperatures(const Tool *tool, bool waitWhenCooling, float tolerance, bool waitOnFault) const noexcept
 {
 	if (tool != nullptr)
 	{
 		for (size_t i = 0; i < tool->HeaterCount(); ++i)
 		{
-			if (!reprap.GetHeat().HeaterAtSetTemperature(tool->GetHeater(i), waitWhenCooling, tolerance))
+			if (!reprap.GetHeat().HeaterAtSetTemperature(tool->GetHeater(i), waitWhenCooling, tolerance, waitOnFault))
 			{
 				return false;
 			}
