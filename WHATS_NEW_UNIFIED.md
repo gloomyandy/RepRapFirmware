@@ -1,3 +1,11 @@
+Version 3.5.0-beta.4_101
+========================
+* Duet3d 3.5.0-beta.4
+
+Version 3.5.0-beta.3+104
+========================
+* Added Neopixel support on RP2040 boards
+
 Version 3.5.0-beta.3+103
 ========================
 * Latest updates from Duet3D (including extrusion changes)
