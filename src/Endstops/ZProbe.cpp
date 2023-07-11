@@ -12,6 +12,7 @@
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <Storage/FileStore.h>
 #include <Heating/Heat.h>
+#include <Math/Matrix.h>
 
 #if SUPPORT_OBJECT_MODEL
 
@@ -20,8 +21,9 @@
 // Otherwise the table will be allocated in RAM instead of flash, which wastes too much RAM.
 
 // Macro to build a standard lambda function that includes the necessary type conversions
-#define OBJECT_MODEL_FUNC(...)				OBJECT_MODEL_FUNC_BODY(ZProbe, __VA_ARGS__)
-#define OBJECT_MODEL_FUNC_IF(...)			OBJECT_MODEL_FUNC_IF_BODY(ZProbe, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC(...)							OBJECT_MODEL_FUNC_BODY(ZProbe, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC_IF(_condition, ...)			OBJECT_MODEL_FUNC_IF_BODY(ZProbe, _condition, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC_ARRAY_IF(_condition, ...)		OBJECT_MODEL_FUNC_ARRAY_IF_BODY(ZProbe, _condition, __VA_ARGS__)
 
 constexpr ObjectModelArrayTableEntry ZProbe::objectModelArrayTable[] =
 {
@@ -50,13 +52,27 @@ constexpr ObjectModelArrayTableEntry ZProbe::objectModelArrayTable[] =
 		nullptr,
 		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return (((const ZProbe*)self)->type == ZProbeType::dumbModulated) ? 2 : 1; },
 		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
-					{	int v1 = 0;
+					{	int32_t v1 = 0;
 						return ExpressionValue
 								(	(context.GetLastIndex() == 0)
 									? (int32_t)((const ZProbe*)self)->GetReading()
 									: (((const ZProbe*)self)->GetSecondaryValues(v1), v1)
 								);
 					}
+	},
+	// 4. Scanning probe coefficients
+	{
+		nullptr,
+		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return ARRAY_SIZE(ZProbe::scanCoefficients); },
+		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
+				{ return ExpressionValue(((const ZProbe*)self)->scanCoefficients[context.GetLastIndex()], 5); }
+	},
+	// 5. Dive heights
+	{
+		nullptr,
+		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return ARRAY_SIZE(ZProbe::diveHeights); },
+		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
+				{ return ExpressionValue(((const ZProbe*)self)->diveHeights[context.GetLastIndex()], 1); }
 	}
 };
 
@@ -66,17 +82,17 @@ constexpr ObjectModelTableEntry ZProbe::objectModelTable[] =
 {
 	// Within each group, these entries must be in alphabetical order
 	// 0. Probe members
-	{ "calibA",						OBJECT_MODEL_FUNC_IF(self->IsScanning(), self->linearCoefficient, 1), 						ObjectModelEntryFlags::none },
-	{ "calibB",						OBJECT_MODEL_FUNC_IF(self->IsScanning(), self->quadraticCoefficient, 1), 					ObjectModelEntryFlags::none },
 	{ "calibrationTemperature",		OBJECT_MODEL_FUNC(self->calibTemperature, 1), 												ObjectModelEntryFlags::none },
 	{ "deployedByUser",				OBJECT_MODEL_FUNC(self->isDeployedByUser), 													ObjectModelEntryFlags::none },
 	{ "disablesHeaters",			OBJECT_MODEL_FUNC((bool)self->misc.parts.turnHeatersOff), 									ObjectModelEntryFlags::none },
-	{ "diveHeight",					OBJECT_MODEL_FUNC(self->diveHeight, 1), 													ObjectModelEntryFlags::none },
+	{ "diveHeight",					OBJECT_MODEL_FUNC(self->diveHeights[0], 1), 												ObjectModelEntryFlags::obsolete },
+	{ "diveHeights",				OBJECT_MODEL_FUNC_ARRAY(5), 																ObjectModelEntryFlags::none },
 	{ "isCalibrated",				OBJECT_MODEL_FUNC_IF(self->IsScanning(), self->isCalibrated), 								ObjectModelEntryFlags::none },
 	{ "lastStopHeight",				OBJECT_MODEL_FUNC(self->lastStopHeight, 3), 												ObjectModelEntryFlags::none },
 	{ "maxProbeCount",				OBJECT_MODEL_FUNC((int32_t)self->misc.parts.maxTaps), 										ObjectModelEntryFlags::none },
 	{ "offsets",					OBJECT_MODEL_FUNC_ARRAY(0), 																ObjectModelEntryFlags::none },
 	{ "recoveryTime",				OBJECT_MODEL_FUNC(self->recoveryTime, 1), 													ObjectModelEntryFlags::none },
+	{ "scanCoefficients",			OBJECT_MODEL_FUNC_ARRAY_IF(self->IsScanning(), 4), 											ObjectModelEntryFlags::none },
 	{ "speeds",						OBJECT_MODEL_FUNC_ARRAY(1), 																ObjectModelEntryFlags::none },
 	{ "temperatureCoefficients",	OBJECT_MODEL_FUNC_ARRAY(2), 																ObjectModelEntryFlags::none },
 	{ "threshold",					OBJECT_MODEL_FUNC((int32_t)self->targetAdcValue), 												ObjectModelEntryFlags::none },
@@ -93,7 +109,7 @@ DEFINE_GET_OBJECT_MODEL_TABLE(ZProbe)
 
 #endif
 
-ZProbe::ZProbe(unsigned int num, ZProbeType p_type) noexcept : EndstopOrZProbe(), number(num), lastStopHeight(0.0), isDeployedByUser(false)
+ZProbe::ZProbe(unsigned int num, ZProbeType p_type) noexcept : EndstopOrZProbe(), lastStopHeight(0.0), number(num), isDeployedByUser(false)
 {
 	SetDefaults();
 	type = p_type;
@@ -112,7 +128,7 @@ void ZProbe::SetDefaults() noexcept
 	{
 		tc = 0.0;
 	}
-	diveHeight = DefaultZDive;
+	diveHeights[0] = diveHeights[1] = DefaultZDive;
 	probeSpeeds[0] = probeSpeeds[1] = ConvertSpeedFromMmPerSec(DefaultProbingSpeed);
 	travelSpeed = ConvertSpeedFromMmPerSec(DefaultZProbeTravelSpeed);
 	recoveryTime = 0.0;
@@ -142,7 +158,20 @@ void ZProbe::PrepareForUse(const bool probingAway) noexcept
 	}
 }
 
-float ZProbe::GetStartingHeight() const noexcept
+// Get the dive height that is in effect for the next tap
+float ZProbe::GetDiveHeight(int tapsDone) const noexcept
+{
+	if (FastThenSlowProbing())
+	{
+		++tapsDone;
+	}
+	return diveHeights[(tapsDone < 1) ? 0 : 1];
+}
+
+// Get the height we should move to when starting this probe.
+// If firstTap is true, always move to the primary dive height.
+// Otherwise if the secondary dive height is smaller than the primary, move to the secondary dive height plus the error.
+float ZProbe::GetStartingHeight(bool firstTap, float previousHeightError) const noexcept
 {
 	switch (type)
 	{
@@ -150,7 +179,8 @@ float ZProbe::GetStartingHeight() const noexcept
 		return GetActualTriggerHeight();
 
 	default:
-		return diveHeight + GetActualTriggerHeight();
+		return ((!firstTap && diveHeights[1] < diveHeights[0]) ? diveHeights[1] + previousHeightError : diveHeights[0])
+			+ GetActualTriggerHeight();
 	}
 }
 
@@ -161,7 +191,7 @@ bool ZProbe::WriteParameters(FileStore *f, unsigned int probeNumber) const noexc
 	const char* axisLetters = reprap.GetGCodes().GetAxisLetters();
 	const size_t numTotalAxes = reprap.GetGCodes().GetTotalAxes();
 	String<StringLength256> scratchString;
-	scratchString.printf("G31 K%u P%d", probeNumber, targetAdcValue);
+	scratchString.printf("G31 K%u P%" PRIi32, probeNumber, targetAdcValue);
 	for (size_t i = 0; i < numTotalAxes; ++i)
 	{
 		if (axisLetters[i] != 'Z')
@@ -175,9 +205,9 @@ bool ZProbe::WriteParameters(FileStore *f, unsigned int probeNumber) const noexc
 
 #endif
 
-int ZProbe::GetReading() const noexcept
+int32_t ZProbe::GetReading() const noexcept
 {
-	int zProbeVal = 0;
+	int32_t zProbeVal = 0;
 	const Platform& p = reprap.GetPlatform();
 	if (type == ZProbeType::unfilteredDigital || type == ZProbeType::blTouch || (p.GetZProbeOnFilter().IsValid() && p.GetZProbeOffFilter().IsValid()))
 	{
@@ -186,18 +216,18 @@ int ZProbe::GetReading() const noexcept
 		case ZProbeType::analog:				// Simple or intelligent IR sensor
 		case ZProbeType::alternateAnalog:		// Alternate sensor
 		case ZProbeType::digital:				// Switch connected to Z probe input
-		case ZProbeType::scanningAnalog:
-			zProbeVal = (int) ((p.GetZProbeOnFilter().GetSum() + p.GetZProbeOffFilter().GetSum()) / (2 * ZProbeAverageReadings));
+			zProbeVal = (int32_t)((p.GetZProbeOnFilter().GetSum() + p.GetZProbeOffFilter().GetSum()) / (int32_t)(2 * ZProbeAverageReadings));
 			break;
 
 		case ZProbeType::dumbModulated:		// Dumb modulated IR sensor.
 			// We assume that zProbeOnFilter and zProbeOffFilter average the same number of readings.
 			// Because of noise, it is possible to get a negative reading, so allow for this.
-			zProbeVal = (int) (((int32_t)p.GetZProbeOnFilter().GetSum() - (int32_t)p.GetZProbeOffFilter().GetSum())/(int)ZProbeAverageReadings);
+			zProbeVal = ((int32_t)p.GetZProbeOnFilter().GetSum() - (int32_t)p.GetZProbeOffFilter().GetSum())/(int32_t)ZProbeAverageReadings;
 			break;
 
 		case ZProbeType::unfilteredDigital:		// Switch connected to Z probe input, no filtering
 		case ZProbeType::blTouch:				// blTouch is now unfiltered too
+		case ZProbeType::scanningAnalog:		// scanning analog probes are unfiltered for speed
 			zProbeVal = GetRawReading();
 			break;
 
@@ -220,7 +250,7 @@ int ZProbe::GetReading() const noexcept
 	return zProbeVal;
 }
 
-int ZProbe::GetSecondaryValues(int& v1) const noexcept
+int32_t ZProbe::GetSecondaryValues(int32_t& v1) const noexcept
 {
 	const Platform& p = reprap.GetPlatform();
 	if (p.GetZProbeOnFilter().IsValid() && p.GetZProbeOffFilter().IsValid())
@@ -237,10 +267,10 @@ int ZProbe::GetSecondaryValues(int& v1) const noexcept
 	return 0;
 }
 
-// Test whether we are at or near the stop
+// Test whether we are at or near the stop. May be called from an ISR as well and from a normal task context.
 bool ZProbe::Stopped() const noexcept
 {
-	const int zProbeVal = GetReading();
+	const int32_t zProbeVal = GetReading();
 	return zProbeVal >= targetAdcValue;
 }
 
@@ -376,12 +406,12 @@ GCodeResult ZProbe::HandleG31(GCodeBuffer& gb, const StringRef& reply) THROWS(GC
 	{
 		const int v0 = GetReading();
 		reply.printf("Z probe %u: current reading %d", number, v0);
-		int v1;
+		int32_t v1;
 		if (GetSecondaryValues(v1) == 1)
 		{
-			reply.catf(" (%d)", v1);
+			reply.catf(" (%" PRIi32 ")", v1);
 		}
-		reply.catf(", threshold %d, trigger height %.3f", targetAdcValue, (double)-offsets[Z_AXIS]);
+		reply.catf(", threshold %" PRIi32 ", trigger height %.3f", targetAdcValue, (double)-offsets[Z_AXIS]);
 		if (temperatureCoefficients[0] != 0.0 || temperatureCoefficients[1] != 0.0)
 		{
 			reply.catf(" at %.1f" DEGREE_SYMBOL "C, temperature coefficients [%.1f/" DEGREE_SYMBOL "C, %.1f/" DEGREE_SYMBOL "C^2]",
@@ -401,7 +431,13 @@ GCodeResult ZProbe::HandleG31(GCodeBuffer& gb, const StringRef& reply) THROWS(GC
 
 GCodeResult ZProbe::Configure(GCodeBuffer& gb, const StringRef &reply, bool& seen) THROWS(GCodeException)
 {
-	gb.TryGetFValue('H', diveHeight, seen);					// dive height
+	if (gb.Seen('H'))										// dive heights
+	{
+		size_t numHeights = 2;
+		gb.GetFloatArray(diveHeights, numHeights, true);
+		seen = true;
+	}
+
 	if (gb.Seen('F'))										// feed rate i.e. probing speed
 	{
 		float userProbeSpeeds[2];
@@ -441,8 +477,8 @@ GCodeResult ZProbe::Configure(GCodeBuffer& gb, const StringRef &reply, bool& see
 
 	reply.printf("Z Probe %u: type %u", number, (unsigned int)type);
 	const GCodeResult rslt = AppendPinNames(reply);
-	reply.catf(", dive height %.1fmm, probe speeds %d,%dmm/min, travel speed %dmm/min, recovery time %.2f sec, heaters %s, max taps %u, max diff %.2f",
-					(double)diveHeight,
+	reply.catf(", dive heights %.1f,%.1fmm, probe speeds %d,%dmm/min, travel speed %dmm/min, recovery time %.2f sec, heaters %s, max taps %u, max diff %.2f",
+					(double)diveHeights[0], (double)diveHeights[1],
 					(int)InverseConvertSpeedToMmPerMin(probeSpeeds[0]),
 					(int)InverseConvertSpeedToMmPerMin(probeSpeeds[1]),
 					(int)InverseConvertSpeedToMmPerMin(travelSpeed),
@@ -468,22 +504,107 @@ void ZProbe::SetLastStoppedHeight(float h) noexcept
 // Scanning support
 GCodeResult ZProbe::SetScanningCoefficients(float aParam, float bParam) noexcept
 {
-	linearCoefficient = aParam;
-	quadraticCoefficient = bParam;
+	scanCoefficients[0] = scanCoefficients[3] = 0.0;
+	scanCoefficients[1] = aParam;
+	scanCoefficients[2] = bParam;
 	isCalibrated = true;
 	return GCodeResult::ok;
+}
+
+float ZProbe::ConvertReadingToHeightDifference(int32_t reading) const noexcept
+{
+	const float diff = (float)(reading - targetAdcValue);
+	return scanCoefficients[0] + diff * (scanCoefficients[1] + diff * (scanCoefficients[2] + diff * scanCoefficients[3]));
 }
 
 GCodeResult ZProbe::ReportScanningCoefficients(const StringRef& reply) noexcept
 {
 	if (isCalibrated)
 	{
-		reply.printf("A=%.2f B=%.1f", (double)linearCoefficient, (double)quadraticCoefficient);
+		reply.printf("Scanning probe coefficients [%.3g %.3g %.3g %.3g]", (double)scanCoefficients[0], (double)scanCoefficients[1], (double)scanCoefficients[2], (double)scanCoefficients[3]);
 		return GCodeResult::ok;
 	}
 
 	reply.copy("Probe has not been calibrated");
 	return GCodeResult::error;
+}
+
+void ZProbe::CalibrateScanningProbe(const int32_t calibrationReadings[], size_t numCalibrationReadingsTaken, float heightChangePerPoint, const StringRef& reply) noexcept
+{
+	const int32_t referenceReading = calibrationReadings[numCalibrationReadingsTaken/2];
+	FixedMatrix<float, 4, 5> matrix;
+	matrix.Fill(0.0);
+
+	// Do a least squares fit of a cubic polynomial to the data
+	// Store { N, sum(X), sum(X^2), sum(X^3) sum(Y) } in row 0
+	// Store { sum(X), sum(X^2), sum(X^3), sum(X^4), sum(XY) } in row 1
+	// Store { sum(X^2), sum(X^3), sum(X^4), sum(X^5), sum(X^2Y) } in row 2
+	// Store { sum(X^3), sum(X^4), sum(X^5), sum(X^6), sum(X^3Y) } in row 3
+	matrix(0, 0) = (float)numCalibrationReadingsTaken;
+	for (size_t i = 0; i < numCalibrationReadingsTaken; ++i)
+	{
+		const float y = ((int)(numCalibrationReadingsTaken/2) - (int)i) * heightChangePerPoint;		// the height different from the trigger height
+		const float x = (float)(calibrationReadings[i] - referenceReading);							// the difference in reading from the target reading at the trigger height
+		const float x2 = fsquare(x);
+		const float x3 = x * x2;
+		const float x4 = fsquare(x2);
+		const float x5 = x * x4;
+		const float x6 = x3 * x3;
+		const float xy = x * y;
+		const float x2y = x2 * y;
+		const float x3y = x3 * y;
+		matrix(0, 1) += x;
+		matrix(0, 2) += x2;
+		matrix(0, 3) += x3;
+		matrix(0, 4) += y;
+		matrix(1, 0) += x;
+		matrix(1, 1) += x2;
+		matrix(1, 2) += x3;
+		matrix(1, 3) += x4;
+		matrix(1, 4) += xy;
+		matrix(2, 0) += x2;
+		matrix(2, 1) += x3;
+		matrix(2, 2) += x4;
+		matrix(2, 3) += x5;
+		matrix(2, 4) += x2y;
+		matrix(3, 0) += x3;
+		matrix(3, 1) += x4;
+		matrix(3, 2) += x5;
+		matrix(3, 3) += x6;
+		matrix(3, 4) += x3y;
+	}
+	matrix.GaussJordan(4, 5);
+
+	scanCoefficients[0] = matrix(0, 4);
+	scanCoefficients[1] = matrix(1, 4);
+	scanCoefficients[2] = matrix(2, 4);
+	scanCoefficients[3] = matrix(3, 4);
+	targetAdcValue = referenceReading;
+	isCalibrated = true;
+	ReportScanningCoefficients(reply);
+
+	// Calculate the RMS error after subtracting the mean error
+	float sumOfErrorSquares = 0.0;
+	for (size_t i = 0; i < numCalibrationReadingsTaken; ++i)
+	{
+		const float readingDiff = (float)(calibrationReadings[i] - referenceReading);
+		const float actualHeightDiff = ((int)(numCalibrationReadingsTaken/2) - (int)i) * heightChangePerPoint;	// the height different from the trigger height
+		const float predictedHeightDiff = scanCoefficients[0] + readingDiff * (scanCoefficients[1] + readingDiff * (scanCoefficients[2] + readingDiff * scanCoefficients[3]));	// the predicted value from the fitted curve
+		sumOfErrorSquares += fsquare(predictedHeightDiff - actualHeightDiff);
+	}
+
+	if (reprap.Debug(Module::Move))
+	{
+		debugPrintf("NumReadings: %u\nHeight interval: %.5f\nScanned data:", numCalibrationReadingsTaken, (double)heightChangePerPoint);
+		for (size_t i = 0; i < numCalibrationReadingsTaken; ++i)
+		{
+			debugPrintf("%c%" PRIi32, (i == 0) ? ' ' : ',', calibrationReadings[i] - referenceReading);
+		}
+		debugPrintf("\nFit: %.5f,%.5g,%.5g,%.5g\n", (double)scanCoefficients[0], (double)scanCoefficients[1], (double)scanCoefficients[2], (double)scanCoefficients[3]);
+	}
+
+	reply.catf(", reading at trigger height %" PRIi32 ", rms error %.3fmm",
+					referenceReading, (double)sqrtf(sumOfErrorSquares/(float)numCalibrationReadingsTaken));
 }
 
 // End

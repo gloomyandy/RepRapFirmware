@@ -319,11 +319,7 @@ private:
 	bool useTaper;										// True to taper off the compensation
 	bool probeReadingNeeded = false;					// true if the laser task needs to take a Z probe reading
 
-#if STM32
-	static constexpr size_t LaserTaskStackWords = 120;	// stack size in dwords for the laser and IOBits task
-#else
-	static constexpr size_t LaserTaskStackWords = 100;	// stack size in dwords for the laser and IOBits task
-#endif
+	static constexpr size_t LaserTaskStackWords = 200;	// stack size in dwords for the laser and IOBits task (increased to support scanning Z probes)
 	static Task<LaserTaskStackWords> *laserTask;		// the task used to manage laser power or IOBits
 };
 

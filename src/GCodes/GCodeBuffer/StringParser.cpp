@@ -1698,10 +1698,20 @@ void StringParser::PrintCommand(const StringRef& s) const noexcept
 }
 
 // Append the full command content to a string
-// This is called when we report a "Bad command" error, so make sure we display any control characters.
+// This is used when logging and also called when we report a "Bad command" error, so make sure we display any control characters.
 void StringParser::AppendFullCommand(const StringRef &s) const noexcept
 {
-	for (size_t i = commandStart; i < commandEnd; ++i)
+	// Don't include any trailing tabs or spaces (e.g. before an end-of-line comment)
+	size_t cmdEnd = commandEnd;
+	{
+		char c;
+		while (cmdEnd != 0 && ((c = gb.buffer[cmdEnd - 1]) == ' ' || c == '\t'))
+		{
+			--cmdEnd;
+		}
+	}
+
+	for (size_t i = commandStart; i < cmdEnd; ++i)
 	{
 		const char c = gb.buffer[i];
 		if (c < 0x20)
@@ -2019,24 +2029,20 @@ void StringParser::SkipWhiteSpace() noexcept
 	}
 }
 
-void StringParser::AddParameters(VariableSet& vs, int codeRunning) noexcept
+void StringParser::AddParameters(VariableSet& vs, int codeRunning) THROWS(GCodeException)
 {
-	parametersPresent.Iterate([this, &vs, codeRunning](unsigned int bit, unsigned int count)
+	parametersPresent.IterateWithExceptions([this, &vs, codeRunning](unsigned int bit, unsigned int count)
 								{
 									const char letter = BitNumberToParameterLetter(bit);
 									if ((letter != 'P' || codeRunning != 98) && Seen(letter))
 									{
+										const char c = gb.buffer[readPointer];
+										if (!isdigit(c) && c != '"' && c != '{' && c != '.')
+										{
+											throw ConstructParseException("invalid value for parameter '%c'", (uint32_t)c);
+										}
 										ExpressionParser parser(gb, &gb.buffer[readPointer], &gb.buffer[commandEnd]);
-										ExpressionValue ev;
-										try
-										{
-											ev = parser.Parse();
-										}
-										catch (const GCodeException&)
-										{
-											//TODO can we report the error anywhere?
-											ev.SetNull(nullptr);
-										}
+										ExpressionValue ev = parser.Parse();
 										char paramName[2] = { letter, 0 };
 										vs.InsertNewParameter(paramName, ev);
 									}

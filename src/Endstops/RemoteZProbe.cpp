@@ -16,15 +16,23 @@
 #include <Platform/Platform.h>
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 
+static void GlobalScanningProbeCallback(CallbackParameter param, RemoteInputHandle h, uint32_t val) noexcept
+{
+	((RemoteZProbe*)param.vp)->ScanningProbeCallback(h, val);
+}
+
 // Members of class RemoteZProbe
 RemoteZProbe::~RemoteZProbe()
 {
-	String<StringLength100> reply;
-	const GCodeResult rslt = CanInterface::DeleteHandle(boardAddress, handle, reply.GetRef());
-	if (rslt != GCodeResult::ok)
+	if (handle.IsValid())
 	{
-		reply.cat('\n');
-		reprap.GetPlatform().Message(GetGenericMessageType(rslt), reply.c_str());
+		String<StringLength100> reply;
+		const GCodeResult rslt = CanInterface::DeleteHandle(boardAddress, handle, reply.GetRef());
+		if (rslt != GCodeResult::ok)
+		{
+			reply.cat('\n');
+			reprap.GetPlatform().Message(GetGenericMessageType(rslt), reply.c_str());
+		}
 	}
 }
 
@@ -44,9 +52,11 @@ GCodeResult RemoteZProbe::AppendPinNames(const StringRef& str) noexcept
 	return rslt;
 }
 
-uint16_t RemoteZProbe::GetRawReading() const noexcept
+// Get the raw reading. Not used with scanning Z probes except for reporting in the object model.
+uint32_t RemoteZProbe::GetRawReading() const noexcept
 {
-	return (state) ? 1000 : 0;
+	return (type == ZProbeType::scanningAnalog) ? lastValue
+			: (state) ? 1000 : 0;
 }
 
 bool RemoteZProbe::SetProbing(bool isProbing) noexcept
@@ -64,24 +74,29 @@ bool RemoteZProbe::SetProbing(bool isProbing) noexcept
 // Create a remote Z probe
 GCodeResult RemoteZProbe::Create(const StringRef& pinNames, const StringRef& reply) noexcept
 {
-	if (type != ZProbeType::unfilteredDigital && type != ZProbeType::blTouch)
+	if (type != ZProbeType::unfilteredDigital && type != ZProbeType::blTouch && type != ZProbeType::scanningAnalog)
 	{
-		reply.copy("M558: only Z probe types 8 and 9 are supported on expansion boards");
+		reply.copy("only Z probe types 8, 9 and 11 are supported on expansion boards");
 		return GCodeResult::error;
 	}
 
 	if (strchr(pinNames.c_str(), '+') != nullptr)
 	{
-		reply.copy("M558: output port not supported on expansion boards");
+		reply.copy("expansion boards do not support Z probe output ports");
 		return GCodeResult::error;
 	}
 
 	RemoteInputHandle h;
 	h.Set(RemoteInputHandle::typeZprobe, number, 0);
-	const GCodeResult rc = CanInterface::CreateHandle(boardAddress, h, pinNames.c_str(), 0, ActiveProbeReportInterval, state, reply);
+	const uint16_t threshold = (type == ZProbeType::scanningAnalog) ? 1 : 0;		// nonzero threshold makes it an analog handle
+	const GCodeResult rc = CanInterface::CreateHandle(boardAddress, h, pinNames.c_str(), threshold, ActiveProbeReportInterval, state, reply);
 	if (rc < GCodeResult::error)						// don't set the handle unless it is valid, or we will get an error when this probe is deleted
 	{
 		handle = h;
+		if (type == ZProbeType::scanningAnalog)
+		{
+			(void)GetCalibratedReading();				// get an initial reading for the object model
+		}
 	}
 	return rc;
 }
@@ -93,9 +108,16 @@ GCodeResult RemoteZProbe::Configure(GCodeBuffer& gb, const StringRef &reply, boo
 	{
 		seen = true;
 		const uint32_t newType = gb.GetUIValue();
-		if (newType != (uint32_t)ZProbeType::unfilteredDigital && newType != (uint32_t)ZProbeType::blTouch)
+		if (newType != (uint32_t)ZProbeType::unfilteredDigital && newType != (uint32_t)ZProbeType::blTouch && newType != (uint32_t)ZProbeType::scanningAnalog)
 		{
-			reply.copy("M558: only Z probe types 8 and 9 are supported on expansion boards");
+			reply.copy("only Z probe types 8, 9 and 11 are supported on expansion boards");
+			return GCodeResult::error;
+		}
+
+		// We don't support changing the type between analog and digital
+		if (newType != (uint32_t)type && (newType == (uint32_t)ZProbeType::scanningAnalog || type == ZProbeType::scanningAnalog))
+		{
+			reply.copy("changing the type of this Z probe in this way is not supported");
 			return GCodeResult::error;
 		}
 		type = (ZProbeType)newType;
@@ -113,16 +135,32 @@ GCodeResult RemoteZProbe::SendProgram(const uint32_t zProbeProgram[], size_t len
 }
 
 // Functions used only with scanning Z probes
+// Get the height compared to the nominal trigger height
 float RemoteZProbe::GetCalibratedReading() const noexcept
 {
+	String<1> dummyReply;
+	if (CanInterface::ReadRemoteHandles(boardAddress, handle, handle, GlobalScanningProbeCallback, CallbackParameter((void*)this), dummyReply.GetRef()) == GCodeResult::ok)
+	{
+		return ConvertReadingToHeightDifference((int32_t)lastValue);
+	}
 	return 0.0;
 }
 
+// Callback function for digital Z probes
 void RemoteZProbe::HandleRemoteInputChange(CanAddress src, uint8_t handleMinor, bool newState) noexcept
 {
 	if (src == boardAddress)
 	{
 		state = newState;
+	}
+}
+
+// Callback function for scanning analog Z probes
+void RemoteZProbe::ScanningProbeCallback(RemoteInputHandle h, uint32_t val) noexcept
+{
+	if (h == handle)
+	{
+		lastValue = val;
 	}
 }
 

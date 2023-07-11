@@ -91,14 +91,14 @@ constexpr unsigned int MaxBlockIndent = 10;				// maximum indentation of GCode. 
 //     Using single-precision maths and up to 9-factor calibration: (9 + 5) * 4 bytes per point
 //     Using double-precision maths and up to 9-factor calibration: (9 + 5) * 8 bytes per point
 //   So 32 points using double precision arithmetic need 3584 bytes of stack space.
-#if SAM4E || SAM4S || SAME70 || SAME5x || STM32
+#if SAME70 || STM32H7
+constexpr size_t MaxGridProbePoints = 961;				// 961 allows us to probe e.g. 300x300 at 10mm intervals
+#else
 constexpr size_t MaxGridProbePoints = 441;				// 441 allows us to probe e.g. 400x400 at 20mm intervals
+#endif
 constexpr size_t MaxAxis0GridPoints = 41;				// Maximum number of grid points in one X row
 constexpr size_t MaxProbePoints = 32;					// Maximum number of G30 probe points
 constexpr size_t MaxCalibrationPoints = 32;				// Should a power of 2 for speed
-#else
-# error unsupported processor
-#endif
 
 constexpr float DefaultGridSpacing = 20.0;				// Default bed probing grid spacing in mm
 
@@ -119,7 +119,7 @@ constexpr float DefaultProbingSpeed = 2.0;				// Default Z probing speed mm/sec
 constexpr float DefaultZProbeTravelSpeed = 100.0;		// Default speed for travel to probe points
 constexpr float DefaultZProbeTolerance = 0.03;			// How close the Z probe trigger height from consecutive taps must be
 constexpr uint8_t DefaultZProbeTaps = 1;				// The maximum number of times we probe each point
-constexpr int DefaultZProbeADValue = 500;				// Default trigger threshold
+constexpr int32_t DefaultZProbeADValue = 500;			// Default trigger threshold
 
 constexpr float SILLY_Z_VALUE = -9999.0;				// Millimetres
 

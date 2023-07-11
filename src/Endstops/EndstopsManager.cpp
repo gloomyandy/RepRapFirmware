@@ -38,8 +38,8 @@ ReadWriteLock EndstopsManager::zProbesLock;
 // Otherwise the table will be allocated in RAM instead of flash, which wastes too much RAM.
 
 // Macro to build a standard lambda function that includes the necessary type conversions
-#define OBJECT_MODEL_FUNC(...)				OBJECT_MODEL_FUNC_BODY(EndstopsManager, __VA_ARGS__)
-#define OBJECT_MODEL_FUNC_IF(...)			OBJECT_MODEL_FUNC_IF_BODY(EndstopsManager, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC(...)					OBJECT_MODEL_FUNC_BODY(EndstopsManager, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC_IF(_condition, ...)	OBJECT_MODEL_FUNC_IF_BODY(EndstopsManager, _condition, __VA_ARGS__)
 
 constexpr ObjectModelArrayTableEntry EndstopsManager::objectModelArrayTable[] =
 {
@@ -163,6 +163,11 @@ ReadLockedPointer<ZProbe> EndstopsManager::GetZProbeOrDefault(size_t index) cons
 										(index < ARRAY_SIZE(zProbes) && zProbes[index] != nullptr)
 										? zProbes[index]
 										: defaultZProbe);
+}
+
+ZProbe *_ecv_null EndstopsManager::GetZProbeFromISR(size_t index) const noexcept
+{
+	return (index < ARRAY_SIZE(zProbes)) ? zProbes[index] : nullptr;
 }
 
 ZProbe& EndstopsManager::GetDefaultZProbeFromISR() const noexcept
@@ -615,7 +620,7 @@ GCodeResult EndstopsManager::HandleM558(GCodeBuffer& gb, const StringRef &reply)
 {
 	const unsigned int probeNumber = (gb.Seen('K')) ? gb.GetLimitedUIValue('K', MaxZProbes) : 0;
 
-	if (gb.GetCommandNumber() == 1)
+	if (gb.GetCommandFraction() == 1)
 	{
 		return reprap.GetGCodes().HandleM558Point1(gb, reply, probeNumber);
 	}

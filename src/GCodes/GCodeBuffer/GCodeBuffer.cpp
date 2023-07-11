@@ -1298,7 +1298,7 @@ void GCodeBuffer::AppendFullCommand(const StringRef &s) const noexcept
 	PARSER_OPERATION(AppendFullCommand(s));
 }
 
-void GCodeBuffer::AddParameters(VariableSet& vars, int codeRunning) noexcept
+void GCodeBuffer::AddParameters(VariableSet& vars, int codeRunning) THROWS(GCodeException)
 {
 	PARSER_OPERATION(AddParameters(vars, codeRunning));
 }

@@ -91,7 +91,7 @@ GCodeResult GCodes::ExecuteG30(GCodeBuffer& gb, const StringRef& reply) THROWS(G
 
 	// If we get here then we actually need to probe
 	const auto zp = SetZProbeNumber(gb, 'K');						// may throw, so do this before changing the state
-	InitialiseTaps(zp->HasTwoProbingSpeeds());
+	InitialiseTaps(zp->FastThenSlowProbing());
 
 #if SUPPORT_ASYNC_MOVES
 	axesMoving.SetBit(Z_AXIS);
@@ -162,7 +162,7 @@ void GCodes::TakeScanningProbeReading() noexcept
 	const auto zp = platform.GetZProbeOrDefault(currentZProbeNumber);
 	const float heightError = zp->GetCalibratedReading();
 	HeightMap& hm = reprap.GetMove().AccessHeightMap();
-	hm.SetGridHeight(gridAxis0Index, gridAxis1Index, heightError);
+	hm.SetGridHeight(gridAxis0Index, gridAxis1Index, -heightError);
 	if (gridAxis0Index != lastAxis0Index)
 	{
 		if (gridAxis1Index & 1u)
@@ -857,13 +857,13 @@ GCodeResult GCodes::HandleM558Point1(GCodeBuffer& gb, const StringRef &reply, un
 		MovementState& ms = GetMovementState(gb);
 		AllocateAxes(gb, ms, axesMoving, ParameterLettersBitmap());		// allocate the Z axis
 #endif
-
 		currentZProbeNumber = probeNumber;
+		zp->PrepareForUse(false);										// needed to set actual trigger height allowing for temperature compensation
 
 		// Set the scanning range to a whole number of microsteps and calculate the microsteps per point
 		const unsigned int microstepsPerHalfScan = (unsigned int)(requestedScanningRange * platform.DriveStepsPerUnit(Z_AXIS));
 		constexpr unsigned int MaxCalibrationPointsPerHalfScan = (MaxScanningProbeCalibrationPoints - 1)/2;
-		const unsigned int microstepsPerPoint = (microstepsPerHalfScan + MaxCalibrationPointsPerHalfScan - 1)/MaxCalibrationPointsPerHalfScan;
+		const unsigned int microstepsPerPoint = max<unsigned int>((microstepsPerHalfScan + MaxCalibrationPointsPerHalfScan - 1)/MaxCalibrationPointsPerHalfScan, 1);
 		heightChangePerPoint = microstepsPerPoint/platform.DriveStepsPerUnit(Z_AXIS);
 		const size_t pointsPerHalfScan = microstepsPerHalfScan/microstepsPerPoint;
 		calibrationStartingHeight = zp->GetActualTriggerHeight() + pointsPerHalfScan * heightChangePerPoint;
@@ -877,6 +877,43 @@ GCodeResult GCodes::HandleM558Point1(GCodeBuffer& gb, const StringRef &reply, un
 	}
 
 	return zp->ReportScanningCoefficients(reply);
+}
+
+// Decode whether we have done enough taps and will accept the reading. Sets member variable acceptReading accordingly.
+// Returns true if we need to give a "Z probe readings not consistent" warning.
+void GCodes::CheckIfMoreTapsNeeded(GCodeBuffer& gb, const ZProbe& zp) noexcept
+{
+	if (zp.GetMaxTaps() < 2 && tapsDone == 1)
+	{
+		acceptReading = true;
+		return;
+	}
+
+	if (tapsDone >= 2)
+	{
+		g30zHeightErrorLowestDiff = min<float>(g30zHeightErrorLowestDiff, fabsf(g30zHeightError - g30PrevHeightError));
+		if (zp.GetTolerance() > 0.0 && g30zHeightErrorLowestDiff <= zp.GetTolerance())
+		{
+			g30zHeightError = (g30zHeightError + g30PrevHeightError)/2;
+			acceptReading = true;
+			return;
+		}
+	}
+
+	if (tapsDone == (int)zp.GetMaxTaps())
+	{
+		// We no longer flag this as a probing error, instead we take the average and issue a warning
+		acceptReading = true;
+		g30zHeightError = g30zHeightErrorSum/tapsDone;
+		if (zp.GetTolerance() > 0.0)				// zero or negative tolerance means always average all readings, so no warning message
+		{
+			gb.LatestMachineState().SetError("Z probe readings not consistent");
+		}
+	}
+	else
+	{
+		acceptReading = false;							// more taps needed
+	}
 }
 
 // End
