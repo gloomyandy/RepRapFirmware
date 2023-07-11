@@ -177,6 +177,13 @@ constexpr uint32_t DRVCONF_FILT_ISENSE_MASK = (3 << 20);	// Filter time constant
 															// Hint: Increase setting if motor chopper noise occurs due to cross-coupling of both coils. Reset Default = 0.
 constexpr uint32_t DefaultDrvConfReg = (2 << DRVCONF_BBMCLKS_SHIFT) | (2 << DRVCONF_OTSELECT_SHIFT);
 
+// TMC2040 has different DRV_CONF settings
+constexpr unsigned int DRV_CONF40_CURRENT_RANGE_SHIFT = 0;
+constexpr uint32_t DRV_CONF40_CURRENT_RANGE_MASK = 0x03;										// 0 = 1A, 1 = 2A, 2 = 3A, 3 = 3A peak current
+constexpr unsigned int DRV_CONF40_SLOPE_CONTROL_SHIFT = 4;
+constexpr uint32_t DRV_CONF40_SLOPE_CONTROL_MASK = 0x03 << DRV_CONF40_SLOPE_CONTROL_SHIFT;		// 0 = 100V/us, 1 = 200V/us, 2 = 400V/us, 3 - 800V/us
+constexpr uint32_t DefaultDrvConfReg40 = (2 << DRV_CONF40_CURRENT_RANGE_SHIFT);
+
 constexpr uint8_t REGNUM_5160_GLOBAL_SCALER = 0x0B;			// Global scaling of Motor current. This value is multiplied to the current scaling in order to adapt a drive to a
 															// certain motor type. This value should be chosen before tuning other settings, because it also influences chopper hysteresis.
 															// 0: Full Scale (or write 256) 1 … 31: Not allowed for operation 32 … 255: 32/256 … 255/256 of maximum current.
@@ -273,8 +280,8 @@ enum class DriversState : uint8_t
 {
 	shutDown = 0,
 	noPower,				// no VIN power
-	powerWait,
-	noDrivers,
+	powerWait,				// waiting for power
+	noDriver,				// no driver found or configured
 	notInitialised,			// have VIN power but not started initialising drivers
 	initialising,			// in the process of initialising the drivers
 	ready					// drivers are initialised and ready
@@ -323,15 +330,16 @@ public:
 	void SetStandstillCurrentPercent(float percent) noexcept;
 
 
-	void GetSpiCommand(uint8_t *sendDataBlock) noexcept;
+	bool GetSpiCommand(uint8_t *sendDataBlock, bool forceRead = false) noexcept;
 	void TransferSucceeded(const uint8_t *rcvDataBlock) noexcept;
 	void TransferFailed() noexcept;
 	DriversState SetupDriver(bool reset) noexcept;
-	bool inline IsReady() noexcept {return ready;}
+	bool inline IsActive() noexcept {return state >= DriversState::initialising;}
+	bool inline IsReady() noexcept {return state == DriversState::ready;}
 	uint8_t inline GetDriverNumber() const noexcept { return driverNumber; }
 
 private:
-	bool ready;
+	DriversState state;
 	uint8_t driverNumber;
 	bool SetChopConf(uint32_t newVal) noexcept;
 	void UpdateRegister(size_t regIndex, uint32_t regVal) noexcept;
@@ -444,7 +452,7 @@ void Tmc51xxDriverState::Init(uint32_t p_driverNumber) noexcept
 pre(!driversPowered)
 {
 	driverNumber = p_driverNumber;
-	ready = false;
+	state = DriversState::noPower;
 	axisNumber = p_driverNumber;										// axes are mapped straight through to drivers initially
 	driverBit = DriversBitmap::MakeFromBits(p_driverNumber);
 	enabled = false;
@@ -822,7 +830,7 @@ void Tmc51xxDriverState::SetMaxCurrent(float value) noexcept
 // Read the status
 StandardDriverStatus Tmc51xxDriverState::ReadStatus(bool accumulated, bool clearAccumulated) noexcept
 {
-	if (!ready)
+	if (!IsReady())
 	{
 		StandardDriverStatus rslt;
 		rslt.all = 0;
@@ -864,7 +872,7 @@ StandardDriverStatus Tmc51xxDriverState::ReadStatus(bool accumulated, bool clear
 // Append any additonal driver status to a string, and reset the min/max load values
 void Tmc51xxDriverState::AppendDriverStatus(const StringRef& reply) noexcept
 {
-	if (!ready)
+	if (!IsReady())
 	{
 		return;
 	}
@@ -932,7 +940,7 @@ void Tmc51xxDriverState::AppendStallConfig(const StringRef& reply) const noexcep
 #endif
 
 // In the following, only byte accesses to sendDataBlock are allowed, because accesses to non-cacheable memory must be aligned
-void Tmc51xxDriverState::GetSpiCommand(uint8_t *sendDataBlock) noexcept
+bool Tmc51xxDriverState::GetSpiCommand(uint8_t *sendDataBlock, bool forceRead) noexcept
 {
 	// Find which register to send. The common case is when no registers need to be updated.
 	{
@@ -940,7 +948,7 @@ void Tmc51xxDriverState::GetSpiCommand(uint8_t *sendDataBlock) noexcept
 		registersToUpdate |= newRegistersToUpdate.exchange(0);
 	}
 
-	if (registersToUpdate == 0)
+	if (registersToUpdate == 0 || forceRead)
 	{
 		// Read a register
 		regIndexBeingUpdated = NoRegIndex;
@@ -962,6 +970,7 @@ void Tmc51xxDriverState::GetSpiCommand(uint8_t *sendDataBlock) noexcept
 		sendDataBlock[2] = 0;
 		sendDataBlock[3] = 0;
 		sendDataBlock[4] = 0;
+		return false;
 	}
 	else
 	{
@@ -970,6 +979,7 @@ void Tmc51xxDriverState::GetSpiCommand(uint8_t *sendDataBlock) noexcept
 		regIndexBeingUpdated = regNum;
 		sendDataBlock[0] = ((regNum == WriteSpecial) ? specialWriteRegisterNumber : WriteRegNumbers[regNum]) | 0x80;
 		StoreBEU32(sendDataBlock + 1, writeRegisters[regNum]);
+		return true;
 	}
 }
 
@@ -1082,16 +1092,16 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 	{
 		accumulatedDriveStatus = 0;
 		if (TMC_PINS[driverNumber] == NoPin)
-			ready = false;
+			state = DriversState::noDriver;
 		else
 		{
 			numReads = numWrites = numWriteErrors = 0;
-			ready = true;
+			state = DriversState::initialising;
 		}
-		return DriversState::initialising;
+		return state;
 	}
-	if (!ready)
-		return DriversState::notInitialised;
+	if (state == DriversState::noDriver)
+		return state;
 	// check for errors
 	if (numWriteErrors > NumWriteRegisters)
 	{
@@ -1101,13 +1111,14 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 		accumulatedDriveStatus = 0;
 		for(size_t i = 0; i < NumReadRegisters; i++)
 			readRegisters[i] = 0;
-		ready = false;
-		return DriversState::notInitialised;
+		state = DriversState::noDriver;
+		return state;
 	}
-	if (numReads < NumReadRegisters)
-		return 	DriversState::initialising;
-	else
-		return DriversState::ready;
+	if (numReads >= NumReadRegisters + NumWriteRegisters)
+	{
+		state = DriversState::ready;
+	}
+	return state;
 }
 
 static SharedSpiClient *spiDevice;
@@ -1120,9 +1131,9 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 {
 	for (;;)
 	{
-		if (driversState <= DriversState::noDrivers)
+		if (driversState <= DriversState::noDriver)
 		{
-			if (driversState != DriversState::noDrivers) driversState = DriversState::powerWait;
+			if (driversState != DriversState::noDriver) driversState = DriversState::powerWait;
 			TaskBase::Take();
 		}
 		else
@@ -1161,7 +1172,7 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 								readyCnt++;
 							}
 						}
-						driversState = (readyCnt ? DriversState::ready : DriversState::noDrivers);
+						driversState = (readyCnt ? DriversState::ready : DriversState::noDriver);
 					}
 				}
 			}
@@ -1172,11 +1183,11 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 			}		
 			for (size_t i = 0; i < numTmc51xxDrivers; ++i)
 			{
-				if (driverStates[i].IsReady())
+				if (driverStates[i].IsActive())
 				{
 					fastDigitalWriteLow(TMC_PINS[i+baseDriveNo]);
 					SYNC_GPIO();
-					driverStates[i].GetSpiCommand(sendData);
+					bool isWrite = driverStates[i].GetSpiCommand(sendData);
 					if (SmartDriversSpiCsDelay) 
 					{
 						delay(SmartDriversSpiCsDelay);
@@ -1185,6 +1196,24 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 					fastDigitalWriteHigh(TMC_PINS[i+baseDriveNo]);
 					SYNC_GPIO();
 					driverStates[i].TransferSucceeded(rcvData);
+					// Write commands will return a copy of the write request on the next
+					// operation. However on TMC2240 devices this only seems to be the case
+					// if there is no other bus activity between requests. So for now we force
+					// a read request after a write to allow us to check it worked.
+					if (isWrite)
+					{
+						fastDigitalWriteLow(TMC_PINS[i+baseDriveNo]);
+						SYNC_GPIO();
+						driverStates[i].GetSpiCommand(sendData, true);
+						if (SmartDriversSpiCsDelay) 
+						{
+							delay(SmartDriversSpiCsDelay);
+						}
+						spiDevice->TransceivePacket(sendData, rcvData, 5);
+						fastDigitalWriteHigh(TMC_PINS[i+baseDriveNo]);
+						SYNC_GPIO();
+						driverStates[i].TransferSucceeded(rcvData);
+					}
 				}
 			}
 			spiDevice->Deselect();
@@ -1270,12 +1299,12 @@ void Tmc51xxDriver::TurnDriversOff() noexcept
 		digitalWrite(ENABLE_PINS[driver + baseDriveNo], true);
 	}
 
-	driversState = (driversState == DriversState::noDrivers ? DriversState::powerWait : DriversState::noPower);
+	driversState = (driversState == DriversState::noDriver ? DriversState::powerWait : DriversState::noPower);
 }
 
 bool Tmc51xxDriver::IsReady() noexcept
 {
-	return driversState == DriversState::ready || driversState == DriversState::noDrivers;
+	return driversState == DriversState::ready || driversState == DriversState::noDriver;
 }
 
 
