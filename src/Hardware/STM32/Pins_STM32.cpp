@@ -222,6 +222,16 @@ void ClearPinArrays() noexcept
     InitPinArray(SpiTempSensorCsPins, MaxSpiTempSensors);
 }
 
+static void InitDiagPin()
+{
+    bool dummy;
+    LogicalPin pin;
+    if (LookupPinName("status", pin, dummy))
+    {
+        DiagPin = (Pin)pin;
+    }
+}
+
 //Find Board settings from string
 bool SetBoard(const char* bn) noexcept
 {
@@ -257,6 +267,7 @@ bool SetBoard(const char* bn) noexcept
                 SbcCsPin = LPC_Boards[i].defaults.SbcCsPin;
                 SbcSpiChannel = LPC_Boards[i].defaults.SbcSpiChannel;
     #endif
+                InitDiagPin();
                 return true;
             }
     }

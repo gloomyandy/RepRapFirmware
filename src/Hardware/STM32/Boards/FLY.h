@@ -61,6 +61,9 @@ constexpr PinEntry PinTable_FLY_SUPER5[] =
     {PD_7, "BTNEN2"}, {PB_6, "LCDSS"},
     {PD_6, "BTNEN1"}, {PB_5, "LCDMOSI"},
     {PD_5, "LCDCD"},
+	
+	// Status LED
+	{PD_15, "status"},
 
 };
 
@@ -72,12 +75,12 @@ constexpr BoardDefaults fly_super5_Defaults = {
 # endif
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
-        {PB_3, PB_4, PB_5},                     //SPI2
+        {PA_5, PA_6, PA_7},                     //SPI0 Drivers
+        {PB_13, PB_14, PB_15},                  //SPI1 WiFi
+        {PB_3, PB_4, PB_5},                     //SPI2 EXP
         {NoPin, NoPin, NoPin},                  //SPI3
         {NoPin, NoPin, NoPin},                  //SPI4
-        {NoPin, NoPin, NoPin},                  //SPI5
+        {PD_0, NoPin, PA_15},                   //SPI5 for reprapdiscount display
         {NoPin, NoPin, NoPin},                  //SPI6
         {NoPin, NoPin, NoPin},                  //SPI7
         {NoPin, NoPin, NoPin},                  //SPI8
@@ -179,12 +182,12 @@ constexpr BoardDefaults fly_super8h7_Defaults = {
 #endif
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
-        {PB_3, PB_4, PB_5},                     //SPI2
-        {PD_3, PD_4, PD_5},                     //SPI3
+        {PA_5, PA_6, PA_7},                     //SPI0 EXP
+        {PB_13, PB_14, PB_15},                  //SPI1 WiFi
+        {PB_3, PB_4, PB_5},                     //SPI2 Drivers
+        {PD_3, PD_4, PD_5},                     //SPI3 Accelerometer Header
         {NoPin, NoPin, NoPin},                  //SPI4
-        {NoPin, NoPin, NoPin},                  //SPI5
+        {PC_14, NoPin, PB_2},                   //SPI5 for Reprapdiscount display
         {NoPin, NoPin, NoPin},                  //SPI6
         {NoPin, NoPin, NoPin},                  //SPI7
         {NoPin, NoPin, NoPin},                  //SPI8
@@ -213,7 +216,7 @@ constexpr PinEntry PinTable_FLY_OPENPNP_TOOL[] =
 {
 
     //Thermistors
-    {PC_6, "chamber_temp"},
+    {PC_6, "chamber"},
 
     //Endstops
     {PB_10, "io0"},
@@ -240,6 +243,9 @@ constexpr PinEntry PinTable_FLY_OPENPNP_TOOL[] =
     {PD_2, "SDCMD"  },
     {PC_11, "SDD3"  },
     {PC_10, "SDD2"  },
+	
+	// Status LED
+	{PA_15, "status"},
 
 
 };
@@ -248,11 +254,11 @@ constexpr BoardDefaults fly_openpnp_tool_Defaults = {
     {0x69632a35, 0x8a5f5551, 0xd0c680ae},       // Signatures
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0 EXP SD
-        {PB_13, PB_14, PB_15},                  //SPI1 Wifi module
-        {PB_3, PB_4, PB_5},                     //SPI2 MOT
-        {NoPin, NoPin, NoPin},                  //SPI3 MAX31855 MAX31865
-        {NoPin, NoPin, NoPin},                  //SPI4 used for single wire ender displays
+        {NoPin, NoPin, NoPin},                  //SPI0 
+        {PB_13, PB_14, PB_15},                  //SPI1 Accelerometer
+        {NoPin, NoPin, NoPin},                  //SPI2 
+        {NoPin, NoPin, NoPin},                  //SPI3 
+        {NoPin, NoPin, NoPin},                  //SPI4 
         {NoPin, NoPin, NoPin},                  //SPI5
     },
     3,                                            // Number of drivers
@@ -344,7 +350,7 @@ constexpr PinEntry PinTable_FLY_F407ZG[] =
     {PD_2, "SDCMD"},
     {PC_11, "SDD3"},
     {PC_10, "SDD2"},
-
+ 
     // UART
     {PA_9, "TX1"},
     {PA_10, "RX1"},
@@ -354,12 +360,12 @@ constexpr BoardDefaults fly_f407zg_Defaults = {
     {0x8a5f5551, 0xd0c680ae},                   // Signatures
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
-        {NoPin, NoPin, NoPin},                  //SPI2
+        {PA_5, PA_6, PA_7},                     //SPI0 MAX6675
+        {PB_13, PB_14, PB_15},                  //SPI1 on EXP and Mot Drivers
+        {PB_3, PB_4, PB_5},                     //SPI2 On the ESP Pads
         {PE_10, NoPin, PE_14},                  //SPI3
         {NoPin, NoPin, NoPin},                  //SPI4
-        {NoPin, NoPin, NoPin},                  //SPI5
+        {PE_8, PE_10, PE_7},                    //SPI5 accelerometer
     },
     9,                                          // Number of drivers
     {PE_1, PG_12,  PD_7, PD_4,  PD_0, PG_8, PG_5, PG_2, PD_9},      //enablePins
@@ -440,6 +446,9 @@ constexpr PinEntry PinTable_FLY_E3[] =
     {PC_6, "FPC9"},
     {PD_0, "FPC10"},
     {PD_1, "FPC11"},
+	
+	// Status LED
+	{PA_8, "status"},
 
 };
 
@@ -447,12 +456,12 @@ constexpr BoardDefaults fly_e3_Defaults = {
     {0xd0c680ae, 0xfd2146b0},                   // Signatures
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
+        {NoPin, NoPin, NoPin},                  //SPI0
+        {PB_13, PB_14, PB_15},                  //SPI1 WiFi
         {NoPin, NoPin, NoPin},                  //SPI2
-        {PC_2, PC_0, PC_1},                     //SPI3
-        {PE_8, NoPin, PB_1},                    //SPI4
-        {PD_6, PD_4, PD_5},                     //SPI5
+        {PC_2, PC_0, PC_1},                     //SPI3 MAX31865 and MAX6675
+        {PE_8, NoPin, PB_1},                    //SPI4 Ender Screen
+        {PE_7, PE_10, PE_9},                    //SPI5 Accelerometer
     },
     4,                                          // Number of drivers
     {PC_15, PE_5, PE_1, PB_5},                  //enablePins
@@ -520,7 +529,7 @@ constexpr PinEntry PinTable_FLY_CDYV2[] =
     {PD_8, "BTNEN1"},
     {PD_9, "BTNEN2"},
 
-    //spi 1  (SD,MAX311865,MAX6675)
+    //spi 1  (SD,MAX31865,MAX6675)
     {PA_4, "SPI1SDCS,LCDSS"},
     {PA_5, "SPI1SCK,LCDSCK"},
     {PA_6, "SPI1MISO,LCDMISO"},
@@ -534,7 +543,7 @@ constexpr PinEntry PinTable_FLY_CDYV2[] =
     {PB_5, "MOTMOSI"},
 
     //Signal light   Neopixel
-    {PD_15, "Neopixel,LED"},
+    {PD_15, "status"},
 
     //Laser 
     {PB_9, "Laser"},
@@ -547,12 +556,12 @@ constexpr BoardDefaults fly_cdyv2_Defaults = {
     {0x8a5f5551, 0xd0c680ae},                   // Signatures
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
-        {PB_3, PB_4, PB_5},                     //SPI2
-        {PE_15, NoPin, PB_2},                   //SPI3
+        {PA_5, PA_6, PA_7},                     //SPI0 EXP
+        {PB_13, PB_14, PB_15},                  //SPI1 WiFi
+        {PB_3, PB_4, PB_5},                     //SPI2 Drivers
+        {PE_15, NoPin, PB_2},                   //SPI3 Screens
         {NoPin, NoPin, NoPin},                  //SPI4
-        {NoPin, NoPin, NoPin},                  //SPI5
+        {PA_13, PE_15, PA_14},                  //SPI5 Accelerometer
     },
     6,                                          // Number of drivers
     {PC_1, PC_14, PB_8, PD_7, PD_4, PD_0},      //enablePins
@@ -623,7 +632,7 @@ constexpr PinEntry PinTable_FLY_E3_PRO[] =
     {PA_10, "RX1"},
 
     //Signal light
-     {PA_8, "LED"},
+     {PA_8, "status"},
 
     //FPC
     {PB_11, "neopixel"},
@@ -638,12 +647,12 @@ constexpr BoardDefaults fly_e3_pro_Defaults = {
     {0xd0c680ae},                   // Signatures
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
+        {NoPin, NoPin, NoPin},                  //SPI0 
+        {PB_13, PB_14, PB_15},                  //SPI1 WiFi
         {NoPin, NoPin, NoPin},                  //SPI2
-        {PC_2, PC_0, PC_1},                     //SPI3
-        {PE_8, NoPin, PB_1},                    //SPI4
-        {PD_6, PD_4, PD_6},                     //SPI5
+        {PD_14, PD_12, PD_13},                  //SPI3 MAX31865 and MAX31855
+        {PE_8, NoPin, PB_1},                    //SPI4 Single Wire Screen
+        {PE_7, PE_10, PE_9},                    //SPI5 Accelerometer
     },
     5,                                          // Number of drivers
     {PE_5, PE_1, PB_5, PD_6 ,PC_15},            //enablePins
@@ -732,12 +741,12 @@ constexpr BoardDefaults fly_super8_Defaults = {
     {0x8a5f5551, 0xd0c680ae},                   // Signatures
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
-        {PB_3, PB_4, PB_5},                     //SPI2
-        {PD_3, PD_4, PD_5},                     //SPI3
+        {PA_5, PA_6, PA_7},                     //SPI0 EXP
+        {PB_13, PB_14, PB_15},                  //SPI1 WiFi
+        {PB_3, PB_4, PB_5},                     //SPI2 Drivers
+        {PD_3, PD_4, PD_5},                     //SPI3 Accelerometer
         {NoPin, NoPin, NoPin},                  //SPI4
-        {NoPin, NoPin, NoPin},                  //SPI5
+        {PC_14, NoPin, PB_2},                   //SPI5 Reprapdiscount Display
     },
     8,                                          // Number of drivers
     {PF_11, PF_14, PG_1, PE_9, PF_2, PC_15, PG_4, PG_7},    //enablePins
@@ -829,12 +838,12 @@ constexpr BoardDefaults fly_e3_prov3_Defaults = {
     {0xd0c680ae},                   // Signatures
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
+        {NoPin, NoPin, NoPin},                  //SPI0
         {PB_13, PB_14, PB_15},                  //SPI1 Wifi module
         {PB_3, PB_4, PB_5},                     //SPI2 used for Fysetc dual wire display
-        {PC_2, PC_0, PC_1},                     //SPI3
+        {PD_14, PD_12, PD_13},                  //SPI3 MAX31855 and MAX31865
         {PE_10, NoPin, PE_8},                   //SPI4 used for single wire ender displays
-        {NoPin, NoPin, NoPin},                  //SPI5
+        {PE_9, NoPin, PA_14},                   //SPI5 Reprapdiscount Display
     },
     5,                                            // Number of drivers
     {PE_5, PE_1, PC_2, PD_6 ,PC_15},           //enablePins
@@ -909,12 +918,12 @@ constexpr BoardDefaults fly_gemini_Defaults = {
     {0xbfecc997},                       // Signatures
     SD_SDIO,                            // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
+        {PA_5, PA_6, PA_7},                     //SPI0 Drivers
+        {PB_13, PB_14, PB_15},                  //SPI1 SBC
         {NoPin, NoPin, NoPin},                  //SPI2
-        {NoPin, NoPin, NoPin},                     //SPI3
-        {NoPin, NoPin, NoPin},                    //SPI4
-        {NoPin, NoPin, NoPin},                     //SPI5
+        {NoPin, NoPin, NoPin},                  //SPI3
+        {NoPin, NoPin, NoPin},                  //SPI4
+        {NoPin, NoPin, NoPin},                  //SPI5
     },
     4,                                            // Number of drivers
     {PB_2, PB_6, PB_5, PB_4},           //enablePins
@@ -982,8 +991,8 @@ constexpr BoardDefaults fly_gemini_v1_1_Defaults = {
     SD_SPI1_B,                            // SD Card access
     {   //CLK, MISO, MOSI
         {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
-        {PB_3, PB_4, PB_5},                     //SPI2
+        {PB_13, PB_14, PB_15},                  //SPI1 SBC
+        {PB_3, PB_4, PB_5},                     //SPI2 Drivers
         {NoPin, NoPin, NoPin},                  //SPI3
         {NoPin, NoPin, NoPin},                  //SPI4
         {NoPin, NoPin, NoPin},                  //SPI5
@@ -1055,9 +1064,9 @@ constexpr BoardDefaults fly_gemini_v2_0_Defaults = {
     {0x318f4fbe},                         // Signatures
     SD_SPI1_B,                            // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
-        {PB_3, PB_4, PB_5},                     //SPI2
+        {PA_5, PA_6, PA_7},                     //SPI0 
+        {PB_13, PB_14, PB_15},                  //SPI1 SBC
+        {PB_3, PB_4, PB_5},                     //SPI2 Drivers
         {NoPin, NoPin, NoPin},                  //SPI3
         {NoPin, NoPin, NoPin},                  //SPI4
         {NoPin, NoPin, NoPin},                  //SPI5
@@ -1131,6 +1140,9 @@ constexpr PinEntry PinTable_FLY_E3_V2[] =
     {PD_2, "SDCMD"  },
     {PC_11, "SDD3"  },
     {PC_10, "SDD2"  },
+	
+	// Status LED
+	{PA_15, "status"},
 
 
 };
@@ -1144,7 +1156,7 @@ constexpr BoardDefaults fly_e3_v2_Defaults = {
         {PB_3, PB_4, PB_5},                     //SPI2 MOT
         {PD_12, PD_13, PD_11},                  //SPI3 MAX31855 MAX31865
         {PE_14, NoPin, PA_13},                  //SPI4 used for single wire ender displays
-        {NoPin, NoPin, NoPin},                  //SPI5
+        {PE_15, NoPin, PA_8},                   //SPI5 Reprapdiscount Display
     },
     5,                                            // Number of drivers
     {PC_1, PC_14, PE_3, PD_6 ,PD_3},           //enablePins
