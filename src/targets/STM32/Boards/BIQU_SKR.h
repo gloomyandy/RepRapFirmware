@@ -138,7 +138,7 @@ constexpr PinEntry PinTable_BTT_SKR_3[] =
     {PC_15, "PWRDET"},
 
     //Status LED
-    {PA_13, "LED"},
+    {PA_13, "LED,status"},
 	
     //EXP1
     {PC_5, "BEEP"},
@@ -168,15 +168,15 @@ constexpr BoardDefaults btt_skr_3_Defaults = {
 # endif
     SD_SDIO,                                  // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
-        {NoPin, NoPin, NoPin},                  //SPI2
-        {NoPin, NoPin, NoPin},                  //SPI3
-        {NoPin, NoPin, NoPin},                  //SPI4
-        {NoPin, NoPin, NoPin},                  //SPI5
-        {NoPin, NoPin, NoPin},                  //SPI6
-        {NoPin, NoPin, NoPin},                  //SPI7
-        {NoPin, NoPin, NoPin},                  //SPI8
+        {PA_5, PA_6, PA_7},                   //SPI0 EXP2
+        {PB_13, PB_14, PB_15},                //SPI1 WiFi
+        {NoPin, NoPin, NoPin},                //SPI2
+        {PE_14, PE_15, PE_13},                //SPI3 Drivers
+        {PC_5, PB_1, PB_0},                   //SPI4 Accelerometer
+        {PE_9, NoPin, PB_1},                  //SPI5 RepRapDiscount Display
+        {NoPin, NoPin, NoPin},                //SPI6
+        {NoPin, NoPin, NoPin},                //SPI7
+        {NoPin, NoPin, NoPin},                //SPI8
     },
     5,                            // Number of drivers
     {PD_6, PD_1, PE_0, PC_7, PD_13}, // enablePins
@@ -262,6 +262,9 @@ constexpr PinEntry PinTable_BIQU_SKR_PRO_v1_1[] =
     {PB_3, "E0CS"},
     {PG_15, "E1CS"},
     {PG_12, "E2CS"},
+	
+	//Status LED
+    {PA_13, "status"},
 
 };
 
@@ -269,10 +272,10 @@ constexpr BoardDefaults biquskr_pro_1_1_Defaults = {
     {0x768a39d6, 0x50da391, 0xa79a1917},        // Signatures
     SD_SPI1_A,                                  // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PB_5},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
-        {PC_10, PC_11, PC_12},                  //SPI2
-        {NoPin, NoPin, NoPin},                  //SPI3
+        {PA_5, PA_6, PB_5},                     //SPI0 SD Card
+        {PB_13, PB_14, PB_15},                  //SPI1 WiFi
+        {PC_10, PC_11, PC_12},                  //SPI2 Drivers and Accelerometer
+        {PG_14, PC_1, PF_7},                    //SPI3 Screen
         {NoPin, NoPin, NoPin},                  //SPI4
         {NoPin, NoPin, NoPin},                  //SPI5
     },
@@ -390,18 +393,21 @@ constexpr PinEntry PinTable_BIQU_GTR_v1_0[] =
     {PI_1, "KSCK"},
     {PH_2, "KCS"},
     {PF_13, "RGBLED"},
+	//Status LED
+    {PA_0, "status"},
+
 };
 
 constexpr BoardDefaults biqu_gtr_1_0_Defaults = {
     {0x94a2cc03},                               // Signatures
     SD_SPI1_B,                                  // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
+        {PA_5, PA_6, PA_7},                     //SPI0 SD Card
+        {PB_13, PB_14, PB_15},                  //SPI1 WiFi
         {NoPin, NoPin, NoPin},                  //SPI2
-        {NoPin, NoPin, NoPin},                  //SPI3
-        {NoPin, NoPin, NoPin},                  //SPI4
-        {NoPin, NoPin, NoPin},                  //SPI5
+        {PI_9, PB_11, PH_11},                   //SPI3 Screen
+        {PI_1, PI_2, NoPin},                    //SPI4 Thermocouple
+        {PB_3, PB_6, PG_15},                    //SPI5 Drivers
     },
     6+5,                                        // Number of drivers GTR + M5
     {PF_1, PE_4,  PB_9, PG_13,  PD_7, PD_2,PF_8,PG_2,PF_4,PE_8,PI_0},    //enablePins including M5
@@ -480,7 +486,7 @@ constexpr PinEntry PinTable_BTT_RRF_E3_v1_1[] =
     {PE_0, "PWRDET"},
 
     //Status LED
-    {PE_2, "LED"},
+    {PE_2, "LED,status"},
 
 };
 
@@ -488,12 +494,12 @@ constexpr BoardDefaults btt_rrf_e3_1_1_Defaults = {
     {0x94a2cc03, 0xb173b733},                   // Signatures
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
-        {NoPin, NoPin, NoPin},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
+        {NoPin, NoPin, NoPin},                  //SPI0
+        {PB_13, PB_14, PB_15},                  //SPI1 WiFi
         {NoPin, NoPin, NoPin},                  //SPI2
         {NoPin, NoPin, NoPin},                  //SPI3
-        {NoPin, NoPin, NoPin},                  //SPI4
-        {NoPin, NoPin, NoPin},                  //SPI5
+        {PE_10, NoPin, PE_11},                  //SPI4 Ender Screen
+        {PB_1, PB_2, PE_11},                    //SPI5 Accelerometer
     },
     6,                                          // Number of drivers
     {PD_7, PD_3, PD_14, PD_10, PC_13, PE_15},   // enablePins
@@ -588,7 +594,7 @@ constexpr PinEntry PinTable_BTT_SKR_2[] =
     {PC_15, "PWRDET"},
 
     //Status LED
-    {PA_13, "LED"},
+    {PA_13, "LED,status"},
 
     //Safe power
     {PC_13, "SP"},
@@ -598,12 +604,12 @@ constexpr BoardDefaults btt_skr_2_Defaults = {
     {0xb75b00a7, 0x35f4602c},               // Signatures
     SD_SDIO,                                // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                 //SPI0
-        {PB_13, PB_14, PB_15},              //SPI1
+        {PA_5, PA_6, PA_7},                 //SPI0 Screen
+        {PB_13, PB_14, PB_15},              //SPI1 WiFi
         {NoPin, NoPin, NoPin},              //SPI2
-        {NoPin, NoPin, NoPin},              //SPI3
-        {NoPin, NoPin, NoPin},              //SPI4
-        {NoPin, NoPin, NoPin},              //SPI5
+        {PE_15, PA_14, PE_14},              //SPI3 Drivers
+        {PC_5, PB_1, PB_0},                 //SPI4 Accelerometer
+        {PE_10, NoPin, PB_1},               //SPI5 RepRapDiscount Display
     },
     5,                                      // Number of drivers
     {PE_3, PD_6, PD_1, PC_7, PD_13},        // enablePins
@@ -711,19 +717,19 @@ constexpr PinEntry PinTable_BTT_OCTOPUS[] =
     {PC_0, "PWRDET"},
 
     //Status LED
-    {PA_13, "LED"},
+    {PA_13, "LED,status"},
 };
 
 constexpr BoardDefaults btt_octopus_Defaults = {
     {0x5e29d842},                               // Signatures
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PC_2, PC_3},                    //SPI1
-        {PB_3,  PB_4,  PB_5},                   //SPI2
+        {PA_5, PA_6, PA_7},                     //SPI0 Drivers + Screen
+        {PB_13, PC_2, PC_3},                    //SPI1 WiFi
+        {PB_3,  PB_4,  PB_5},                   //SPI2 SPI3 Header - J74
         {NoPin, NoPin, NoPin},                  //SPI3
-        {NoPin, NoPin, NoPin},                  //SPI4
-        {NoPin, NoPin, NoPin},                  //SPI5
+        {PE_8, PE_9, PE_7},                     //SPI4 Accelerometer
+        {PE_12, NoPin, PE_9},                   //SPI5 RepRapDiscount Display
     },
     8,                                          // Number of drivers
     {PF_14, PF_15, PG_5, PA_0, PG_2, PF_1, PD_4, PE_0}, // enablePins
@@ -837,19 +843,19 @@ constexpr PinEntry PinTable_BTT_OCTOPUSPRO[] =
     {PC_0, "PWRDET"},
 
     //Status LED
-    {PA_13, "LED"},
+    {PA_13, "LED,status"},
 };
 
 constexpr BoardDefaults btt_octopuspro_Defaults = {
     {0x5e29d842},                               // Signatures
     SD_SDIO,                                    // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PC_2, PC_3},                    //SPI1
-        {PB_3,  PB_4,  PB_5},                   //SPI2
+        {PA_5, PA_6, PA_7},                     //SPI0 Drivers + Screen + PT100
+        {PB_13, PC_2, PC_3},                    //SPI1 WiFi
+        {PB_3,  PB_4,  PB_5},                   //SPI2 SPI3 Header - J74
         {NoPin, NoPin, NoPin},                  //SPI3
-        {NoPin, NoPin, NoPin},                  //SPI4
-        {NoPin, NoPin, NoPin},                  //SPI5
+        {PE_8, PE_9, PE_7},                     //SPI4 Accelerometer
+        {PE_12, NoPin, PE_9},                   //SPI5 RepRapDiscount Display
     },
     8,                                          // Number of drivers
     {PF_14, PF_15, PG_5, PA_0, PG_2, PF_1, PD_4, PE_0}, // enablePins
@@ -918,7 +924,7 @@ constexpr PinEntry PinTable_BIQU_OCTOPUS_X7[] =
     {PD_8, "LCDCD"},
 	
 	//DIAGNOSTIC LED
-	{PC_7, "LED,STATUS"},
+	{PC_7, "LED,status"},
 	
 	//DIAG PIN
 	{PE_13, "diag4"},
@@ -935,9 +941,9 @@ constexpr BoardDefaults biquoctopus_x7_Defaults = {
     {0x5e29d842, },                    			// Signatures
     SD_SDIO,                                  // SD Card access
     {   //CLK, MISO, MOSI
-        {PA_5, PA_6, PA_7},                     //SPI0
-        {PB_13, PB_14, PB_15},                  //SPI1
-        {PB_3, PB_4, PB_5},                     //SPI2
+        {PA_5, PA_6, PA_7},                     //SPI0 Drivers
+        {PB_13, PB_14, PB_15},                  //SPI1 EXP2
+        {PB_3, PB_4, PB_5},                     //SPI2 WiFi
         {NoPin, NoPin, NoPin},                  //SPI3
         {NoPin, NoPin, NoPin},                  //SPI4
         {NoPin, NoPin, NoPin},                  //SPI5
