@@ -253,20 +253,20 @@ bool SetBoard(const char* bn) noexcept
                 SetDefaultPinArray(LPC_Boards[i].defaults.enablePins, ENABLE_PINS, LPC_Boards[i].defaults.numDrivers);
                 SetDefaultPinArray(LPC_Boards[i].defaults.stepPins, STEP_PINS, LPC_Boards[i].defaults.numDrivers);
                 SetDefaultPinArray(LPC_Boards[i].defaults.dirPins, DIRECTION_PINS, LPC_Boards[i].defaults.numDrivers);
-    #if HAS_SMART_DRIVERS
+#if HAS_SMART_DRIVERS
                 SetDefaultPinArray(LPC_Boards[i].defaults.uartPins, TMC_PINS, LPC_Boards[i].defaults.numDrivers);
                 totalSmartDrivers = LPC_Boards[i].defaults.numSmartDrivers;
-    #endif
+#endif
                 digipotFactor = LPC_Boards[i].defaults.digipotFactor;
-    #if HAS_VOLTAGE_MONITOR
+#if HAS_VOLTAGE_MONITOR
                 PowerMonitorVinDetectPin = LPC_Boards[i].defaults.vinDetectPin;
-    #endif
+#endif
                 StepperPowerEnablePin = LPC_Boards[i].defaults.stepperPowerEnablePin;
-    #if HAS_SBC_INTERFACE
+#if HAS_SBC_INTERFACE
                 SbcTfrReadyPin = LPC_Boards[i].defaults.SbcTfrReadyPin;
                 SbcCsPin = LPC_Boards[i].defaults.SbcCsPin;
                 SbcSpiChannel = LPC_Boards[i].defaults.SbcSpiChannel;
-    #endif
+#endif
                 InitDiagPin();
                 return true;
             }
