@@ -102,7 +102,12 @@ const uint32_t WiFiSlowResponseTimeoutMillis = 500;		// SPI timeout when when th
 const uint32_t WiFiFastResponseTimeoutMillis = 100;		// SPI timeout when when the ESP does not have to access SPIFFS filesystem. 20ms is too short on Duet 2 with both FTP and Telnet enabled.
 const uint32_t WiFiWaitReadyMillis = 100;
 const uint32_t WiFiStartupMillis = 15000;				// Formatting the SPIFFS partition can take up to 10s.
+
+#if WIFI_USES_ESP32
+const uint32_t WiFiStableMillis = 500;					// Spin() fails in state starting2 when starting wifi in config.g if we use 300 or lower here. When testing, 400 was OK.
+#else
 const uint32_t WiFiStableMillis = 100;
+#endif
 
 const unsigned int MaxHttpConnections = 4;
 
@@ -139,7 +144,7 @@ static inline void DisableSpi() noexcept
 #endif
 }
 
-static inline void EnableSpi()
+static inline void EnableSpi() noexcept
 {
 #if SAME5x
 	WiFiSpiSercom->SPI.CTRLA.reg |= SERCOM_SPI_CTRLA_ENABLE;
@@ -150,7 +155,7 @@ static inline void EnableSpi()
 }
 
 // Clear the transmit and receive registers and put the SPI into slave mode, SPI mode 1
-static inline void ResetSpi()
+static inline void ResetSpi() noexcept
 {
 #if SAME5x
 	WiFiSpiSercom->SPI.CTRLA.reg |= SERCOM_SPI_CTRLA_SWRST;
@@ -271,8 +276,8 @@ WiFiInterface::WiFiInterface(Platform& p) noexcept
 		protocolEnabled[i] = (i == HttpProtocol);
 	}
 
-	strcpy(actualSsid, "(unknown)");
-	strcpy(wiFiServerVersion, "(unknown)");
+	actualSsid.copy("(unknown)");
+	wiFiServerVersion.copy("(unknown)");
 
 #ifdef DUET3MINI
 	SerialWiFiDevice = new AsyncSerial(WiFiUartSercomNumber, WiFiUartRxPad, 512, 512, SerialWiFiPortInit, SerialWiFiPortDeinit);
@@ -289,21 +294,23 @@ WiFiInterface::WiFiInterface(Platform& p) noexcept
 // Otherwise the table will be allocated in RAM instead of flash, which wastes too much RAM.
 
 // Macro to build a standard lambda function that includes the necessary type conversions
-#define OBJECT_MODEL_FUNC(_ret) OBJECT_MODEL_FUNC_BODY(WiFiInterface, _ret)
+#define OBJECT_MODEL_FUNC(...) OBJECT_MODEL_FUNC_BODY(WiFiInterface, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC_IF(_condition,...) OBJECT_MODEL_FUNC_IF_BODY(WiFiInterface, _condition, __VA_ARGS__)
 
 constexpr ObjectModelTableEntry WiFiInterface::objectModelTable[] =
 {
 	// These entries must be in alphabetical order
-	{ "actualIP",			OBJECT_MODEL_FUNC(self->ipAddress),				ObjectModelEntryFlags::none },
-	{ "firmwareVersion",	OBJECT_MODEL_FUNC(self->wiFiServerVersion),		ObjectModelEntryFlags::none },
-	{ "gateway",			OBJECT_MODEL_FUNC(self->gateway),				ObjectModelEntryFlags::none },
-	{ "mac",				OBJECT_MODEL_FUNC(self->macAddress),			ObjectModelEntryFlags::none },
-	{ "state",				OBJECT_MODEL_FUNC(self->GetStateName()),		ObjectModelEntryFlags::none },
-	{ "subnet",				OBJECT_MODEL_FUNC(self->netmask),				ObjectModelEntryFlags::none },
-	{ "type",				OBJECT_MODEL_FUNC_NOSELF("wifi"),				ObjectModelEntryFlags::none },
+	{ "actualIP",			OBJECT_MODEL_FUNC(self->ipAddress),															ObjectModelEntryFlags::none },
+	{ "firmwareVersion",	OBJECT_MODEL_FUNC(self->wiFiServerVersion.c_str()),											ObjectModelEntryFlags::none },
+	{ "gateway",			OBJECT_MODEL_FUNC(self->gateway),															ObjectModelEntryFlags::none },
+	{ "mac",				OBJECT_MODEL_FUNC_IF(self->GetState() == NetworkState::active, self->macAddress),			ObjectModelEntryFlags::none },
+	{ "ssid",				OBJECT_MODEL_FUNC_IF(self->GetState() == NetworkState::active, self->actualSsid.c_str()),	ObjectModelEntryFlags::none },
+	{ "state",				OBJECT_MODEL_FUNC(self->GetStateName()),													ObjectModelEntryFlags::none },
+	{ "subnet",				OBJECT_MODEL_FUNC(self->netmask),															ObjectModelEntryFlags::none },
+	{ "type",				OBJECT_MODEL_FUNC_NOSELF("wifi"),															ObjectModelEntryFlags::none },
 };
 
-constexpr uint8_t WiFiInterface::objectModelTableDescriptor[] = { 1, 7 };
+constexpr uint8_t WiFiInterface::objectModelTableDescriptor[] = { 1, 8 };
 
 DEFINE_GET_OBJECT_MODEL_TABLE(WiFiInterface)
 
@@ -528,7 +535,7 @@ GCodeResult WiFiInterface::GetNetworkState(const StringRef& reply) noexcept
 		reply.cat(TranslateWiFiState(currentMode));
 		if (currentMode == WiFiState::connected || currentMode == WiFiState::runningAsAccessPoint)
 		{
-			reply.catf("%s, IP address %s", actualSsid, IP4String(ipAddress).c_str());
+			reply.catf("%s, IP address %s", actualSsid.c_str(), IP4String(ipAddress).c_str());
 		}
 		break;
 	default:
@@ -654,6 +661,7 @@ void WiFiInterface::Spin() noexcept
 			if (risingEdges >= 2) // the first rising edge is the one coming out of reset
 			{
 				lastTickMillis = now;
+				startupRetryCount = 0;
 				SetState(NetworkState::starting2);
 			}
 			else
@@ -669,7 +677,7 @@ void WiFiInterface::Spin() noexcept
 
 	case NetworkState::starting2:
 		{
-			// See if the ESP8266 has kept its pins at their stable values for long enough
+			// See if the WiFi module has kept its pins at their stable values for long enough
 			const uint32_t now = millis();
 			if (digitalRead(SamCsPin) && digitalRead(EspDataReadyPin) && !digitalRead(APIN_ESP_SPI_SCK))
 			{
@@ -682,9 +690,9 @@ void WiFiInterface::Spin() noexcept
 					// Read the status to get the WiFi server version and MAC address
 					Receiver<NetworkStatusResponse> status;
 					int32_t rc = SendCommand(NetworkCommand::networkGetStatus, 0, 0, nullptr, 0, status);
-					if (rc > 0)
+					if (rc >= (int32_t)MinimumStatusResponseLength)
 					{
-						SafeStrncpy(wiFiServerVersion, status.Value().versionText, ARRAY_SIZE(wiFiServerVersion));
+						wiFiServerVersion.copy(status.Value().versionText);
 						macAddress.SetFromBytes(status.Value().macAddress);
 
 						// Set the hostname before anything else is done
@@ -722,12 +730,17 @@ void WiFiInterface::Spin() noexcept
 						SetState(NetworkState::active);
 						espStatusChanged = true;				// make sure we fetch the current state and enable the ESP interrupt
 					}
+					else if (startupRetryCount < 3)
+					{
+						// When we use the ESP32 module, the first startup attempt often fails when we try to start up straight after running config.g
+						++startupRetryCount;
+						lastTickMillis = now;
+					}
 					else
 					{
-						// Something went wrong, maybe a bad firmware image was flashed
-						// Disable the WiFi chip again in this case
-						platform.MessageF(NetworkErrorMessage, "failed to initialise WiFi module: %s\n", TranslateWiFiResponse(rc));
+						// Something went wrong, maybe a bad firmware image was flashed. Disable the WiFi chip again in this case
 						Stop();
+						platform.MessageF(NetworkErrorMessage, "failed to initialise WiFi module: %s\n", TranslateWiFiResponse(rc));
 					}
 				}
 			}
@@ -771,7 +784,7 @@ void WiFiInterface::Spin() noexcept
 			}
 			else if (requestedMode == WiFiState::connected)
 			{
-				rslt = SendCommand(NetworkCommand::networkStartClient, 0, 0, 0, requestedSsid, SsidLength, nullptr, 0);
+				rslt = SendCommand(NetworkCommand::networkStartClient, 0, 0, 0, requestedSsid.Pointer(), requestedSsid.Capacity(), nullptr, 0);
 			}
 			else if (requestedMode == WiFiState::runningAsAccessPoint)
 			{
@@ -852,13 +865,13 @@ void WiFiInterface::Spin() noexcept
 					if (SendCommand(NetworkCommand::networkGetStatus, 0, 0, nullptr, 0, status) > 0)
 					{
 						ipAddress.SetV4LittleEndian(status.Value().ipAddress);
-						SafeStrncpy(actualSsid, status.Value().ssid, SsidLength);
+						actualSsid.copy(status.Value().ssid);
 					}
 					InitSockets();
 					reconnectCount = 0;
 					platform.MessageF(NetworkInfoMessage, "WiFi module is %s%s, IP address %s\n",
 						TranslateWiFiState(currentMode),
-						actualSsid,
+						actualSsid.c_str(),
 						IP4String(ipAddress).c_str());
 				}
 				break;
@@ -937,21 +950,21 @@ const char* WiFiInterface::TranslateEspResetReason(uint32_t reason) noexcept
 
 void WiFiInterface::Diagnostics(MessageType mtype) noexcept
 {
-	platform.MessageF(mtype, "= WiFi =\nNetwork state is %s\n", GetStateName());
-	platform.MessageF(mtype, "WiFi module is %s\n", TranslateWiFiState(currentMode));
-	platform.MessageF(mtype, "Failed messages: pending %u, notready %u, noresp %u\n", transferAlreadyPendingCount, readyTimeoutCount, responseTimeoutCount);
+	platform.MessageF(mtype,
+						"= WiFi =\nInterface state: %s\n"
+						"Module is %s\n"
+						"Failed messages: pending %u, notready %u, noresp %u\n",
+						 	 GetStateName(),
+							 TranslateWiFiState(currentMode),
+							 transferAlreadyPendingCount, readyTimeoutCount, responseTimeoutCount
+					 );
 	platform.MessageF(mtype, "Bad header: %u/%u\n", badHeaderCount, actualBadHeaderCount);
-
-#if 0
-	// The underrun/overrun counters don't work at present
-	platform.MessageF(mtype, "SPI underruns %u, overruns %u\n", spiTxUnderruns, spiRxOverruns);
-#endif
 
 	if (GetState() != NetworkState::disabled && GetState() != NetworkState::starting1 && GetState() != NetworkState::starting2)
 	{
 		Receiver<NetworkStatusResponse> status;
 		status.Value().clockReg = 0xFFFFFFFF;				// older WiFi firmware doesn't return this value, so preset it
-		if (SendCommand(NetworkCommand::networkGetStatus, 0, 0, nullptr, 0, status) > 0)
+		if (SendCommand(NetworkCommand::networkGetStatus, 0, 0, nullptr, 0, status) >= (int32_t)MinimumStatusResponseLength)
 		{
 			NetworkStatusResponse& r = status.Value();
 			r.versionText[ARRAY_UPB(r.versionText)] = 0;
@@ -1008,8 +1021,7 @@ GCodeResult WiFiInterface::EnableInterface(int mode, const StringRef& ssid, cons
 											: WiFiState::disabled;
 	if (modeRequested == WiFiState::connected)
 	{
-		memset(requestedSsid, 0, sizeof(requestedSsid));
-		SafeStrncpy(requestedSsid, ssid.c_str(), ARRAY_SIZE(requestedSsid));
+		requestedSsid.copy(ssid.c_str());
 	}
 
 	if (activated)
@@ -1829,7 +1841,7 @@ int32_t WiFiInterface::SendCommand(NetworkCommand cmd, SocketNumber socketNum, u
 	bufferOut->hdr.param32 = param32;
 	bufferOut->hdr.dataLength = (uint16_t)dataOutLength;
 	bufferOut->hdr.dataBufferAvailable = (uint16_t)dataInLength;
-	if (dataOut != nullptr)
+	if (dataOut != nullptr && dataOut != &(bufferOut->data))
 	{
 		memcpy(bufferOut->data, dataOut, dataOutLength);
 	}
@@ -1866,8 +1878,7 @@ int32_t WiFiInterface::SendCommand(NetworkCommand cmd, SocketNumber socketNum, u
 	digitalWrite(SamTfrReadyPin, true);
 
 	// Wait until the DMA transfer is complete, with timeout
-	// On factory reset, use the startup timeout, as it involves re-formatting the SPIFFS
-	// partition.
+	// On factory reset, use the startup timeout, as it involves re-formatting the SPIFFS partition.
 	const uint32_t timeout = (cmd == NetworkCommand::networkFactoryReset) ? WiFiStartupMillis :
 		(cmd == NetworkCommand::networkAddSsid || cmd == NetworkCommand::networkDeleteSsid ||
 		 cmd == NetworkCommand::networkConfigureAccessPoint || cmd == NetworkCommand::networkRetrieveSsidData

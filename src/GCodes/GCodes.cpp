@@ -372,10 +372,14 @@ FilePosition GCodes::GetFilePosition(bool allowNoFilePos) const noexcept
 }
 
 // Start running the config file
-bool GCodes::RunConfigFile(const char* fileName) noexcept
+bool GCodes::RunConfigFile(const char* fileName, bool isMainConfigFile) noexcept
 {
-	runningConfigFile = DoFileMacro(*triggerGCode, fileName, false, AsyncSystemMacroCode);
-	return runningConfigFile;
+	const bool ret = DoFileMacro(*triggerGCode, fileName, false, AsyncSystemMacroCode);
+	if (ret && isMainConfigFile)
+	{
+		runningConfigFile = true;
+	}
+	return ret;
 }
 
 // Return true if the trigger G-code buffer is busy running config.g or a trigger file
@@ -389,8 +393,8 @@ void GCodes::CheckFinishedRunningConfigFile(GCodeBuffer& gb) noexcept
 {
 	if (runningConfigFile && gb.GetChannel() == GCodeChannel::Trigger)
 	{
-		gb.LatestMachineState().GetPrevious()->CopyStateFrom(gb.LatestMachineState());	// so that M83 etc. in  nested file don't get forgotten
-		if (gb.LatestMachineState().GetPrevious()->GetPrevious() == nullptr)
+		gb.LatestMachineState().GetPrevious()->CopyStateFrom(gb.LatestMachineState());	// so that M83 etc. in nested files don't get forgotten
+		if (gb.LatestMachineState().GetPrevious()->GetPrevious() == nullptr)			// if we've finished running config.g rather than a macro it called
 		{
 			for (GCodeBuffer *gb2 : gcodeSources)
 			{
@@ -878,7 +882,7 @@ void GCodes::DoPause(GCodeBuffer& gb, PrintPausedReason reason, GCodeState newSt
 		// Pausing a file print via another input source or for some other reason
 		pauseRestorePoint.feedRate = fileGCode->LatestMachineState().feedRate;				// set up the default
 
-		const bool movesSkipped = reprap.GetMove().PausePrint(pauseRestorePoint);			// tell Move we wish to pause the current print
+		const bool movesSkipped = reprap.GetMove().PausePrint(pauseRestorePoint, speedFactor);			// tell Move we wish to pause the current print
 		if (movesSkipped)
 		{
 			// The PausePrint call has filled in the restore point with machine coordinates
@@ -1026,9 +1030,11 @@ bool GCodes::IsReallyPrintingOrResuming() const noexcept
 bool GCodes::IsHeatingUp() const noexcept
 {
 	int num;
-	return fileGCode->IsExecuting()
-		&& fileGCode->GetCommandLetter() == 'M'
-		&& ((num = fileGCode->GetCommandNumber()) == 109 || num == 116 || num == 190 || num == 191);
+	return fileGCode->GetState() == GCodeState::m109WaitForTemperature
+		|| (   fileGCode->IsExecuting()
+			&& fileGCode->GetCommandLetter() == 'M'
+			&& ((num = fileGCode->GetCommandNumber()) == 109 || num == 116 || num == 190 || num == 191)
+		   );
 }
 
 #if HAS_VOLTAGE_MONITOR || HAS_STALL_DETECT

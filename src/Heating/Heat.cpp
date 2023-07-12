@@ -63,6 +63,11 @@ constexpr uint32_t HeaterTaskStackWords = 420;			// task stack size in dwords, m
 
 static TASKMEM Task<HeaterTaskStackWords> heaterTask;
 
+TaskHandle Heat::GetHeatTask() noexcept
+{
+	return &heaterTask;
+}
+
 extern "C" [[noreturn]] void HeaterTaskStart(void * pvParameters) noexcept
 {
 	reprap.GetHeat().HeaterTask();

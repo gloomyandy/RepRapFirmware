@@ -26,7 +26,7 @@ static constexpr char eofString[] = EOF_STRING;		// What's at the end of an HTML
 
 StringParser::StringParser(GCodeBuffer& gcodeBuffer) noexcept
 	: gb(gcodeBuffer), fileBeingWritten(nullptr), writingFileSize(0), indentToSkipTo(NoIndentSkip), eofStringCounter(0),
-	  hasCommandNumber(false), commandLetter('Q'), lastChar(0), checksumRequired(false), crcRequired(false), binaryWriting(false)
+	  hasCommandNumber(false), commandLetter('Q'), checksumRequired(false), crcRequired(false), binaryWriting(false)
 {
 	StartNewFile();
 	Init();
@@ -75,17 +75,16 @@ inline void StringParser::StoreAndAddToChecksum(char c) noexcept
 // is the number of leading white space characters..
 bool StringParser::Put(char c) noexcept
 {
-	// If this character is LF and the previous one was CR, throw the LF away so that we don't increment the line number twice
-	const char prevChar = lastChar;
-	lastChar = c;
-	if (c == '\n' && prevChar == '\r')
-	{
-		return false;
-	}
-
 	if (c != 0)
 	{
 		++commandLength;
+	}
+
+	// We now discard CR if we are reading from file. It makes line number counting easier and it's unlikely that a pre-OSX Mac will be used with a Duet.
+	// When not reading from file we still accept CR as a line terminator, for compatibility with Putty and some other terminal emulators.
+	if (c == '\r' && gb.IsDoingFile())
+	{
+		return false;
 	}
 
 	if (c == 0 || c == '\n' || c == '\r')
@@ -961,15 +960,15 @@ void StringParser::DecodeCommand() noexcept
 	}
 	else if (   hasCommandNumber
 			 && commandLetter == 'G'
-			 && commandNumber <= 1
-			 && strchr(reprap.GetGCodes().GetAxisLetters(), cl) != nullptr
+			 && commandNumber <= 3
+			 && strchr(reprap.GetGCodes().GetAxisLetters(), cl) != nullptr			// this assumes that the first letter will always be an axis coordinate
 			 && (   reprap.GetGCodes().GetMachineType() == MachineType::cnc			// Fanuc style CNC
 				 || reprap.GetGCodes().GetMachineType() == MachineType::laser		// LaserWeb style
 				)
 			 && !isalpha(gb.buffer[commandStart + 1])								// make sure it isn't an if-command or other meta command
 			)
 	{
-		// Fanuc or LaserWeb-style GCode, repeat the existing G0/G1 command with the new parameters
+		// Fanuc or LaserWeb-style GCode, repeat the existing G0/G1/G2/G3 command with the new parameters
 		parameterStart = commandStart;
 		FindParameters();
 	}
@@ -1675,6 +1674,12 @@ void StringParser::WriteToFile() noexcept
 		}
 	}
 
+	size_t indent = commandIndent;
+	while (indent != 0)
+	{
+		fileBeingWritten->Write(' ');
+		--indent;
+	}
 	fileBeingWritten->Write(gb.buffer);
 	fileBeingWritten->Write('\n');
 	Init();

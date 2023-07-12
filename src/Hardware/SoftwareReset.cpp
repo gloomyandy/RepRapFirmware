@@ -122,6 +122,12 @@ void SoftwareResetData::Populate(uint16_t reason, const uint32_t *stk) noexcept
 #else
 		for (uint32_t& stval : stack)
 		{
+#if __FPU_USED
+			if (&stval - stack == 8 && ResetReasonHasExceptionFrame(reason))
+			{
+				stk += 17;				// skip the FP registers
+			}
+#endif
 			stval = (stk < &_estack) ? *stk++ : 0xFFFFFFFF;
 		}
 #endif
