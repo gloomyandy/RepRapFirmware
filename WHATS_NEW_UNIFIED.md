@@ -1,3 +1,9 @@
+Version 3.4.6-rc.1_101
+======================
+* Duet3d 3.4.6-rc.1
+* Updated pin files
+* Enable status LED by default
+
 Version 3.4.5+_107
 ==================
 * Added support for fly_openpnp_tool board
