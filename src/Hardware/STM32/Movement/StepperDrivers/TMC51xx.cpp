@@ -128,9 +128,16 @@ constexpr uint32_t GSTAT_RESET = 1 << 0;					// driver has been reset since last
 constexpr uint32_t GSTAT_DRV_ERR = 1 << 1;					// driver has been shut down due to over temp or short circuit
 constexpr uint32_t GSTAT_UV_CP = 1 << 2;					// undervoltage on charge pump, driver disabled. Not latched so does not need to be cleared.
 
+// IOIN register (0x04, RO) reads the state of all input pins and version. We use it for device identification.
+constexpr uint8_t REGNUM_IOIN = 0x04;
+constexpr uint32_t IOIN_VERSION_SHIFT = 24;
+constexpr uint32_t IOIN_VERSION_MASK = 0xff << IOIN_VERSION_SHIFT;
+constexpr uint32_t IOIN_VERSION_5160 = 0x30;				// version for TMC5160
+constexpr uint32_t IOIN_VERSION_2240 = 0x40;				// version for TMC2240 in spi mode
+
 // IFCOUNT register (0x02, RO) is not used in SPI mode
 // SLAVECONF register (0x03, WO) is not used in SPI mode
-// IOIN register (0x04, RO) reads the state of all input pins. We don't use it.
+// IOIN register (0x04, RO) reads the state of all input pins. We use it for device identification.
 // OUTPUT register (0x04, WO) is not used in SPI mode
 // X_COMPARE register (0x05, WO) allows us to get a pulse on DIAG1 when an index is passed. We don't use it.
 // OTP_PROG register (0x06, WO, 5160 only) is not used in this firmware
@@ -345,11 +352,10 @@ private:
 	void UpdateRegister(size_t regIndex, uint32_t regVal) noexcept;
 	void UpdateChopConfRegister() noexcept;							// calculate the chopper control register and flag it for sending
 	void UpdateCurrent() noexcept;
-
-	void ResetLoadRegisters() noexcept
-	{
-		minSgLoadRegister = InvalidSgLoadRegister;			// value InvalidSgLoadRegister indicates that it hasn't been read
-	}
+	int32_t IdentifyDriver() noexcept;
+	bool IsTmc2240() noexcept { return typ == DriverType::Tmc2240; }
+	void ResetReadRegisters() noexcept;
+	void ResetLoadRegisters() noexcept { minSgLoadRegister = InvalidSgLoadRegister; }
 
 	// Write register numbers are in priority order, most urgent first, in same order as WriteRegNumbers
 	static constexpr unsigned int WriteGConf = 0;			// microstepping
@@ -410,6 +416,7 @@ private:
 	volatile uint8_t specialReadRegisterNumber;
 	volatile uint8_t specialWriteRegisterNumber;
 	bool enabled;											// true if driver is enabled
+	DriverType typ;
 
 	float maxCurrent;
 	float senseResistor;
@@ -484,11 +491,7 @@ pre(!driversPowered)
 #endif
 	UpdateRegister(WritePwmConf, DefaultPwmConfReg);
 
-	for (size_t i = 0; i < NumReadRegisters; ++i)
-	{
-		readRegisters[i] = 0;
-	}
-	accumulatedDriveStatus = 0;
+	ResetReadRegisters();
 
 	regIndexBeingUpdated = regIndexRequested = previousRegIndexRequested = NoRegIndex;
 	numReads = numWrites = numWriteErrors = 0;
@@ -876,7 +879,7 @@ void Tmc51xxDriverState::AppendDriverStatus(const StringRef& reply) noexcept
 	{
 		return;
 	}
-	reply.catf(" 5160");
+	reply.catf(IsTmc2240() ? " 2240" : " 5160");
 	if (minSgLoadRegister <= MaxValidSgLoadRegister)
 	{
 		reply.catf(", SG min %u", (unsigned)minSgLoadRegister);
@@ -1085,36 +1088,96 @@ static size_t baseDriveNo = 0;
 // TMC51xx management task
 static TASKMEM Task<TmcTaskStackWords> tmcTask;
 
+int32_t Tmc51xxDriverState::IdentifyDriver() noexcept
+{
+	if (specialReadRegisterNumber == 0xFE)
+	{
+		specialReadRegisterNumber = 0xFF;
+		return (readRegisters[ReadSpecial] & IOIN_VERSION_MASK) >> IOIN_VERSION_SHIFT;
+	}
+
+	if (specialReadRegisterNumber == 0xFF)
+	{
+		// Force next read to be this one
+		regIndexRequested = ReadSpecial - 1;
+		specialReadRegisterNumber = REGNUM_IOIN;
+	}
+	return -1;
+}
+
+void Tmc51xxDriverState::ResetReadRegisters() noexcept
+{
+	accumulatedDriveStatus = 0;
+	for(size_t i = 0; i < NumReadRegisters; i++)
+		readRegisters[i] = 0;
+}
+
 
 DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 {
 	if (reset)
 	{
+		// Strt the identification/setup process
 		accumulatedDriveStatus = 0;
 		if (TMC_PINS[driverNumber] == NoPin)
 			state = DriversState::noDriver;
 		else
 		{
 			numReads = numWrites = numWriteErrors = 0;
+			ResetReadRegisters();
+			newRegistersToUpdate.store(0);
+			typ = DriverType::unknown;
+			// Ask for hardware version
+			IdentifyDriver();
 			state = DriversState::initialising;
 		}
 		return state;
 	}
 	if (state == DriversState::noDriver)
 		return state;
+	// Idenitfy device during initial reads
+	if (typ == DriverType::unknown)
+	{
+		int32_t version = IdentifyDriver();
+		if (version >= 0)
+		{
+			if (numReads < 3)
+			{
+				// Start another read
+				IdentifyDriver();
+			}
+			else
+			{
+				if (version == IOIN_VERSION_2240)
+					typ = DriverType::Tmc2240;
+				else if (version == IOIN_VERSION_5160)
+					typ = DriverType::Tmc5160;
+				else
+				{
+					// We could potentially stop here and declare the driver unknown, but for now
+					// we issue a warning and assume it is a 5160.
+					if (reprap.Debug(Module::Driver))
+						debugPrintf("TMCSPI:: Warning driver %d unknown version number 0x%x\n", driverNumber, (unsigned)version);
+					typ = DriverType::Tmc5160;
+				}
+				WriteAll();
+			}
+		}
+		return state;
+	}		
+
+
 	// check for errors
 	if (numWriteErrors > NumWriteRegisters)
 	{
 		if (reprap.Debug(Module::Driver))
 			debugPrintf("TMC5160: Too many write errors drive %d error cnt %d driver disabled\n", driverNumber, numWriteErrors);
 		// Too many write errors, probably means no driver or config error
-		accumulatedDriveStatus = 0;
-		for(size_t i = 0; i < NumReadRegisters; i++)
-			readRegisters[i] = 0;
+		ResetReadRegisters();
 		state = DriversState::noDriver;
 		return state;
 	}
-	if (numReads >= NumReadRegisters + NumWriteRegisters)
+	if (numReads >= NumReadRegisters + NumWriteRegisters + 3)
 	{
 		state = DriversState::ready;
 	}
@@ -1143,7 +1206,6 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 				for (size_t drive = 0; drive < numTmc51xxDrivers; ++drive)
 				{
 					driverStates[drive].SetupDriver(true);
-					driverStates[drive].WriteAll();
 				}
 				driversState = DriversState::initialising;
 			}

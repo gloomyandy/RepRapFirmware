@@ -98,8 +98,8 @@ enum class DriversState : uint8_t
 {
 	shutDown = 0,
 	noPower,				// no VIN power
-	powerWait,
-	noDrivers,
+	powerWait,				// waiting for power
+	noDriver,				// no driver found or configured
 	notInitialised,			// have VIN power but not started initialising drivers
 	initialising,			// in the process of initialising the drivers
 	ready					// drivers are initialised and ready
@@ -192,7 +192,7 @@ constexpr uint32_t IOIN_VERSION_SHIFT = 24;
 constexpr uint32_t IOIN_VERSION_MASK = 0xFF << IOIN_VERSION_SHIFT;
 
 constexpr uint32_t IOIN_VERSION_2208_2224 = 0x20;			// version for TMC2208/2224
-constexpr uint32_t IOIN_VERSION_2209 = 0x21;				// version for TMC2209
+constexpr uint32_t IOIN_VERSION_2209 = 0x21;				// version for TMC2209/2226
 
 // FACTORY_CONF register (0x07, RW)
 constexpr uint8_t REGNUM_FACTORY_CONF = 0x07;
@@ -424,7 +424,8 @@ public:
 	void TransferTimedOut() noexcept { ++numTimeouts; }
 
 	DriversState SetupDriver(bool reset) noexcept;
-	bool inline IsReady() noexcept {return maxReadCount != 0;}
+	bool inline IsActive() noexcept {return state >= DriversState::initialising;}
+	bool inline IsReady() noexcept {return state == DriversState::ready;}
 	// Variables used by the ISR
 
 	void UartTmcHandler() noexcept;									// core of the ISR for this driver
@@ -435,8 +436,10 @@ private:
 	void UpdateChopConfRegister() noexcept;							// calculate the chopper control register and flag it for sending
 	void UpdateCurrent() noexcept;
 	void UpdateMaxOpenLoadStepInterval() noexcept;
+	bool IsTmc2209() const noexcept { return typ == DriverType::Tmc2209; }
+	int32_t IdentifyDriver() noexcept;
+	void ResetReadRegisters() noexcept;
 #if HAS_STALL_DETECT
-	bool IsTmc2209() const noexcept { return (readRegisters[ReadIoIn] & IOIN_VERSION_MASK) == (IOIN_VERSION_2209 << IOIN_VERSION_SHIFT); }
 	void ResetLoadRegisters() noexcept
 	{
 		minSgLoadRegister = InvalidSgLoadRegister;		// value InvalidSgLoadRegister indicates that it hasn't been read
@@ -469,22 +472,20 @@ private:
 	static constexpr unsigned int WriteSpecial = NumWriteRegisters;
 
 #if HAS_STALL_DETECT
-	static constexpr unsigned int NumReadRegisters = 7;			// the number of registers that we read from on a TMC2209
-	static constexpr unsigned int NumReadRegistersNon09 = 6;	// the number of registers that we read from on a TMC2208/2224
+	static constexpr unsigned int NumReadRegisters = 6;			// the number of registers that we read from on a TMC2209
 #else
-	static constexpr unsigned int NumReadRegisters = 6;		// the number of registers that we read from on a TMC2208/2224
+	static constexpr unsigned int NumReadRegisters = 5;		// the number of registers that we read from on a TMC2208/2224
 #endif
 	static const uint8_t ReadRegNumbers[NumReadRegisters];	// the register numbers that we read from
 
 	// Read register numbers, in same order as ReadRegNumbers
-	static constexpr unsigned int ReadIoIn = 0;				// includes the version which we use to distinguish TMC2209 from 2208/2224
-	static constexpr unsigned int ReadGStat = 1;			// global status
-	static constexpr unsigned int ReadDrvStat = 2;			// drive status
-	static constexpr unsigned int ReadMsCnt = 3;			// microstep counter
-	static constexpr unsigned int ReadPwmScale = 4;			// PWM scaling
-	static constexpr unsigned int ReadPwmAuto = 5;			// PWM scaling
+	static constexpr unsigned int ReadGStat = 0;			// global status
+	static constexpr unsigned int ReadDrvStat = 1;			// drive status
+	static constexpr unsigned int ReadMsCnt = 2;			// microstep counter
+	static constexpr unsigned int ReadPwmScale = 3;			// PWM scaling
+	static constexpr unsigned int ReadPwmAuto = 4;			// PWM scaling
 #if HAS_STALL_DETECT
-	static constexpr unsigned int ReadSgResult = 6;			// stallguard result, TMC2209 only
+	static constexpr unsigned int ReadSgResult = 5;			// stallguard result, TMC2209 only
 #endif
 	static constexpr unsigned int ReadSpecial = NumReadRegisters;
 
@@ -494,7 +495,6 @@ private:
 
 	uint32_t configuredChopConfReg;							// the configured chopper control register, in the Enabled state, without the microstepping bits
 	volatile uint32_t registersToUpdate;					// bitmap of register indices whose values need to be sent to the driver chip
-	uint32_t updateMask;									// mask of allowed update registers
 
 	uint32_t axisNumber;									// the axis number of this driver as used to index the DriveMovements in the DDA
 	uint32_t microstepShiftFactor;							// how much we need to shift 1 left by to get the current microstepping
@@ -525,10 +525,10 @@ private:
 	uint8_t driverNumber;									// the number of this driver as addressed by the UART multiplexer
 	uint8_t standstillCurrentFraction;						// divide this by 256 to get the motor current standstill fraction
 	uint8_t registerToRead;									// the next register we need to read
-	uint8_t maxReadCount;									// max register to read
 	uint8_t regnumBeingUpdated;								// which register we are sending
 	uint8_t lastIfCount;									// the value of the IFCNT register last time we read it
-	uint8_t failedOp;
+	DriversState state;
+	DriverType typ;
 	static const uint8_t ReadRegCRCs[NumReadRegisters];		// CRCs of the messages needed to read the registers
 	volatile uint8_t specialReadRegisterNumber;				// the special register number we are reading
 	volatile uint8_t specialWriteRegisterNumber;			// the special register number we are writing
@@ -574,7 +574,6 @@ constexpr uint8_t Tmc22xxDriverState::WriteRegNumbers[NumWriteRegisters] =
 
 constexpr uint8_t Tmc22xxDriverState::ReadRegNumbers[NumReadRegisters] =
 {
-	REGNUM_IOIN,						// tells us whether we have a TMC2208/24 or a TMC2209
 	REGNUM_GSTAT,
 	REGNUM_DRV_STATUS,
 	REGNUM_MSCNT,
@@ -592,20 +591,19 @@ constexpr uint8_t Tmc22xxDriverState::ReadRegCRCs[NumReadRegisters] =
 	CRCAddFinalByte(InitialSendCRC, ReadRegNumbers[2]),
 	CRCAddFinalByte(InitialSendCRC, ReadRegNumbers[3]),
 	CRCAddFinalByte(InitialSendCRC, ReadRegNumbers[4]),
-	CRCAddFinalByte(InitialSendCRC, ReadRegNumbers[5]),
 #if HAS_STALL_DETECT
-	CRCAddFinalByte(InitialSendCRC, ReadRegNumbers[6])
+	CRCAddFinalByte(InitialSendCRC, ReadRegNumbers[5])
 #endif
 };
 
-Tmc22xxDriverState::Tmc22xxDriverState() noexcept : TmcDriverState(), configuredChopConfReg(0),registersToUpdate(0), updateMask(0),
- axisNumber(0), microstepShiftFactor(0), motorCurrent(0), maxOpenLoadStepInterval(0), minSgLoadRegister(0), failedOp(0)
+Tmc22xxDriverState::Tmc22xxDriverState() noexcept : TmcDriverState(), configuredChopConfReg(0),registersToUpdate(0),
+ axisNumber(0), microstepShiftFactor(0), motorCurrent(0), maxOpenLoadStepInterval(0), minSgLoadRegister(0)
 {
 }
 
 inline bool Tmc22xxDriverState::UpdatePending() const noexcept
 {
-	return (registersToUpdate & updateMask) != 0;
+	return registersToUpdate != 0;
 }
 
 // Set up the PDC or DMAC to send a register
@@ -703,6 +701,7 @@ void Tmc22xxDriverState::Init(uint32_t p_driverNumber, Pin p_enablePin
 pre(!driversPowered)
 {
 	driverNumber = p_driverNumber;
+	state = DriversState::noPower;
 	axisNumber = p_driverNumber;										// assume straight-through axis mapping initially
 	enablePin = p_enablePin;											// this is NoPin for the built-in drivers
 	IoPort::SetPinMode(p_enablePin, OUTPUT_HIGH);
@@ -712,7 +711,7 @@ pre(!driversPowered)
 	diagPin = p_diagPin;
 	IoPort::SetPinMode(p_diagPin, INPUT_PULLUP);
 #endif
-
+	state = DriversState::noPower;
 	enabled = false;
 	registersToUpdate = 0;
 	specialReadRegisterNumber = specialWriteRegisterNumber = 0xFF;
@@ -738,7 +737,6 @@ pre(!driversPowered)
 		accumulatedReadRegisters[i] = readRegisters[i] = 0;				// clear all read registers so that we don't use dud values, in particular we don't know the driver type yet
 	}
 	regnumBeingUpdated = 0xFF;
-	failedOp = 0xFF;
 	registerToRead = 0;
 	lastIfCount = 0;
 	readErrors = writeErrors = numReads = numWrites = numTimeouts = 0;
@@ -783,7 +781,7 @@ inline void Tmc22xxDriverState::SetAxisNumber(size_t p_axisNumber) noexcept
 // Write all registers. This is called when the drivers are known to be powered up.
 inline void Tmc22xxDriverState::WriteAll() noexcept
 {
-	registersToUpdate = (1 << NumWriteRegisters) - 1;
+	registersToUpdate = (1 << (IsTmc2209() ? NumWriteRegisters : NumWriteRegistersNon09)) - 1;
 }
 
 float Tmc22xxDriverState::GetStandstillCurrentPercent() const noexcept
@@ -1045,7 +1043,7 @@ void Tmc22xxDriverState::SetMaxCurrent(float value) noexcept
 StandardDriverStatus Tmc22xxDriverState::ReadStatus(bool accumulated, bool clearAccumulated) noexcept
 {
 	StandardDriverStatus rslt;
-	if (maxReadCount != 0)
+	if (IsReady())
 	{
 		uint32_t status;
 		if (accumulated)
@@ -1092,7 +1090,7 @@ StandardDriverStatus Tmc22xxDriverState::ReadStatus(bool accumulated, bool clear
 // Append the driver status to a string, and reset the min/max load values
 void Tmc22xxDriverState::AppendDriverStatus(const StringRef& reply) noexcept
 {
-	if (maxReadCount == 0)
+	if (!IsReady())
 	{
 		return;
 	}
@@ -1119,11 +1117,6 @@ void Tmc22xxDriverState::AppendDriverStatus(const StringRef& reply) noexcept
 	if(readErrors != 0 || writeErrors != 0 || numTimeouts != 0)
 		reply.catf(", error r/w %u/%u, ifcnt %u, timeout %u",
 						readErrors, writeErrors, lastIfCount, numTimeouts);
-	if (failedOp != 0xff)
-	{
-		reply.catf(", failedOp 0x%02x", failedOp);
-		failedOp = 0xFF;
-	}
 
 	readErrors = writeErrors = numReads = numWrites = numTimeouts = 0;
 }
@@ -1232,11 +1225,10 @@ inline void Tmc22xxDriverState::TransferDone() noexcept
 inline bool Tmc22xxDriverState::StartTransfer() noexcept
 {
 	// Find which register to send. The common case is when no registers need to be updated.
-	if ((registersToUpdate & updateMask) != 0)
+	if (registersToUpdate != 0)
 	{
 		// Write a register
-		const size_t regNum = LowestSetBit(registersToUpdate & updateMask);
-
+		const size_t regNum = LowestSetBit(registersToUpdate);
 		// Kick off a transfer for the register to write
 		uint8_t regNumber;
 		uint32_t regData;
@@ -1263,6 +1255,30 @@ inline bool Tmc22xxDriverState::StartTransfer() noexcept
 	}
 }
 
+int32_t Tmc22xxDriverState::IdentifyDriver() noexcept
+{
+	if (specialReadRegisterNumber == 0xFE)
+	{
+		specialReadRegisterNumber = 0xFF;
+		return (readRegisters[ReadSpecial] & IOIN_VERSION_MASK) >> IOIN_VERSION_SHIFT;
+	}
+
+	if (specialReadRegisterNumber == 0xFF)
+	{
+		// Force next read to be this one
+		registerToRead = ReadSpecial;
+		specialReadRegisterNumber = REGNUM_IOIN;
+	}
+	return 0xffffffff;
+}
+
+void Tmc22xxDriverState::ResetReadRegisters() noexcept
+{
+	for (size_t i = 0; i < NumReadRegisters; ++i)
+	{
+		accumulatedReadRegisters[i] = readRegisters[i] = 0;				// clear all read registers so that we don't use dud values, in particular we don't know the driver type yet
+	}
+}
 
 DriversState Tmc22xxDriverState::SetupDriver(bool reset) noexcept
 {
@@ -1270,50 +1286,73 @@ DriversState Tmc22xxDriverState::SetupDriver(bool reset) noexcept
 	//debugPrintf("Setup driver %d cnt %d/%d", GetDriverNumber(), numReads, numWrites);
 	if (reset)
 	{
-		// set initial state send updates and read registers
-		maxReadCount = NumReadRegistersNon09;
-		updateMask = (1 << NumWriteRegistersNon09) - 1;
-		readErrors = writeErrors = numReads = numWrites = numTimeouts = 0;
-		WriteAll();
-		//debugPrintf(" reset\n");
-		return DriversState::initialising;
+		if (TMC_PINS[driverNumber] == NoPin)
+			state = DriversState::noDriver;
+		else
+		{
+			// set initial state send updates and read registers
+			readErrors = writeErrors = numReads = numWrites = numTimeouts = 0;
+			ResetReadRegisters();
+			typ = DriverType::unknown;
+			registersToUpdate = 0;
+			IdentifyDriver();
+			state = DriversState::initialising;
+		}
+		return state;
 	}
-	// have we disabled this device because of timeouts?
-	if (maxReadCount == 0)
-	{
-		//debugPrintf(" disabled\n");
-		return DriversState::notInitialised;
-	}
+	if (state == DriversState::noDriver)
+		return state;
 	// check for device not present
-	if (numTimeouts > DriverNotPresentTimeouts)
+	if (numTimeouts > DriverNotPresentTimeouts || readErrors > DriverNotPresentTimeouts)
 	{
 		//debugPrintf(" disabling driver\n");
-		maxReadCount = 0;
-		return DriversState::notInitialised;
+		if (reprap.Debug(Module::Driver))
+			debugPrintf("TMC5160: Too many errors drive %d driver disabled\n", driverNumber);
+		ResetReadRegisters();
+		state = DriversState::noDriver;
+		return state;
 	}
+
+	// Idenitfy device during initial reads
+	if (typ == DriverType::unknown)
+	{
+		int32_t version = IdentifyDriver();
+		if (version >= 0)
+		{
+			if (numReads < 3)
+			{
+				// Start another read
+				IdentifyDriver();
+			}
+			else
+			{
+				if (version == IOIN_VERSION_2209)
+					typ = DriverType::Tmc2209;
+				else if (version == IOIN_VERSION_2208_2224)
+					typ = DriverType::Tmc2208;
+				else
+				{
+					// We could potentially stop here and declare the driver unknown, but for now
+					// we issue a warning and assume it is a 2209.
+					if (reprap.Debug(Module::Driver))
+						debugPrintf("TMCUART:: Warning driver %d unknown version number 0x%x\n", driverNumber, (unsigned)version);
+					typ = DriverType::Tmc2209;
+				}
+				WriteAll();
+			}
+		}
+		return state;
+	}		
 
 	if (UpdatePending())
 	{
 		//debugPrintf(" write pending %x\n", registersToUpdate);
-		return DriversState::initialising;
+		return state;
 	}
-	if (numReads >= 1)
+	if (numReads >= NumReadRegisters + 3)
 	{
-		// we have read the basic registers so can work out what device we have
-		if (IsTmc2209() && maxReadCount != NumReadRegisters)
-		{
-			//debugPrintf(" request 2209 reg\n");
-			// request extra 2209 registers, note this may trigger more writes
-			maxReadCount = NumReadRegisters;
-			updateMask = (1 << NumWriteRegisters) - 1;
-			return DriversState::initialising;
-		}
-		if (numReads >= maxReadCount)
-		{
-			registersToUpdate &= updateMask;
-			//debugPrintf(" ready\n");
-			return DriversState::ready;
-		}
+		//debugPrintf(" ready\n");
+		state = DriversState::ready;
 	}
 	//debugPrintf(" waiting\n");
 	return DriversState::initialising;
@@ -1325,9 +1364,9 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 {
 	for (;;)
 	{
-		if (driversState <= DriversState::noDrivers)
+		if (driversState <= DriversState::noDriver)
 		{
-			if (driversState != DriversState::noDrivers) driversState = DriversState::powerWait;
+			if (driversState != DriversState::noDriver) driversState = DriversState::powerWait;
 			TaskBase::Take();
 		}
 		else
@@ -1337,7 +1376,6 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 				for (size_t drive = 0; drive < numTmc22xxDrivers; ++drive)
 				{
 					driverStates[drive].SetupDriver(true);
-					driverStates[drive].WriteAll();
 				}
 				driversState = DriversState::initialising;
 			}
@@ -1366,20 +1404,21 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 								readyCnt++;
 							}
 						}
-						driversState = (readyCnt ? DriversState::ready : DriversState::noDrivers);
+						driversState = (readyCnt ? DriversState::ready : DriversState::noDriver);
 					}
 				}
 			}
 			uint32_t activeCnt = 0;
 			for (size_t i = 0; i < numTmc22xxDrivers; ++i)
 			{
-				if (driverStates[i].IsReady())
+				if (driverStates[i].IsActive())
 				{
 					activeCnt++;
 					if (driverStates[i].StartTransfer())
 						driverStates[i].TransferDone();
 					else
 						driverStates[i].TransferTimedOut();
+
 				}
 			}
 			// Give other tasks a chance to run.
@@ -1454,7 +1493,7 @@ void Tmc22xxDriver::Spin(bool powered) noexcept
 
 bool Tmc22xxDriver::IsReady() noexcept
 {
-	return driversState == DriversState::ready || driversState == DriversState::noDrivers;
+	return driversState == DriversState::ready || driversState == DriversState::noDriver;
 }
 
 // This is called from the tick ISR, possibly while Spin (with powered either true or false) is being executed
@@ -1464,7 +1503,7 @@ void Tmc22xxDriver::TurnDriversOff() noexcept
 	{
 		digitalWrite(ENABLE_PINS[driver + baseDriveNo], true);
 	}
-	driversState = (driversState == DriversState::noDrivers ? DriversState::powerWait : DriversState::noPower);
+	driversState = (driversState == DriversState::noDriver ? DriversState::powerWait : DriversState::noPower);
 }
 
 TmcDriverState* Tmc22xxDriver::GetDrive(size_t driveNo) noexcept
