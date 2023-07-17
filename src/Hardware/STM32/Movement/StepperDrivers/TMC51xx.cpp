@@ -60,6 +60,11 @@ constexpr uint32_t DefaultTcoolthrs = 2000;					// max interval between 1/256 mi
 constexpr uint32_t DefaultThigh = 200;
 constexpr size_t TmcTaskStackWords = 200;
 constexpr uint32_t TmcClockSpeed = 12000000; 				// the rate at which the TMC driver is clocked, internally or externally
+//constexpr float Tmc2240Rref = 14.0;							// TMC2240 reference resistor on Fly boards, in Kohms
+constexpr float Tmc2240Rref = 12.3;							// TMC2240 reference resistor on Duet 3 Mini2+ prototype, in Kohms
+constexpr float Tmc2240FullScaleCurrent = 36000/Tmc2240Rref;// in mA, assuming we set the range bits in the DRV_CONF register to 01b
+constexpr float Tmc2240CsMultiplier = 32.0/Tmc2240FullScaleCurrent;
+constexpr float MaximumTmc2240MotorCurrent = 2500.0;
 
 #if TMC_TYPE == 5130
 constexpr float SenseResistor = 0.11;						// 0.082R external + 0.03 internal
@@ -119,6 +124,7 @@ constexpr uint32_t DefaultGConfReg = GCONF_DIAG0_STALL | GCONF_DIAG0_PUSHPULL;
 #elif TMC_TYPE == 5160
 constexpr uint32_t DefaultGConfReg = GCONF_5160_RECAL | GCONF_5160_MULTISTEP_FILT | GCONF_DIAG0_STALL | GCONF_DIAG0_PUSHPULL;
 #endif
+constexpr uint32_t DefaultGConfReg2240 = GCONF_5160_MULTISTEP_FILT | GCONF_DIAG0_STALL | GCONF_DIAG0_PUSHPULL;
 
 // General configuration and status registers
 
@@ -185,11 +191,11 @@ constexpr uint32_t DRVCONF_FILT_ISENSE_MASK = (3 << 20);	// Filter time constant
 constexpr uint32_t DefaultDrvConfReg = (2 << DRVCONF_BBMCLKS_SHIFT) | (2 << DRVCONF_OTSELECT_SHIFT);
 
 // TMC2040 has different DRV_CONF settings
-constexpr unsigned int DRV_CONF40_CURRENT_RANGE_SHIFT = 0;
-constexpr uint32_t DRV_CONF40_CURRENT_RANGE_MASK = 0x03;										// 0 = 1A, 1 = 2A, 2 = 3A, 3 = 3A peak current
-constexpr unsigned int DRV_CONF40_SLOPE_CONTROL_SHIFT = 4;
-constexpr uint32_t DRV_CONF40_SLOPE_CONTROL_MASK = 0x03 << DRV_CONF40_SLOPE_CONTROL_SHIFT;		// 0 = 100V/us, 1 = 200V/us, 2 = 400V/us, 3 - 800V/us
-constexpr uint32_t DefaultDrvConfReg40 = (2 << DRV_CONF40_CURRENT_RANGE_SHIFT);
+constexpr unsigned int DRV_CONF2240_CURRENT_RANGE_SHIFT = 0;
+constexpr uint32_t DRV_CONF2240_CURRENT_RANGE_MASK = 0x03;										// 0 = 1A, 1 = 2A, 2 = 3A, 3 = 3A peak current
+constexpr unsigned int DRV_CONF2240_SLOPE_CONTROL_SHIFT = 4;
+constexpr uint32_t DRV_CONF2240_SLOPE_CONTROL_MASK = 0x03 << DRV_CONF2240_SLOPE_CONTROL_SHIFT;		// 0 = 100V/us, 1 = 200V/us, 2 = 400V/us, 3 - 800V/us
+constexpr uint32_t DefaultDrvConfReg2240 = (2 << DRV_CONF2240_CURRENT_RANGE_SHIFT);
 
 constexpr uint8_t REGNUM_5160_GLOBAL_SCALER = 0x0B;			// Global scaling of Motor current. This value is multiplied to the current scaling in order to adapt a drive to a
 															// certain motor type. This value should be chosen before tuning other settings, because it also influences chopper hysteresis.
@@ -198,6 +204,11 @@ constexpr uint8_t REGNUM_5160_GLOBAL_SCALER = 0x0B;			// Global scaling of Motor
 constexpr uint32_t DefaultGlobalScalerReg = 0;				// until we use it as part of the current setting
 
 constexpr uint8_t REGNUM_5160_OFFSET_READ = 0x0B;			// Bits 8..15: Offset calibration result phase A (signed). Bits 0..7: Offset calibration result phase B (signed).
+
+// TMC2040 Temperature ADC regs
+constexpr uint8_t REGNUM_ADC_TEMP = 0x51;
+constexpr unsigned int ADC_TEMP_SHIFT = 0;
+constexpr uint32_t ADC_TEMP_MASK = 0x01FFF << ADC_TEMP_SHIFT;								// ADC temperature reading
 
 #endif
 
@@ -211,6 +222,8 @@ constexpr uint32_t IHOLDIRUN_IRUN_SHIFT = 8;
 constexpr uint32_t IHOLDIRUN_IRUN_MASK = 0x1F << IHOLDIRUN_IRUN_SHIFT;
 constexpr uint32_t IHOLDIRUN_IHOLDDELAY_SHIFT = 16;
 constexpr uint32_t IHOLDIRUN_IHOLDDELAY_MASK = 0x0F << IHOLDIRUN_IHOLDDELAY_SHIFT;
+constexpr unsigned int IHOLDIRUN2240_IRUNDELAY_SHIFT = 24;
+constexpr uint32_t IHOLDIRUN2240_IRUNDELAY_MASK = 0x0F << IHOLDIRUN2240_IRUNDELAY_SHIFT;
 
 constexpr uint32_t DefaultIholdIrunReg = (0 << IHOLDIRUN_IHOLD_SHIFT) | (0 << IHOLDIRUN_IRUN_SHIFT) | (2 << IHOLDIRUN_IHOLDDELAY_SHIFT);
 															// approx. 0.5 sec motor current reduction to half power
@@ -273,6 +286,7 @@ constexpr uint8_t REGNUM_DRV_STATUS = 0x6F;
 constexpr uint8_t REGNUM_PWMCONF = 0x70;
 
 constexpr uint32_t DefaultPwmConfReg = 0xC40C001E;			// this is the reset default - try it until we find something better
+constexpr uint32_t DefaultPwmConfReg2240 = 0xC40C001D;			// this is the reset default - try it until we find something better
 
 constexpr uint8_t REGNUM_PWM_SCALE = 0x71;
 constexpr uint8_t REGNUM_PWM_AUTO = 0x72;
@@ -376,10 +390,13 @@ private:
 	static constexpr unsigned int NumWriteRegisters = 8;	// the number of registers that we write to
 #endif
 	static constexpr unsigned int WriteSpecial = NumWriteRegisters;
+	static constexpr unsigned int WriteAll5160 = (1u << NumWriteRegisters) - 1;
+	static constexpr unsigned int WriteAll2240 = ((1u << NumWriteRegisters) - 1) & ~(1 << Write5160ShortConf);
+
 
 	static const uint8_t WriteRegNumbers[NumWriteRegisters];	// the register numbers that we write to
 
-	static constexpr unsigned int NumReadRegisters = 5;		// the number of registers that we read from
+	static constexpr unsigned int NumReadRegisters = 6;		// the number of registers that we read from
 	static const uint8_t ReadRegNumbers[NumReadRegisters];	// the register numbers that we read from
 
 	// Read register numbers, in same order as ReadRegNumbers
@@ -388,6 +405,7 @@ private:
 	static constexpr unsigned int ReadMsCnt = 2;
 	static constexpr unsigned int ReadPwmScale = 3;
 	static constexpr unsigned int ReadPwmAuto = 4;
+	static constexpr unsigned int ReadAdcTemp = 5;
 	static constexpr unsigned int ReadSpecial = NumReadRegisters;
 
 	static constexpr uint8_t NoRegIndex = 0xFF;				// this means no register updated, or no register requested
@@ -445,7 +463,8 @@ const uint8_t Tmc51xxDriverState::ReadRegNumbers[NumReadRegisters] =
 	REGNUM_DRV_STATUS,
 	REGNUM_MSCNT,
 	REGNUM_PWM_SCALE,
-	REGNUM_PWM_AUTO
+	REGNUM_PWM_AUTO,
+	REGNUM_ADC_TEMP
 };
 
 Tmc51xxDriverState::Tmc51xxDriverState() noexcept : TmcDriverState(), accumulatedDriveStatus(0), configuredChopConfReg(0), maxStallStepInterval(0),
@@ -519,7 +538,7 @@ inline void Tmc51xxDriverState::SetAxisNumber(size_t p_axisNumber) noexcept
 // Write all registers. This is called when the drivers are known to be powered up.
 inline void Tmc51xxDriverState::WriteAll() noexcept
 {
-	newRegistersToUpdate.store((1u << NumWriteRegisters) - 1);
+	newRegistersToUpdate.store(IsTmc2240() ? WriteAll2240 : WriteAll5160);
 }
 
 float Tmc51xxDriverState::GetStandstillCurrentPercent() const noexcept
@@ -754,6 +773,18 @@ void Tmc51xxDriverState::SetCurrent(float current) noexcept
 
 void Tmc51xxDriverState::UpdateCurrent() noexcept
 {
+	if (IsTmc2240())
+	{
+		const float idealIRunCs = motorCurrent * Tmc2240CsMultiplier;
+		const uint32_t iRunCsBits = constrain<uint32_t>((unsigned int)(idealIRunCs + 0.2), 1, 32) - 1;
+		const float idealIHoldCs = idealIRunCs * standstillCurrentFraction * (1.0/256.0);
+		const uint32_t iHoldCsBits = constrain<uint32_t>((unsigned int)(idealIHoldCs + 0.2), 1, 32) - 1;
+		UpdateRegister(WriteIholdIrun,
+						(writeRegisters[WriteIholdIrun] & ~(IHOLDIRUN_IRUN_MASK | IHOLDIRUN_IHOLD_MASK))
+						| (iRunCsBits << IHOLDIRUN_IRUN_SHIFT)
+						| (iHoldCsBits << IHOLDIRUN_IHOLD_SHIFT));
+		return;
+	}
 #if TMC_TYPE == 5130
 	// Assume a current sense resistor of 0.082 ohms, to which we must add 0.025 ohms internal resistance.
 	// Full scale peak motor current in the high sensitivity range is give by I = 0.18/(R+0.03) = 0.18/0.105 ~= 1.6A
@@ -889,6 +920,10 @@ void Tmc51xxDriverState::AppendDriverStatus(const StringRef& reply) noexcept
 		reply.cat(", SG min n/a");
 	}
 	ResetLoadRegisters();
+	if (IsTmc2240())
+	{
+		reply.catf(", temp %.1fC", (double)((float)(((readRegisters[ReadAdcTemp] & ADC_TEMP_MASK) >> ADC_TEMP_SHIFT) - 2038)/7.7));
+	}
 
 	reply.catf(", mspos %u, reads %u, writes %u", (unsigned int)(readRegisters[ReadMsCnt] & 1023), numReads, numWrites);
 	if (numWriteErrors > 0)
@@ -1149,9 +1184,19 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 			else
 			{
 				if (version == IOIN_VERSION_2240)
+				{
+					// We have a TMC2240, adjust settings from assumed 5160
 					typ = DriverType::Tmc2240;
+					UpdateRegister(WriteGConf, writeRegisters[WriteGConf] & ~(GCONF_5160_RECAL));
+					UpdateRegister(WriteIholdIrun, writeRegisters[WriteIholdIrun] | (0x4 << IHOLDIRUN2240_IRUNDELAY_SHIFT));
+					UpdateRegister(Write5160DrvConf, DefaultDrvConfReg2240);
+					UpdateRegister(WritePwmConf, DefaultPwmConfReg2240);
+
+				}
 				else if (version == IOIN_VERSION_5160)
+				{
 					typ = DriverType::Tmc5160;
+				}
 				else
 				{
 					// We could potentially stop here and declare the driver unknown, but for now
