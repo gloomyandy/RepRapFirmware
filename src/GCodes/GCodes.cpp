@@ -1675,7 +1675,7 @@ bool GCodes::Push(GCodeBuffer& gb, bool withinSameFile) noexcept
 	const bool ok = gb.PushState(withinSameFile);
 	if (!ok)
 	{
-		platform.Message(ErrorMessage, "Push(): stack overflow\n");
+		platform.MessageF(ErrorMessage, "Push(): stack overflow on %s\n", gb.GetChannel().ToString());
 		AbortPrint(gb);
 	}
 	return ok;
@@ -1686,7 +1686,7 @@ void GCodes::Pop(GCodeBuffer& gb, bool withinSameFile) noexcept
 {
 	if (!gb.PopState(withinSameFile))
 	{
-		platform.Message(ErrorMessage, "Pop(): stack underflow\n");
+		platform.MessageF(ErrorMessage, "Pop(): stack underflow on %s\n", gb.GetChannel().ToString());
 	}
 	reprap.InputsUpdated();
 }
@@ -2063,7 +2063,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 			}
 			else if (gb.LatestMachineState().g53Active)
 			{
-				ms.currentUserPosition[axis] = moveArg + ms.GetCurrentToolOffset(axis);	// g53 ignores tool offsets as well as workplace coordinates
+				ms.currentUserPosition[axis] = moveArg + ms.GetCurrentToolOffset(axis)/axisScaleFactors[axis];	// g53 ignores tool offsets as well as workplace coordinates
 			}
 			else if (gb.LatestMachineState().runningSystemMacro)
 			{
@@ -2380,7 +2380,7 @@ bool GCodes::DoArcMove(GCodeBuffer& gb, bool clockwise)
 		}
 		else if (gb.LatestMachineState().g53Active)
 		{
-			newAxis0Pos += ms.GetCurrentToolOffset(axis0);
+			newAxis0Pos += ms.GetCurrentToolOffset(axis0)/axisScaleFactors[axis0];
 		}
 		else if (!gb.LatestMachineState().runningSystemMacro)
 		{
@@ -2401,7 +2401,7 @@ bool GCodes::DoArcMove(GCodeBuffer& gb, bool clockwise)
 		}
 		else if (gb.LatestMachineState().g53Active)
 		{
-			newAxis1Pos += ms.GetCurrentToolOffset(axis1);
+			newAxis1Pos += ms.GetCurrentToolOffset(axis1)/axisScaleFactors[axis1];
 		}
 		else if (!gb.LatestMachineState().runningSystemMacro)
 		{
@@ -2513,7 +2513,7 @@ bool GCodes::DoArcMove(GCodeBuffer& gb, bool clockwise)
 			}
 			else if (gb.LatestMachineState().g53Active)
 			{
-				ms.currentUserPosition[axis] = moveArg + ms.GetCurrentToolOffset(axis);	// g53 ignores tool offsets as well as workplace coordinates
+				ms.currentUserPosition[axis] = moveArg + ms.GetCurrentToolOffset(axis)/axisScaleFactors[axis];	// g53 ignores tool offsets as well as workplace coordinates
 			}
 			else if (gb.LatestMachineState().runningSystemMacro)
 			{

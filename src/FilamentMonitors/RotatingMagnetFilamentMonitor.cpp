@@ -37,15 +37,16 @@ constexpr ObjectModelTableEntry RotatingMagnetFilamentMonitor::objectModelTable[
 #ifdef DUET3_ATE
 	{ "agc",				OBJECT_MODEL_FUNC((int32_t)self->agc),																	ObjectModelEntryFlags::live },
 #endif
-	{ "calibrated", 		OBJECT_MODEL_FUNC_IF(self->IsLocal() && self->dataReceived && self->HaveCalibrationData(), self, 1), 	ObjectModelEntryFlags::live },
+	{ "calibrated", 		OBJECT_MODEL_FUNC_IF(
+#if SUPPORT_CAN_EXPANSION
+													self->IsLocal() &&
+#endif
+													self->dataReceived && self->HaveCalibrationData(), self, 1), 					ObjectModelEntryFlags::live },
 	{ "configured", 		OBJECT_MODEL_FUNC(self, 2), 																			ObjectModelEntryFlags::none },
-	{ "enabled",			OBJECT_MODEL_FUNC(self->comparisonEnabled),		 														ObjectModelEntryFlags::none },
 #ifdef DUET3_ATE
 	{ "mag",				OBJECT_MODEL_FUNC((int32_t)self->magnitude),															ObjectModelEntryFlags::live },
 	{ "position",			OBJECT_MODEL_FUNC((int32_t)self->lastKnownPosition),													ObjectModelEntryFlags::live },
 #endif
-	{ "status",				OBJECT_MODEL_FUNC(self->GetStatusText()),																ObjectModelEntryFlags::live },
-	{ "type",				OBJECT_MODEL_FUNC_NOSELF("rotatingMagnet"), 															ObjectModelEntryFlags::none },
 
 	// 1. RotatingMagnetFilamentMonitor.calibrated members
 	{ "mmPerRev",			OBJECT_MODEL_FUNC(self->MeasuredSensitivity(), 2), 														ObjectModelEntryFlags::live },
@@ -65,15 +66,15 @@ constexpr uint8_t RotatingMagnetFilamentMonitor::objectModelTableDescriptor[] =
 {
 	3,
 #ifdef DUET3_ATE
-	8,
-#else
 	5,
+#else
+	2,
 #endif
 	4,
 	5
 };
 
-DEFINE_GET_OBJECT_MODEL_TABLE(RotatingMagnetFilamentMonitor)
+DEFINE_GET_OBJECT_MODEL_TABLE_WITH_PARENT(RotatingMagnetFilamentMonitor, FilamentMonitor)
 
 #endif
 
@@ -81,7 +82,7 @@ RotatingMagnetFilamentMonitor::RotatingMagnetFilamentMonitor(unsigned int drv, u
 	: Duet3DFilamentMonitor(drv, monitorType, did),
 	  mmPerRev(DefaultMmPerRev),
 	  minMovementAllowed(DefaultMinMovementAllowed), maxMovementAllowed(DefaultMaxMovementAllowed),
-	  minimumExtrusionCheckLength(DefaultMinimumExtrusionCheckLength), comparisonEnabled(false), checkNonPrintingMoves(false)
+	  minimumExtrusionCheckLength(DefaultMinimumExtrusionCheckLength), checkNonPrintingMoves(false)
 {
 	switchOpenMask = (monitorType == 4) ? TypeMagnetV1SwitchOpenMask : 0;
 	Init();
@@ -151,12 +152,6 @@ GCodeResult RotatingMagnetFilamentMonitor::Configure(GCodeBuffer& gb, const Stri
 			}
 		}
 
-		if (gb.Seen('S'))
-		{
-			seen = true;
-			comparisonEnabled = (gb.GetIValue() > 0);
-		}
-
 		if (gb.Seen('A'))
 		{
 			seen = true;
@@ -172,7 +167,7 @@ GCodeResult RotatingMagnetFilamentMonitor::Configure(GCodeBuffer& gb, const Stri
 			reply.printf("Duet3D rotating magnet filament monitor v%u%s on pin ", version, (switchOpenMask != 0) ? " with switch" : "");
 			GetPort().AppendPinName(reply);
 			reply.catf(", %s, sensitivity %.2fmm/rev, allow %ld%% to %ld%%, check %s moves every %.1fmm, ",
-						(comparisonEnabled) ? "enabled" : "disabled",
+						(GetEnableMode() != 0) ? "enabled" : "disabled",
 						(double)mmPerRev,
 						ConvertToPercent(minMovementAllowed),
 						ConvertToPercent(maxMovementAllowed),
@@ -419,7 +414,7 @@ FilamentSensorStatus RotatingMagnetFilamentMonitor::Check(bool isPrinting, bool 
 		extrusionCommandedThisSegment = extrusionCommandedSinceLastSync = movementMeasuredThisSegment = movementMeasuredSinceLastSync = 0.0;
 	}
 
-	return (comparisonEnabled) ? ret : FilamentSensorStatus::ok;
+	return (GetEnableMode() != 0) ? ret : FilamentSensorStatus::ok;
 }
 
 // Compare the amount commanded with the amount of extrusion measured, and set up for the next comparison
@@ -458,7 +453,7 @@ FilamentSensorStatus RotatingMagnetFilamentMonitor::CheckFilament(float amountCo
 			float ratio = totalMovementMeasured/totalExtrusionCommanded;
 			minMovementRatio = maxMovementRatio = ratio;
 
-			if (comparisonEnabled)
+			if (GetEnableMode() != 0)
 			{
 				ratio *= mmPerRev;
 				if (ratio < minMovementAllowed)
@@ -492,7 +487,7 @@ FilamentSensorStatus RotatingMagnetFilamentMonitor::CheckFilament(float amountCo
 				minMovementRatio = ratio;
 			}
 
-			if (comparisonEnabled)
+			if (GetEnableMode() != 0)
 			{
 				ratio *= mmPerRev;
 				if (ratio < minMovementAllowed)
@@ -517,7 +512,7 @@ FilamentSensorStatus RotatingMagnetFilamentMonitor::Clear() noexcept
 	Reset();											// call this first so that haveStartBitData and synced are false when we call HandleIncomingData
 	HandleIncomingData();								// to keep the diagnostics up to date
 
-	return (!comparisonEnabled) ? FilamentSensorStatus::ok
+	return (GetEnableMode() == 0) ? FilamentSensorStatus::ok
 			: (!dataReceived) ? FilamentSensorStatus::noDataReceived
 				: (sensorError) ? FilamentSensorStatus::sensorError
 					: ((sensorValue & switchOpenMask) != 0) ? FilamentSensorStatus::noFilament
@@ -576,12 +571,6 @@ GCodeResult RotatingMagnetFilamentMonitor::Configure(const CanMessageGenericPars
 		}
 
 		uint16_t temp;
-		if (parser.GetUintParam('S', temp))
-		{
-			seen = true;
-			comparisonEnabled = (temp > 0);
-		}
-
 		if (parser.GetUintParam('A', temp))
 		{
 			seen = true;
@@ -597,7 +586,7 @@ GCodeResult RotatingMagnetFilamentMonitor::Configure(const CanMessageGenericPars
 			reply.printf("Duet3D rotating magnet filament monitor v%u%s on pin ", version, (switchOpenMask != 0) ? " with switch" : "");
 			GetPort().AppendPinName(reply);
 			reply.catf(", %s, sensitivity %.2fmm/rev, allow %ld%% to %ld%%, check every %.1fmm, ",
-						(comparisonEnabled) ? "enabled" : "disabled",
+						(GetEnableMode() != 0) ? "enabled" : "disabled",
 						(double)mmPerRev,
 						ConvertToPercent(minMovementAllowed),
 						ConvertToPercent(maxMovementAllowed),

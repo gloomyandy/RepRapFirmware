@@ -30,6 +30,9 @@ class FilamentMonitor INHERIT_OBJECT_MODEL
 public:
 	FilamentMonitor(const FilamentMonitor&) = delete;
 
+	// Override the virtual destructor if your derived class allocates any dynamic memory
+	virtual ~FilamentMonitor() noexcept;
+
 	// Configure this sensor, returning true if error and setting 'seen' if we processed any configuration parameters
 	virtual GCodeResult Configure(GCodeBuffer& gb, const StringRef& reply, bool& seen) THROWS(GCodeException) = 0;
 
@@ -54,11 +57,14 @@ public:
 	// Call this to disable the interrupt before deleting a filament monitor
 	virtual void Disable() noexcept;
 
-	// Override the virtual destructor if your derived class allocates any dynamic memory
-	virtual ~FilamentMonitor() noexcept;
+	// Get the type of filament monitor to report in the OM
+	virtual const char *_ecv_array GetTypeText() const noexcept = 0;
 
 	// Return the type of this sensor
 	unsigned int GetType() const noexcept { return type; }
+
+	// Return the enable state of this sensor
+	uint8_t GetEnableMode() const noexcept { return enableMode; }
 
 	// Check that this monitor still refers to a valid extruder
 	bool IsValid(size_t extruderNumber) const noexcept;
@@ -115,6 +121,8 @@ public:
 	static ReadWriteLock filamentMonitorsLock;
 
 protected:
+	DECLARE_OBJECT_MODEL
+
 	FilamentMonitor(unsigned int drv, unsigned int monitorType, DriverId did) noexcept;
 
 	GCodeResult CommonConfigure(GCodeBuffer& gb, const StringRef& reply, InterruptMode interruptMode, bool& seen) THROWS(GCodeException);
@@ -130,12 +138,14 @@ protected:
 		return lrintf(100 * f);
 	}
 
-	bool IsLocal() const noexcept { return driverId.IsLocal(); }
+#if SUPPORT_CAN_EXPANSION
+	bool IsLocal() const noexcept { return boardAddress == CanInterface::GetCanAddress(); }
+#endif
 
 private:
 
 	// Create a filament sensor returning null if not a valid sensor type
-	static FilamentMonitor *Create(unsigned int extruder, unsigned int monitorType, GCodeBuffer& gb, const StringRef& reply) noexcept;
+	static FilamentMonitor *Create(unsigned int extruder, unsigned int monitorType, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 	static void InterruptEntry(CallbackParameter param) noexcept;
 
 	static constexpr size_t NumFilamentMonitors =
@@ -165,6 +175,7 @@ private:
 	bool haveIsrStepsCommanded;
 	FilamentSensorStatus lastStatus;
 #if SUPPORT_CAN_EXPANSION
+	CanAddress boardAddress;
 	FilamentSensorStatus lastRemoteStatus;
 	bool hasRemote;
 #endif
