@@ -57,6 +57,10 @@ Version 3.5beta1_102
 * Duet3D 3.5beta1
 * Removed LPC17xx support from source
 
+Version 3.4.6_101
+======================
+* Duet3d 3.4.6
+
 Version 3.4.6-rc.1_101
 ======================
 * Duet3d 3.4.6-rc.1
