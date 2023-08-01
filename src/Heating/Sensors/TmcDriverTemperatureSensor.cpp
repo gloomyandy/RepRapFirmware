@@ -10,6 +10,9 @@
 #include <Platform/RepRap.h>
 
 #if HAS_SMART_DRIVERS
+#if STM32
+#include <TMC22xx.h>
+#endif
 
 TmcDriverTemperatureSensor::TmcDriverTemperatureSensor(unsigned int sensorNum, unsigned int chan) noexcept
 	: TemperatureSensor(sensorNum, "Stepper driver temperature warnings"), channel(chan)
@@ -27,9 +30,34 @@ const char *TmcDriverTemperatureSensor::GetShortSensorType() const noexcept
 
 void TmcDriverTemperatureSensor::Poll() noexcept
 {
+#if STM32
+	float maxTemp = 0.0f;
+	for(size_t drive = 0; drive < totalSmartDrivers; drive++)
+		maxTemp = max<float>(maxTemp, SmartDrivers::GetTemperature(drive));
+	SetResult(maxTemp, TemperatureError::ok);
+#else	
 	SetResult(reprap.GetPlatform().GetTmcDriversTemperature(channel), TemperatureError::ok);
+#endif
 }
 
+
+#if STM32
+// Class DhtHumiditySensor members
+TmcDriverActualTemperatureSensor::TmcDriverActualTemperatureSensor(unsigned int sensorNum) noexcept
+	: AdditionalOutputSensor(sensorNum, "Stepper driver temperature", false)
+{
+}
+
+TmcDriverActualTemperatureSensor::~TmcDriverActualTemperatureSensor() noexcept
+{
+}
+
+void TmcDriverActualTemperatureSensor::Poll() noexcept
+{
+	SetResult(SmartDrivers::GetTemperature(outputNumber), TemperatureError::ok);
+}
+
+#endif
 #endif
 
 // End

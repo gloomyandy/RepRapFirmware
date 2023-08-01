@@ -276,6 +276,12 @@ TemperatureSensor *_ecv_from TemperatureSensor::Create(unsigned int sensorNum, c
 		ts = new TmcDriverTemperatureSensor(sensorNum, 1);
 	}
 # endif
+# if STM32
+	else if (ReducedStringEquals(typeName, TmcDriverActualTemperatureSensor::TypeName))
+	{
+		ts = new TmcDriverActualTemperatureSensor(sensorNum);
+	}
+# endif
 #endif
 	else
 	{

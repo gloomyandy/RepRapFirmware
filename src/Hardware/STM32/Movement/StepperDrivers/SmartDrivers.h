@@ -60,6 +60,7 @@ namespace SmartDrivers
 	float GetSenseResistor(size_t driver) noexcept;
 	void SetMaxCurrent(size_t driver, float value) noexcept;
 	float GetMaxCurrent(size_t driver) noexcept;
+	float GetTemperature(size_t driver) noexcept;
 };
 
 #endif

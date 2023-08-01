@@ -407,6 +407,7 @@ public:
 	float GetMaxCurrent() const noexcept;
 	void SetMaxCurrent(float value) noexcept;
 	void AppendDriverStatus(const StringRef& reply) noexcept;
+	float GetTemperature() noexcept;
 	uint8_t GetDriverNumber() const noexcept { return driverNumber; }
 	bool UpdatePending() const noexcept;
 	
@@ -1119,6 +1120,14 @@ void Tmc22xxDriverState::AppendDriverStatus(const StringRef& reply) noexcept
 						readErrors, writeErrors, lastIfCount, numTimeouts);
 
 	readErrors = writeErrors = numReads = numWrites = numTimeouts = 0;
+}
+
+float Tmc22xxDriverState::GetTemperature() noexcept
+{
+	uint32_t status = readRegisters[ReadDrvStat];
+
+	return (status & TMC22xx_RR_OT ? 150.0f : status & TMC22xx_RR_OTPW ? 100.0f : 0.0f);
+
 }
 
 // This is called by the ISR when the SPI transfer has completed

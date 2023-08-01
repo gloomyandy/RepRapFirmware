@@ -36,6 +36,7 @@ public:
 	virtual void SetSenseResistor(float value) noexcept = 0;
 	virtual float GetMaxCurrent() const noexcept = 0;
 	virtual void SetMaxCurrent(float value) noexcept = 0;
+	virtual float GetTemperature() noexcept = 0;
 
 };
 #endif
