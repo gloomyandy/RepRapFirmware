@@ -93,7 +93,7 @@ FLAGS += -MMD -MP
 
 ifeq ($(NETWORK), WIFI)
         $(info  - Networking: ESP WIFI) 
-        FLAGS += -DESP8266WIFI -DMQTT_USE_CUSTOM_SOCKET_HANDLE
+        FLAGS += -DESP8266WIFI -DMQTT_USE_CUSTOM_SOCKET_HANDLE -DMQTTC_PAL_FILE="Networking/MQTT/mqtt_pal.h"
 		OUTPUT_NAME =$(BASE_OUTPUT_NAME)-wifi
 else ifeq ($(NETWORK), SBC)
         $(info  - SBC Interface Enabled)
