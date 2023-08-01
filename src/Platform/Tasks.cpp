@@ -53,7 +53,9 @@ constexpr unsigned int MainTaskStackWords = max<unsigned int>(1370, (MaxAxes * M
 
 static TASKMEM Task<MainTaskStackWords> mainTask;
 extern "C" [[noreturn]] void MainTask(void * pvParameters) noexcept;
+#if !STM32
 extern DeviceVectors exception_table;
+#endif
 
 // Idle task data
 // The timer and idle tasks currently never do I/O, so they don't need much stack.
