@@ -47,7 +47,7 @@
 
 #  define IAP_IMAGE_START         0x0                 // FIXME: Needs updating for H7
 # else
-#  error "Processor undfined"
+#  error "Processor undefined"
 # endif
 #else
 # define FIRMWARE_NAME "RepRapFirmware for STM32F4 based Boards"
