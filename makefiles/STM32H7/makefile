@@ -224,6 +224,6 @@ distclean:
 	-rm -rf $(BUILD_DIR)/ 
 
 upload:
-	ST-LINK_CLI.exe -c SWD -P "$(BUILD_DIR)/$(OUTPUT_NAME).bin" 0x8020000 -ClrBP -NoPrompt -Rst -Run
+	ST-LINK_CLI.exe -c SWD Hrst UR -P "$(BUILD_DIR)/$(OUTPUT_NAME).bin" 0x8020000 -ClrBP -NoPrompt -Rst -Run
 
 .PHONY: all firmware clean distclean $(BUILD_DIR)/$(OUTPUT_NAME).elf
