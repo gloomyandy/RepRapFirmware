@@ -28,6 +28,10 @@ void GCodeException::GetMessage(const StringRef &reply, const GCodeBuffer *null 
 		}
 		reply.cat(": ");
 	}
+	else if (column >= 0)
+	{
+		reply.printf("at column %d: ", column + 1);
+	}
 	else
 	{
 		reply.Clear();
@@ -74,6 +78,16 @@ void GCodeException::GetMessage(const StringRef &reply, const GCodeBuffer *null 
 	{
 		reply.catf(message, param.i);
 	}
+}
+
+[[noreturn]] void ThrowGCodeException(const char *errMsg) THROWS(GCodeException)
+{
+	throw GCodeException(-1, -1, errMsg);
+}
+
+[[noreturn]] void ThrowGCodeException(const char *errMsg, uint32_t param) THROWS(GCodeException)
+{
+	throw GCodeException(-1, -1, errMsg, param);
 }
 
 // End

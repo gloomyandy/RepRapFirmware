@@ -158,15 +158,15 @@ void ExpressionValue::AppendAsString(const StringRef& str) const noexcept
 			ReadLocker lock(Heap::heapLock);				// must have a read lock on heapLock when calling GetNumElements or GetElement
 			for (size_t i = 0; ; ++i)
 			{
-				if (i != 0)
-				{
-					str.cat(',');
-				}
-
 				ExpressionValue val;
 				if (!ahVal.GetElement(i, val))
 				{
 					break;									// reached the end of the array
+				}
+
+				if (i != 0)
+				{
+					str.cat(',');
 				}
 				val.AppendAsString(str);
 			}
@@ -349,6 +349,13 @@ void ExpressionValue::SetInt(int32_t i) noexcept
 	Release();
 	type = (uint32_t)TypeCode::Int32;
 	iVal = i;
+}
+
+void ExpressionValue::SetChar(char c) noexcept
+{
+	Release();
+	type = (uint32_t)TypeCode::Char;
+	cVal = c;
 }
 
 void ExpressionValue::SetFloat(float f, uint32_t digits) noexcept { Release(); type = (uint32_t)TypeCode::Float; fVal = f; param = digits; }

@@ -14,6 +14,34 @@
 
 class VariableSet;
 
+// Small class to read from file, checking for end of line or end of file and counting the characters read
+// We could improve the efficiency by buffering a small number of characters
+class LineReader
+{
+public:
+	LineReader(FileStore *pf) noexcept : f(pf), charsRead(0), currentCharacter(0), fileFinished(false) { }
+
+	// Read a character into currentCharacter. If we reach end of file or end of line, set the character to 0 and fileFinished to true.
+	void ReadChar() noexcept;
+
+	// While the current character is space or tab, read another character
+	void SkipTabsAndSpaces() noexcept;
+
+	// Retrieval functions
+	char CurrentCharacter() const noexcept { return currentCharacter; }
+	bool FileFinished() const noexcept { return fileFinished; }
+	size_t CharsRead() const noexcept { return charsRead; }
+
+	// Close the file
+	void Close() noexcept { f->Close(); }
+
+private:
+	FileStore *f;
+	size_t charsRead;
+	char currentCharacter;
+	bool fileFinished;
+};
+
 class ExpressionParser
 {
 public:
@@ -40,26 +68,30 @@ private:
 	[[noreturn]] void __attribute__((noinline)) ThrowParseException(const char *str, const char *param) const THROWS(GCodeException);
 	[[noreturn]] void __attribute__((noinline)) ThrowParseException(const char *str, uint32_t param) const THROWS(GCodeException);
 
-	void ParseInternal(ExpressionValue& val, bool evaluate, uint8_t priority) THROWS(GCodeException);
-	void ParseExpectKet(ExpressionValue& rslt, bool evaluate, char expectedKet) THROWS(GCodeException);
+	void __attribute__((noinline)) ParseInternal(ExpressionValue& val, bool evaluate, uint8_t priority) THROWS(GCodeException);
+	void __attribute__((noinline)) ParseExpectKet(ExpressionValue& rslt, bool evaluate, char expectedKet) THROWS(GCodeException);
 	void __attribute__((noinline)) ParseNumber(ExpressionValue& rslt) noexcept
 		pre(readPointer >= 0; isdigit(gb.buffer[readPointer]));
 	void __attribute__((noinline)) ParseIdentifierExpression(ExpressionValue& rslt, bool evaluate, bool applyLengthOperator, bool applyExists) THROWS(GCodeException)
 		pre(readPointer >= 0; isalpha(gb.buffer[readPointer]));
 	void __attribute__((noinline)) ParseQuotedString(ExpressionValue& rslt) THROWS(GCodeException);
 
+	void ParseCharacter(ExpressionValue& rslt) THROWS(GCodeException);
 	void ParseGeneralArray(ExpressionValue& firstElementAndResult, bool evaluate) THROWS(GCodeException);
-
 	void ParseArray(size_t& length, function_ref<void(ExpressionValue& ev, size_t index) THROWS(GCodeException)> processElement) THROWS(GCodeException);
-	time_t ParseDateTime(const char *s) const THROWS(GCodeException);
 
-	void GetVariableValue(ExpressionValue& rslt, const VariableSet *vars, const char *name, ObjectExplorationContext& context, bool isParameter, bool applyLengthOperator, bool wantExists) THROWS(GCodeException);
+	time_t __attribute__((noinline)) ParseDateTime(const char *s) const THROWS(GCodeException);
+
+	void __attribute__((noinline)) GetVariableValue(ExpressionValue& rslt, const VariableSet *vars, const char *name, ObjectExplorationContext& context, bool isParameter, bool applyLengthOperator, bool wantExists) THROWS(GCodeException);
 
 	void ConvertToFloat(ExpressionValue& val, bool evaluate) const THROWS(GCodeException);
 	void ConvertToInteger(ExpressionValue& val, bool evaluate) const THROWS(GCodeException);
 	void ConvertToUnsigned(ExpressionValue& val, bool evaluate) const THROWS(GCodeException);
 	void ConvertToBool(ExpressionValue& val, bool evaluate) const THROWS(GCodeException);
-	void ConvertToString(ExpressionValue& val, bool evaluate) noexcept;
+
+	// The following must be declared 'noinline' because it allocates a large buffer on the stack and its caller is recursive
+	void __attribute__((noinline)) ConvertToString(ExpressionValue& val, bool evaluate) const noexcept;
+
 	void ConvertToDriverId(ExpressionValue& val, bool evaluate) const THROWS(GCodeException);
 	void ApplyLengthOperator(ExpressionValue& val) const THROWS(GCodeException);
 
@@ -69,8 +101,10 @@ private:
 	static void __attribute__((noinline)) StringConcat(ExpressionValue &val, ExpressionValue &val2) noexcept;
 
 	void BalanceNumericTypes(ExpressionValue& val1, ExpressionValue& val2, bool evaluate) const THROWS(GCodeException);
-	void BalanceTypes(ExpressionValue& val1, ExpressionValue& val2, bool evaluate) THROWS(GCodeException);
-	void EvaluateMinOrMax(ExpressionValue& v1, ExpressionValue& v2, bool evaluate, bool isMax) THROWS(GCodeException);
+	void BalanceTypes(ExpressionValue& val1, ExpressionValue& val2, bool evaluate) const THROWS(GCodeException);
+	void __attribute__((noinline)) EvaluateMinOrMax(ExpressionValue& v1, ExpressionValue& v2, bool evaluate, bool isMax) const THROWS(GCodeException);
+	void __attribute__((noinline)) ReadArrayFromFile(ExpressionValue& rslt, unsigned int offset, unsigned int length, char delimiter) const THROWS(GCodeException);
+	void ReadArrayElementFromFile(ExpressionValue& rslt, LineReader& reader, char delimiter) const THROWS(GCodeException);
 	void GetNextOperand(ExpressionValue& operand, bool evaluate) THROWS(GCodeException);
 	static bool TypeHasNoLiterals(TypeCode t) noexcept;
 
