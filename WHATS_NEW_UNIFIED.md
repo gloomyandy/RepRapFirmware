@@ -1,3 +1,12 @@
+Version 3.5.0-beta.4+104
+========================
+* Updated version no format to be compatible with DWC
+* Latest Duet3D fixes
+* Added support for TMC2240 drivers in SPI mode
+* Return actual driver temperature if available (experimental)
+* Allow access to individual driver temperatires (experimental)
+* Add DriverType to board.txt to allow arbitary driver order
+
 Version 3.5.0-beta.4_101
 ========================
 * Duet3d 3.5.0-beta.4
