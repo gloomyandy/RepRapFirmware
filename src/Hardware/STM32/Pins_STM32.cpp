@@ -96,6 +96,8 @@ Pin DIRECTION_PINS[NumDirectDrivers];
     Pin DriverDiagPins[NumDirectDrivers];
 #endif
 Pin TMC_PINS[NumDirectDrivers];
+DriverType TMC_DRIVER_TYPE[NumDirectDrivers];
+
 size_t totalSmartDrivers;
 size_t num5160SmartDrivers = 0;
 SSPChannel SmartDriversSpiChannel = SSPNONE;

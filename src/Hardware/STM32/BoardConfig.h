@@ -23,9 +23,10 @@ enum configValueType{
     cvUint32Type,
     cvFloatType,
     cvStringType,
+    cvDriverType
 };
 
-const uint32_t CVTLengths[] = {sizeof(Pin), sizeof(bool), sizeof(uint8_t), sizeof(uint16_t), sizeof(uint32_t), sizeof(float), MaxBoardNameLength};
+const uint32_t CVTLengths[] = {sizeof(Pin), sizeof(bool), sizeof(uint8_t), sizeof(uint16_t), sizeof(uint32_t), sizeof(float), MaxBoardNameLength, sizeof(DriverType)};
 
 struct boardConfigEntry_t
 {

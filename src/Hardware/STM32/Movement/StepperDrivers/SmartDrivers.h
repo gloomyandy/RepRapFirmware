@@ -15,15 +15,6 @@
 
 #include "StepperDrivers/DriverMode.h"
 
-enum class DriverType : uint8_t
-{
-	unknown = 0,
-	Tmc2208,
-	Tmc2209,
-	Tmc5160 = 0x81,
-	Tmc2240
-};
-
 namespace SmartDrivers
 {
 	void Init(size_t numSmartDrivers) noexcept;

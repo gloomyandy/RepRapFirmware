@@ -12,63 +12,108 @@
 #endif
 static TmcDriverState **driverStates;
 static size_t numDrivers;
+
+static bool IsDumbDriver(size_t driveNo) noexcept
+{
+	return TMC_DRIVER_TYPE[driveNo] >= DriverType::unknown && TMC_DRIVER_TYPE[driveNo] <= DriverType::stepdir;
+}
+
+static bool IsSPIDriver(size_t driveNo) noexcept
+{
+	return TMC_DRIVER_TYPE[driveNo] >= DriverType::tmcspiauto && TMC_DRIVER_TYPE[driveNo] <= DriverType::tmc2240;
+}
+
+static bool IsUARTDriver(size_t driveNo) noexcept
+{
+	return TMC_DRIVER_TYPE[driveNo] >= DriverType::tmcuartauto && TMC_DRIVER_TYPE[driveNo] <= DriverType::tmc2660;
+}
+
 //--------------------------- Public interface ---------------------------------
 // Initialise the driver interface and the drivers, leaving each drive disabled.
 // It is assumed that the drivers are not powered, so driversPowered(true) must be called after calling this before the motors can be moved.
 void SmartDrivers::Init(size_t numSmartDrivers) noexcept
 {
-    numDrivers = min<size_t>(numSmartDrivers, MaxSmartDrivers);
+	numDrivers = min<size_t>(numSmartDrivers, MaxSmartDrivers);
 	if (numDrivers == 0)
 		driverStates = nullptr;
 	else
 		driverStates = (TmcDriverState **)	Tasks::AllocPermanent(sizeof(TmcDriverState *)*numDrivers);
-    size_t drive = 0;
-    size_t first = 0;
+	// Work out how many spi and uart drives we have and create the interfaces for them
+	// We need to work out how to handle empty slots and StepDir only devices, we may need a new class for
+	// these but for now we treat them in the same way they have been handled for some time, leaving the
+	// 2209 driver to deal with them.
+	size_t SPICnt = 0;
+	size_t UARTCnt = 0;
+	for(size_t drive = 0; drive < numDrivers; drive++)
+	{
+		if (IsSPIDriver(drive))
+		{
+			SPICnt++;
+		}
+		else if (IsUARTDriver(drive) || IsDumbDriver(drive))
+		{
+			UARTCnt++;
+		}
+	}
 #if SUPPORT_TMC51xx
-    Tmc51xxDriver::Init(first, num5160SmartDrivers);
-    for(; drive < num5160SmartDrivers; drive++)
-        driverStates[drive] = Tmc51xxDriver::GetDrive(drive);
-    first = drive;
+	Tmc51xxDriver::Init(SPICnt);
+	size_t SPISlot = 0;
 #endif
 #if SUPPORT_TMC22xx
-    Tmc22xxDriver::Init(first, numDrivers-first);
-    for(; drive < numDrivers; drive++)
-        driverStates[drive] = Tmc22xxDriver::GetDrive(drive - first);
+	Tmc22xxDriver::Init(UARTCnt);
+	size_t UARTSlot = 0;
 #endif
+	for(size_t drive = 0; drive < numDrivers; drive++)
+	{
+#if SUPPORT_TMC51xx
+		if (IsSPIDriver(drive))
+		{
+			driverStates[drive] = Tmc51xxDriver::InitDrive(SPISlot, drive);
+			SPISlot++;
+		}
+#endif
+#if SUPPORT_TMC22xx
+		if (IsUARTDriver(drive) || IsDumbDriver(drive))
+		{
+			driverStates[drive] = Tmc22xxDriver::InitDrive(UARTSlot, drive);
+			UARTSlot++;
+		}
+#endif
+	}
 }
 
 // Shut down the drivers and stop any related interrupts. Don't call Spin() again after calling this as it may re-enable them.
 void SmartDrivers::Exit() noexcept
 {
 #if SUPPORT_TMC51xx
-    Tmc51xxDriver::Exit();
+	Tmc51xxDriver::Exit();
 #endif
 #if SUPPORT_TMC22xx
-    Tmc22xxDriver::Exit();
+	Tmc22xxDriver::Exit();
 #endif
 }
 
 void SmartDrivers::Spin(bool powered) noexcept
 {
 #if SUPPORT_TMC51xx
-    Tmc51xxDriver::Spin(powered);
+	Tmc51xxDriver::Spin(powered);
 #endif
 #if SUPPORT_TMC22xx
-    Tmc22xxDriver::Spin(powered);
+	Tmc22xxDriver::Spin(powered);
 #endif
 }
 
 bool SmartDrivers::IsReady() noexcept
 {
 #if SUPPORT_TMC51xx
-    return Tmc51xxDriver::IsReady()
+	return Tmc51xxDriver::IsReady()
 #else
-    return true 
+	return true 
 #endif
 #if SUPPORT_TMC22xx
-    && Tmc22xxDriver::IsReady();
+	&& Tmc22xxDriver::IsReady();
 #else
-    ;
+	;
 #endif
 }
 
@@ -76,10 +121,10 @@ bool SmartDrivers::IsReady() noexcept
 void SmartDrivers::TurnDriversOff() noexcept
 {
 #if SUPPORT_TMC51xx
-    Tmc51xxDriver::TurnDriversOff();
+	Tmc51xxDriver::TurnDriversOff();
 #endif
 #if SUPPORT_TMC22xx
-    Tmc22xxDriver::TurnDriversOff();
+	Tmc22xxDriver::TurnDriversOff();
 #endif
 
 }
@@ -261,7 +306,7 @@ GCodeResult SmartDrivers::SetAnyRegister(size_t driver, const StringRef& reply, 
 DriversBitmap SmartDrivers::GetStalledDrivers(DriversBitmap driversOfInterest) noexcept
 {
 #if SUPPORT_TMC22xx
-    return Tmc22xxDriver::GetStalledDrivers(driversOfInterest);
+	return Tmc22xxDriver::GetStalledDrivers(driversOfInterest);
 #endif
 }
 #endif

@@ -67,6 +67,7 @@ static const boardConfigEntry_t boardConfigs[]=
     {"stepper.digipotFactor", &digipotFactor, nullptr, cvFloatType},
 #if HAS_SMART_DRIVERS
     {"stepper.TmcUartPins", TMC_PINS, &NumDirectDrivers, cvPinType},
+    {"stepper.DriverType", TMC_DRIVER_TYPE, &NumDirectDrivers, cvDriverType},
     {"stepper.numSmartDrivers", &totalSmartDrivers, nullptr, cvUint32Type},
 #if SUPPORT_TMC51xx
     {"stepper.num5160Drivers", &num5160SmartDrivers, nullptr, cvUint32Type},
@@ -340,12 +341,32 @@ static void ConfigureGPIOPins() noexcept
     pinMode(StepperPowerEnablePin, (ATX_POWER_STATE ? OUTPUT_HIGH : OUTPUT_LOW));
 }
 
-static void ConfigureSPIPins(SSPChannel dev, Pin clk, Pin miso, Pin mosi)
+static void ConfigureSPIPins(SSPChannel dev, Pin clk, Pin miso, Pin mosi) noexcept
 {
     SPI::getSSPDevice(dev)->initPins(clk, miso, mosi, NvicPrioritySpi);
 }
 
-static void FatalError(const char* fmt, ...)
+static void ConfigureDriveType() noexcept
+{
+    // first check to see if we have any explcit settings
+    for(size_t i = 0; i < NumDirectDrivers; i++)
+    {
+        if (TMC_DRIVER_TYPE[i] != DriverType::unknown)
+        {
+            // at least one driver has been set, so we assume all have been
+            return;
+        }
+    }
+    // individual drivers have not been set, so we configure using "legacy" settings
+    for(size_t i = 0; i < num5160SmartDrivers; i++)
+        TMC_DRIVER_TYPE[i] = DriverType::tmcspiauto;
+    for(size_t i = num5160SmartDrivers; i < totalSmartDrivers; i++)
+        TMC_DRIVER_TYPE[i] = DriverType::tmcuartauto;
+    for(size_t i = totalSmartDrivers; i < NumDirectDrivers; i++)
+        TMC_DRIVER_TYPE[i] = DriverType::stepdir;
+}
+
+static void FatalError(const char* fmt, ...) noexcept
 {
     for(;;)
     {
@@ -357,7 +378,7 @@ static void FatalError(const char* fmt, ...)
     }
 }
 
-static void MessageF(MessageType mtype, const char* fmt, ...)
+static void MessageF(MessageType mtype, const char* fmt, ...) noexcept
 {
     va_list vargs;
     va_start(vargs, fmt);
@@ -365,7 +386,7 @@ static void MessageF(MessageType mtype, const char* fmt, ...)
     va_end(vargs);
 }
 
-static void FlushMessages()
+static void FlushMessages() noexcept
 {
     uint32_t start = millis();
     while(reprap.GetPlatform().FlushMessages() && (millis() - start < 5000))
@@ -395,7 +416,7 @@ static void CheckDriverPins() noexcept
 #endif
 
 
-static void UnknownHardware(uint32_t sig)
+static void UnknownHardware(uint32_t sig) noexcept
 {
     for(;;)
     {
@@ -409,7 +430,7 @@ static void UnknownHardware(uint32_t sig)
 }
 
 
-static const char *GetBootloaderString()
+static const char *GetBootloaderString() noexcept
 {
     const uint32_t *BootVectors = (const uint32_t *)0x8000000;
     const char *BootloaderString = (const char *) BootVectors[8];
@@ -440,7 +461,7 @@ static constexpr SDCardConfig SDCardConfigs[] = {
     {SSP3, {PC_10, PC_11, PC_12, PA_15, NoPin, NoPin}, {0x602, 0x602, 0x602, 0x1}}, // BTT BX
 };
 
-static bool CheckPinConfig(uint32_t config)
+static bool CheckPinConfig(uint32_t config) noexcept
 {
     // check to see if the pins are currently set in the expected state
     // The bootloader on many boards will leave the pins configured after
@@ -456,7 +477,7 @@ static bool CheckPinConfig(uint32_t config)
 // Note that this may not be correct, but it should be sufficient to allow
 // us to either connect to an SBC or mount an SD card from which we can get
 // an actual board configuration.
-static uint32_t IdentifyBoard()
+static uint32_t IdentifyBoard() noexcept
 {
     // We use the CRC of part of the bootloader to id the board
     signature = crc32((char *)0x8000000, 8192);
@@ -511,7 +532,7 @@ static uint32_t IdentifyBoard()
     return UNKNOWN_BOARD;
 }
 
-static bool TryConfig(uint32_t config, bool mount)
+static bool TryConfig(uint32_t config, bool mount) noexcept
 {
     const SDCardConfig *conf = &SDCardConfigs[config];
     if (conf->device != SSPSDIO)
@@ -545,7 +566,7 @@ static bool TryConfig(uint32_t config, bool mount)
     return false;
 }    
 
-static SSPChannel InitSDCard(uint32_t boardId, bool mount, bool needed)
+static SSPChannel InitSDCard(uint32_t boardId, bool mount, bool needed) noexcept
 {
     int conf = LPC_Boards[boardId].defaults.SDConfig;
 
@@ -687,6 +708,9 @@ void BoardConfig::Init() noexcept
 #if 0
     // anti-rotation detection feature disabled for now due to potential to damage some drivers
     CheckDriverPins();
+#endif
+#if HAS_SMART_DRIVERS
+    ConfigureDriveType();
 #endif       
     //Setup the SPI Pins, note that the SD SPI device may already have been configured
     for(size_t i = 0; i < ARRAY_SIZE(SPIPins); i++)
@@ -848,6 +872,12 @@ void BoardConfig::PrintValue(MessageType mtype, configValueType configType, void
         case cvStringType:
             MessageF(mtype, "%s",  (char *)(variable) );
             break;
+        case cvDriverType:
+            {
+                DriverType dt = *(DriverType *)(variable);
+                MessageF(mtype, "%s", dt.ToString());
+            }
+            break;
         default:{
             
         }
@@ -904,11 +934,18 @@ void BoardConfig::Diagnostics(MessageType mtype) noexcept
             MessageF(mtype, "{");
             for(size_t p=0; p<*(next.maxArrayEntries); p++)
             {
-                //TODO:: handle other values
-                if(next.type == cvPinType){
-                    if (p > 0)
-                        MessageF(mtype, ", ");
-                    BoardConfig::PrintValue(mtype, next.type, (void *)&((Pin *)(next.variable))[p]);
+                if (p > 0)
+                    MessageF(mtype, ", ");
+                switch(next.type)
+                {
+                    case cvPinType:
+                        BoardConfig::PrintValue(mtype, next.type, (void *)&((Pin *)(next.variable))[p]);
+                        break;
+                    case cvDriverType:
+                        BoardConfig::PrintValue(mtype, next.type, (void *)&((DriverType *)(next.variable))[p]);
+                        break;
+                    default:
+                        break;
                 }
             }
             MessageF(mtype, "}\n");
@@ -1004,7 +1041,6 @@ void BoardConfig::SetValueFromString(configValueType type, void *variable, char 
         case cvPinType:
             *(Pin *)(variable) = LookupPin(valuePtr);
             break;
-            
         case cvBoolType:
             {
                 bool res = false;
@@ -1021,7 +1057,6 @@ void BoardConfig::SetValueFromString(configValueType type, void *variable, char 
                 *(bool *)(variable) = res;
             }
             break;
-            
         case cvFloatType:
             {
                 const char *ptr = nullptr;
@@ -1055,7 +1090,6 @@ void BoardConfig::SetValueFromString(configValueType type, void *variable, char 
                 *(uint32_t *)(variable) = StrToU32(valuePtr, &ptr);
             }
             break;
-            
         case cvStringType:
             {
                 
@@ -1066,7 +1100,6 @@ void BoardConfig::SetValueFromString(configValueType type, void *variable, char 
                 }
             }
             break;
-            
         default:
             debugPrintf("Unhandled ValueType\n");
     }
@@ -1181,7 +1214,7 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
                         //Currently only handles Arrays of Pins
                         
                         
-                        if(next.maxArrayEntries != nullptr /*&& next.type == cvPinType*/ && StringEqualsIgnoreCase(key, next.key))
+                        if(next.maxArrayEntries != nullptr && (next.type == cvPinType || next.type == cvDriverType) && StringEqualsIgnoreCase(key, next.key))
                         {
                             //matched an entry in boardConfigEntryArray
 
@@ -1190,7 +1223,7 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
                             
                             //Pin Array Type
                             Pin readArray[maxArraySize];
-
+                            DriverType readArrayDT[maxArraySize];
                             //eat whitespace
                             while(pos < maxLineLength && line[pos] != 0 && isSpaceOrTab(line[pos]) == true ) pos++;
 
@@ -1238,6 +1271,7 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
                                         //read until end condition - space,comma,}  or null / # ;
                                         while(pos < maxLineLength && line[pos] != 0 && !isSpaceOrTab(line[pos]) && line[pos] != ',' && line[pos] != '}' && line[pos] != '/' && line[pos] != '#' && line[pos] != ';')
                                         {
+                                            line[pos] = tolower(line[pos]);
                                             pos++;
                                         }
                                         // Skip trailing whitespace
@@ -1270,11 +1304,17 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
                                         //Put into the Temp Array
                                         if(arrIdx >= 0 && arrIdx<maxArraySize)
                                         {
-                                            readArray[arrIdx] = LookupPin(valuePtr);
-                                            
-                                            //TODO:: HANDLE OTHER VALUE TYPES??
-                                            
-
+                                            switch(next.type)
+                                            {
+                                                case cvPinType:
+                                                    readArray[arrIdx] = LookupPin(valuePtr);
+                                                    break;
+                                                case cvDriverType:
+                                                    readArrayDT[arrIdx] = DriverType(valuePtr);
+                                                    break;
+                                                default:
+                                                    break;
+                                            }
                                         }
                                     }
 
@@ -1288,7 +1328,17 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
                                             //dest array may be larger, dont overrite the default values
                                             for(size_t i=0; i<(arrIdx+1); i++ )
                                             {
-                                                ((Pin *)(next.variable))[i] = readArray[i];
+                                                switch(next.type)
+                                                {
+                                                    case cvPinType:
+                                                        ((Pin *)(next.variable))[i] = readArray[i];
+                                                        break;
+                                                    case cvDriverType:
+                                                        ((DriverType *)(next.variable))[i] = readArrayDT[i];
+                                                        break;
+                                                    default:
+                                                        break;
+                                                }
                                             }
                                             //Success!
                                             searching = false;

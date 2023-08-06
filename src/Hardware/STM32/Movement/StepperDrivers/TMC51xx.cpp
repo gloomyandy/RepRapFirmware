@@ -362,6 +362,8 @@ public:
 	bool inline IsActive() noexcept {return state >= DriversState::initialising;}
 	bool inline IsReady() noexcept {return state == DriversState::ready;}
 	uint8_t inline GetDriverNumber() const noexcept { return driverNumber; }
+	void inline EnableChipSelect() noexcept {fastDigitalWriteLow(TMC_PINS[driverNumber]);}
+	void inline DisableChipSelect() noexcept {fastDigitalWriteHigh(TMC_PINS[driverNumber]);}
 
 private:
 	DriversState state;
@@ -371,7 +373,7 @@ private:
 	void UpdateChopConfRegister() noexcept;							// calculate the chopper control register and flag it for sending
 	void UpdateCurrent() noexcept;
 	int32_t IdentifyDriver() noexcept;
-	bool IsTmc2240() noexcept { return typ == DriverType::Tmc2240; }
+	bool IsTmc2240() noexcept { return typ == DriverType::tmc2240; }
 	void ResetReadRegisters() noexcept;
 	void ResetLoadRegisters() noexcept { minSgLoadRegister = InvalidSgLoadRegister; }
 
@@ -493,6 +495,8 @@ pre(!driversPowered)
 	senseResistor = DefaultSenseResistor;
 	maxCurrent = MaxTmc5160Current;
 	standstillCurrentFraction = (uint16_t)min<uint32_t>((DefaultStandstillCurrentPercent * 256)/100, 255);
+	if (TMC_PINS[driverNumber] != NoPin)
+		DisableChipSelect();
 
 	// Set default values for all registers and flag them to be updated
 	UpdateRegister(WriteGConf, DefaultGConfReg);
@@ -1139,7 +1143,6 @@ void Tmc51xxDriverState::TransferFailed() noexcept
 
 // State structures for all drivers
 static Tmc51xxDriverState *driverStates;
-static size_t baseDriveNo = 0;
 // TMC51xx management task
 static TASKMEM Task<TmcTaskStackWords> tmcTask;
 
@@ -1174,8 +1177,11 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 	{
 		// Strt the identification/setup process
 		accumulatedDriveStatus = 0;
-		if (TMC_PINS[driverNumber] == NoPin)
+		if (TMC_PINS[driverNumber] == NoPin || TMC_DRIVER_TYPE[driverNumber] <= DriverType::stepdir)
+		{
 			state = DriversState::noDriver;
+			typ = DriverType::none;
+		}
 		else
 		{
 			numReads = numWrites = numWriteErrors = 0;
@@ -1206,7 +1212,7 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 				if (version == IOIN_VERSION_2240)
 				{
 					// We have a TMC2240, adjust settings from assumed 5160
-					typ = DriverType::Tmc2240;
+					typ = DriverType::tmc2240;
 					UpdateRegister(WriteGConf, writeRegisters[WriteGConf] & ~(GCONF_5160_RECAL));
 					UpdateRegister(WriteIholdIrun, writeRegisters[WriteIholdIrun] | (0x4 << IHOLDIRUN2240_IRUNDELAY_SHIFT));
 					UpdateRegister(Write5160DrvConf, DefaultDrvConfReg2240);
@@ -1215,7 +1221,7 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 				}
 				else if (version == IOIN_VERSION_5160)
 				{
-					typ = DriverType::Tmc5160;
+					typ = DriverType::tmc5160;
 				}
 				else
 				{
@@ -1223,7 +1229,14 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 					// we issue a warning and assume it is a 5160.
 					if (reprap.Debug(Module::Driver))
 						debugPrintf("TMCSPI:: Warning driver %d unknown version number 0x%x\n", driverNumber, (unsigned)version);
-					typ = DriverType::Tmc5160;
+					typ = DriverType::tmc5160;
+				}
+				// did our discovery match the request driver type?
+				if (TMC_DRIVER_TYPE[driverNumber] != DriverType::tmcspiauto && typ != TMC_DRIVER_TYPE[driverNumber])
+				{
+					if (reprap.Debug(Module::Driver))
+						debugPrintf("TMCSPI:: Warning driver %d type mismatch requested %s actual %s\n", driverNumber, TMC_DRIVER_TYPE[driverNumber].ToString(), typ.ToString());
+					typ = TMC_DRIVER_TYPE[driverNumber];
 				}
 				WriteAll();
 			}
@@ -1236,7 +1249,7 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 	if (numWriteErrors > NumWriteRegisters)
 	{
 		if (reprap.Debug(Module::Driver))
-			debugPrintf("TMC5160: Too many write errors drive %d error cnt %d driver disabled\n", driverNumber, numWriteErrors);
+			debugPrintf("TMCSPI: Too many write errors drive %d error cnt %d driver disabled\n", driverNumber, numWriteErrors);
 		// Too many write errors, probably means no driver or config error
 		ResetReadRegisters();
 		state = DriversState::noDriver;
@@ -1268,9 +1281,9 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 		{
 			if (driversState == DriversState::notInitialised)
 			{
-				for (size_t drive = 0; drive < numTmc51xxDrivers; ++drive)
+				for (size_t i = 0; i < numTmc51xxDrivers; ++i)
 				{
-					driverStates[drive].SetupDriver(true);
+					driverStates[i].SetupDriver(true);
 				}
 				driversState = DriversState::initialising;
 			}
@@ -1291,11 +1304,11 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 					if (allInitialised)
 					{
 						size_t readyCnt = 0;
-						for (size_t driver = 0; driver < numTmc51xxDrivers; ++driver)
+						for (size_t i = 0; i < numTmc51xxDrivers; ++i)
 						{
-							if (driverStates[driver].IsReady())
+							if (driverStates[i].IsReady())
 							{
-								digitalWrite(ENABLE_PINS[driver+baseDriveNo], false);
+								digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], false);
 								readyCnt++;
 							}
 						}
@@ -1310,36 +1323,37 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 			}		
 			for (size_t i = 0; i < numTmc51xxDrivers; ++i)
 			{
-				if (driverStates[i].IsActive())
+				Tmc51xxDriverState& drv = driverStates[i];
+				if (drv.IsActive())
 				{
-					fastDigitalWriteLow(TMC_PINS[i+baseDriveNo]);
+					drv.EnableChipSelect();
 					SYNC_GPIO();
-					bool isWrite = driverStates[i].GetSpiCommand(sendData);
+					bool isWrite = drv.GetSpiCommand(sendData);
 					if (SmartDriversSpiCsDelay) 
 					{
 						delay(SmartDriversSpiCsDelay);
 					}
 					spiDevice->TransceivePacket(sendData, rcvData, 5);
-					fastDigitalWriteHigh(TMC_PINS[i+baseDriveNo]);
+					drv.DisableChipSelect();
 					SYNC_GPIO();
-					driverStates[i].TransferSucceeded(rcvData);
+					drv.TransferSucceeded(rcvData);
 					// Write commands will return a copy of the write request on the next
 					// operation. However on TMC2240 devices this only seems to be the case
 					// if there is no other bus activity between requests. So for now we force
 					// a read request after a write to allow us to check it worked.
 					if (isWrite)
 					{
-						fastDigitalWriteLow(TMC_PINS[i+baseDriveNo]);
+						drv.EnableChipSelect();
 						SYNC_GPIO();
-						driverStates[i].GetSpiCommand(sendData, true);
+						drv.GetSpiCommand(sendData, true);
 						if (SmartDriversSpiCsDelay) 
 						{
 							delay(SmartDriversSpiCsDelay);
 						}
 						spiDevice->TransceivePacket(sendData, rcvData, 5);
-						fastDigitalWriteHigh(TMC_PINS[i+baseDriveNo]);
+						drv.DisableChipSelect();
 						SYNC_GPIO();
-						driverStates[i].TransferSucceeded(rcvData);
+						drv.TransferSucceeded(rcvData);
 					}
 				}
 			}
@@ -1355,10 +1369,9 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 
 // Initialise the driver interface and the drivers, leaving each drive disabled.
 // It is assumed that the drivers are not powered, so driversPowered(true) must be called after calling this before the motors can be moved.
-void Tmc51xxDriver::Init(size_t firstDrive, size_t numDrivers) noexcept
+void Tmc51xxDriver::Init(size_t numDrivers) noexcept
 {
 	numTmc51xxDrivers = min<size_t>(numDrivers, MaxSmartDrivers);
-	baseDriveNo = firstDrive;
 	if (numTmc51xxDrivers == 0)
 	{
 		driversState = DriversState::ready;
@@ -1367,14 +1380,6 @@ void Tmc51xxDriver::Init(size_t firstDrive, size_t numDrivers) noexcept
 	driversState = DriversState::noPower;
 	driverStates = (Tmc51xxDriverState *)	Tasks::AllocPermanent(sizeof(Tmc51xxDriverState )*numTmc51xxDrivers);
 	memset((void *)driverStates, 0, sizeof(Tmc51xxDriverState)*numTmc51xxDrivers);
-	// make sure CS is not enabled and init everything
-	for (size_t driver = 0; driver < numTmc51xxDrivers; ++driver)
-	{
-		new(&driverStates[driver]) Tmc51xxDriverState();
-		if (TMC_PINS[driver+baseDriveNo] != NoPin)
-			pinMode(TMC_PINS[driver+baseDriveNo], OUTPUT_HIGH);
-		driverStates[driver].Init(driver+baseDriveNo);
-	}
 	if (SmartDriversSpiChannel == SSPNONE)
 	{
 		debugPrintf("TMC5160 stepper.spiChannel has not been configured\n");
@@ -1421,9 +1426,9 @@ void Tmc51xxDriver::Spin(bool powered) noexcept
 // This is called from the tick ISR, possibly while Spin (with powered either true or false) is being executed
 void Tmc51xxDriver::TurnDriversOff() noexcept
 {
-	for (size_t driver = 0; driver < numTmc51xxDrivers; ++driver)
+	for (size_t i = 0; i < numTmc51xxDrivers; ++i)
 	{
-		digitalWrite(ENABLE_PINS[driver + baseDriveNo], true);
+		digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], true);
 	}
 
 	driversState = (driversState == DriversState::noDriver ? DriversState::powerWait : DriversState::noPower);
@@ -1435,9 +1440,12 @@ bool Tmc51xxDriver::IsReady() noexcept
 }
 
 
-TmcDriverState* Tmc51xxDriver::GetDrive(size_t driveNo) noexcept
+TmcDriverState* Tmc51xxDriver::InitDrive(size_t slot, size_t driveNo) noexcept
 {
-	return &(driverStates[driveNo]);
+	// init everything and return pointer to driver
+	new(&driverStates[slot]) Tmc51xxDriverState();
+	driverStates[slot].Init(driveNo);
+	return &(driverStates[slot]);
 }
 
 #endif

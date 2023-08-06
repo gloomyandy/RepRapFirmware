@@ -437,7 +437,7 @@ private:
 	void UpdateChopConfRegister() noexcept;							// calculate the chopper control register and flag it for sending
 	void UpdateCurrent() noexcept;
 	void UpdateMaxOpenLoadStepInterval() noexcept;
-	bool IsTmc2209() const noexcept { return typ == DriverType::Tmc2209; }
+	bool IsTmc2209() const noexcept { return typ == DriverType::tmc2209; }
 	int32_t IdentifyDriver() noexcept;
 	void ResetReadRegisters() noexcept;
 #if HAS_STALL_DETECT
@@ -747,7 +747,6 @@ pre(!driversPowered)
 }
 // State structures for all drivers
 static Tmc22xxDriverState *driverStates;
-static size_t baseDriveNo = 0;
 
 #if HAS_STALL_DETECT
 
@@ -1083,7 +1082,7 @@ StandardDriverStatus Tmc22xxDriverState::ReadStatus(bool accumulated, bool clear
 	else
 	{
 		rslt.all = 0;
-		rslt.notPresent = true;
+		rslt.notPresent = typ <= DriverType::none;
 	}
 	return rslt;
 }
@@ -1091,6 +1090,11 @@ StandardDriverStatus Tmc22xxDriverState::ReadStatus(bool accumulated, bool clear
 // Append the driver status to a string, and reset the min/max load values
 void Tmc22xxDriverState::AppendDriverStatus(const StringRef& reply) noexcept
 {
+	if (typ == DriverType::stepdir)
+	{
+		reply.cat(" stepdir");
+		return;
+	}
 	if (!IsReady())
 	{
 		return;
@@ -1295,8 +1299,11 @@ DriversState Tmc22xxDriverState::SetupDriver(bool reset) noexcept
 	//debugPrintf("Setup driver %d cnt %d/%d", GetDriverNumber(), numReads, numWrites);
 	if (reset)
 	{
-		if (TMC_PINS[driverNumber] == NoPin)
+		if (TMC_PINS[driverNumber] == NoPin || TMC_DRIVER_TYPE[driverNumber] <= DriverType::stepdir)
+		{
 			state = DriversState::noDriver;
+			typ = TMC_DRIVER_TYPE[driverNumber] == DriverType::stepdir ? DriverType::stepdir : DriverType::none;
+		}
 		else
 		{
 			// set initial state send updates and read registers
@@ -1316,9 +1323,10 @@ DriversState Tmc22xxDriverState::SetupDriver(bool reset) noexcept
 	{
 		//debugPrintf(" disabling driver\n");
 		if (reprap.Debug(Module::Driver))
-			debugPrintf("TMC5160: Too many errors drive %d driver disabled\n", driverNumber);
+			debugPrintf("TMCUART: Too many errors drive %d driver disabled\n", driverNumber);
 		ResetReadRegisters();
 		state = DriversState::noDriver;
+		typ = DriverType::none;
 		return state;
 	}
 
@@ -1336,16 +1344,23 @@ DriversState Tmc22xxDriverState::SetupDriver(bool reset) noexcept
 			else
 			{
 				if (version == IOIN_VERSION_2209)
-					typ = DriverType::Tmc2209;
+					typ = DriverType::tmc2209;
 				else if (version == IOIN_VERSION_2208_2224)
-					typ = DriverType::Tmc2208;
+					typ = DriverType::tmc2208;
 				else
 				{
 					// We could potentially stop here and declare the driver unknown, but for now
 					// we issue a warning and assume it is a 2209.
 					if (reprap.Debug(Module::Driver))
 						debugPrintf("TMCUART:: Warning driver %d unknown version number 0x%x\n", driverNumber, (unsigned)version);
-					typ = DriverType::Tmc2209;
+					typ = DriverType::tmc2209;
+				}
+				// did our discovery match the request driver type?
+				if (TMC_DRIVER_TYPE[driverNumber] != DriverType::tmcuartauto && typ != TMC_DRIVER_TYPE[driverNumber])
+				{
+					if (reprap.Debug(Module::Driver))
+						debugPrintf("TMCUART:: Warning driver %d type mismatch requested %s actual %s\n", driverNumber, TMC_DRIVER_TYPE[driverNumber].ToString(), typ.ToString());
+					typ = TMC_DRIVER_TYPE[driverNumber];
 				}
 				WriteAll();
 			}
@@ -1382,9 +1397,9 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 		{
 			if (driversState == DriversState::notInitialised)
 			{
-				for (size_t drive = 0; drive < numTmc22xxDrivers; ++drive)
+				for (size_t i = 0; i < numTmc22xxDrivers; ++i)
 				{
-					driverStates[drive].SetupDriver(true);
+					driverStates[i].SetupDriver(true);
 				}
 				driversState = DriversState::initialising;
 			}
@@ -1405,11 +1420,11 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 					if (allInitialised)
 					{
 						size_t readyCnt = 0;
-						for (size_t driver = 0; driver < numTmc22xxDrivers; ++driver)
+						for (size_t i = 0; i < numTmc22xxDrivers; ++i)
 						{
-							if (driverStates[driver].IsReady())
+							if (driverStates[i].IsReady())
 							{
-								digitalWrite(ENABLE_PINS[driver+baseDriveNo], false);
+								digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], false);
 								readyCnt++;
 							}
 						}
@@ -1439,10 +1454,9 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 //--------------------------- Public interface ---------------------------------
 // Initialise the driver interface and the drivers, leaving each drive disabled.
 // It is assumed that the drivers are not powered, so driversPowered(true) must be called after calling this before the motors can be moved.
-void Tmc22xxDriver::Init(size_t firstDrive, size_t numDrivers) noexcept
+void Tmc22xxDriver::Init(size_t numDrivers) noexcept
 {
 	numTmc22xxDrivers = min<size_t>(numDrivers, MaxSmartDrivers);
-	baseDriveNo = firstDrive;
 	if (numTmc22xxDrivers == 0)
 	{
 		driversState = DriversState::ready;
@@ -1452,18 +1466,6 @@ void Tmc22xxDriver::Init(size_t firstDrive, size_t numDrivers) noexcept
 	memset((void *)driverStates, 0, sizeof(Tmc22xxDriverState)*numTmc22xxDrivers);
 	
 	driversState = DriversState::noPower;
-	for (size_t drive = 0; drive < numTmc22xxDrivers; ++drive)
-	{
-		new(&driverStates[drive]) Tmc22xxDriverState();
-		driverStates[drive].Init(drive+baseDriveNo
-#if TMC22xx_HAS_ENABLE_PINS
-								, ENABLE_PINS[drive+baseDriveNo]
-#endif
-#if HAS_STALL_DETECT
-								, DriverDiagPins[drive+baseDriveNo]
-#endif
-								);
-	}
 	tmc22Task.Create(Tmc22Loop, "TMC22xx", nullptr, TaskPriority::TmcPriority);
 }
 
@@ -1508,16 +1510,25 @@ bool Tmc22xxDriver::IsReady() noexcept
 // This is called from the tick ISR, possibly while Spin (with powered either true or false) is being executed
 void Tmc22xxDriver::TurnDriversOff() noexcept
 {
-	for (size_t driver = 0; driver < numTmc22xxDrivers; ++driver)
+	for (size_t i = 0; i < numTmc22xxDrivers; ++i)
 	{
-		digitalWrite(ENABLE_PINS[driver + baseDriveNo], true);
+		digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], true);
 	}
 	driversState = (driversState == DriversState::noDriver ? DriversState::powerWait : DriversState::noPower);
 }
 
-TmcDriverState* Tmc22xxDriver::GetDrive(size_t driveNo) noexcept
+TmcDriverState* Tmc22xxDriver::InitDrive(size_t slot, size_t driveNo) noexcept
 {
-	return &(driverStates[driveNo]);
+	new(&driverStates[slot]) Tmc22xxDriverState();
+	driverStates[slot].Init(driveNo
+#if TMC22xx_HAS_ENABLE_PINS
+							, ENABLE_PINS[driveNo]
+#endif
+#if HAS_STALL_DETECT
+							, DriverDiagPins[driveNo]
+#endif
+							);
+	return &(driverStates[slot]);
 }
 
 #if HAS_STALL_DETECT

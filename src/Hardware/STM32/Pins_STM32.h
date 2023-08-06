@@ -5,6 +5,7 @@
 //#include "RepRapFirmware.h"
 #include "NVMEmulation.h"
 
+
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
 #endif
@@ -241,15 +242,26 @@ constexpr unsigned int CanDeviceNumber = 0;			// we use FDCAN1 (which is device 
 #endif
 
 //Steppers
+NamedEnum(DriverType, uint8_t,
+	unknown,
+    none,
+    stepdir,
+	tmcuartauto,
+	tmc2208,
+	tmc2209,
+    tmc2660,
+	tmcspiauto,
+	tmc5160,
+	tmc2240
+);
 // HAS_SMART_DRIVERS is defined in Pins.h, we duplicate it for the board files to use
 #define HAS_SMART_DRIVERS		(SUPPORT_TMC2660 || SUPPORT_TMC22xx || SUPPORT_TMC51xx)
 extern Pin ENABLE_PINS[NumDirectDrivers];
 extern Pin STEP_PINS[NumDirectDrivers];
 extern Pin DIRECTION_PINS[NumDirectDrivers];
-#if SUPPORT_TMC22xx || SUPPORT_TMC51xx
-extern Pin TMC_PINS[NumDirectDrivers];
-#endif
 #if HAS_SMART_DRIVERS
+extern DriverType TMC_DRIVER_TYPE[NumDirectDrivers];
+extern Pin TMC_PINS[NumDirectDrivers];
 extern Pin DriverDiagPins[NumDirectDrivers];
 extern size_t totalSmartDrivers;
 extern size_t num5160SmartDrivers;
