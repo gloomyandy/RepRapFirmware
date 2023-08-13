@@ -610,6 +610,9 @@ GCodeResult WiFiInterface::GetNetworkState(const StringRef& reply) noexcept
 			reply.catf("%s, IP address %s", actualSsid.c_str(), IP4String(ipAddress).c_str());
 		}
 		break;
+	case NetworkState::idle:
+		reply.copy("WiFi module is idle");
+		break;
 	default:
 		reply.copy("Unknown network state");
 		return GCodeResult::error;
@@ -805,7 +808,7 @@ void WiFiInterface::Spin() noexcept
 							SetupSpi();
 						}
 #endif
-						SetState(NetworkState::active);
+						SetState(NetworkState::idle);
 						espStatusChanged = true;				// make sure we fetch the current state and enable the ESP interrupt
 					}
 					else if (startupRetryCount < 3)
@@ -838,6 +841,7 @@ void WiFiInterface::Spin() noexcept
 #endif
 		break;
 
+	case NetworkState::idle:
 	case NetworkState::active:
 		if (espStatusChanged && digitalRead(EspDataReadyPin))
 		{
@@ -971,12 +975,13 @@ void WiFiInterface::Spin() noexcept
 				}
 				break;
 
+			case WiFiState::idle:
 			default:
 				if (requestedMode != WiFiState::connected)
 				{
 					requestedMode = currentMode;				// don't keep repeating the request if it failed and it wasn't a connect request
 				}
-				SetState(NetworkState::active);
+				SetState(NetworkState::idle);
 				platform.MessageF(NetworkInfoMessage, "WiFi module is %s\n", TranslateWiFiState(currentMode));
 				break;
 			}

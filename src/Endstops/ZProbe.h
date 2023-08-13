@@ -23,6 +23,9 @@ public:
 	virtual GCodeResult SendProgram(const uint32_t zProbeProgram[], size_t len, const StringRef& reply) noexcept;
 	virtual float GetCalibratedReading() const noexcept { return 0.0; }
 
+	// The following should never be called for a non-scanning probe, so by default we just return error with no message
+	virtual GCodeResult CalibrateDriveLevel(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException) { return GCodeResult::error; }
+
 #if SUPPORT_CAN_EXPANSION
 	// Process a remote input change that relates to this Z probe
 	virtual void HandleRemoteInputChange(CanAddress src, uint8_t handleMinor, bool newState) noexcept { }
@@ -63,7 +66,7 @@ public:
 
 	// Scanning Z probe support
 	bool IsScanning() const noexcept { return type == ZProbeType::scanningAnalog; }			// this is currently the only type of scanning probe we support
-	GCodeResult SetScanningCoefficients(float aParam, float bParam) noexcept;
+	GCodeResult SetScanningCoefficients(float aParam, float bParam, float cParam) noexcept;
 	GCodeResult ReportScanningCoefficients(const StringRef& reply) noexcept;
 	void CalibrateScanningProbe(const int32_t calibrationReadings[], size_t numCalibrationReadingsTaken, float heightChangePerPoint, const StringRef& reply) noexcept;
 	float ConvertReadingToHeightDifference(int32_t reading) const noexcept;

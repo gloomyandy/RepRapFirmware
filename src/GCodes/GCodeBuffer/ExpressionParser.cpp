@@ -59,7 +59,7 @@ void LineReader::SkipTabsAndSpaces() noexcept
 
 // These can't be declared locally inside ParseIdentifierExpression because NamedEnum includes static data
 NamedEnum(NamedConstant, unsigned int, _false, iterations, line, _null, pi, _result, _true, input);
-NamedEnum(Function, unsigned int, abs, acos, asin, atan, atan2, ceil, cos, datetime, degrees, exists, exp, fileexists, floor, isnan, log, max, min, mod, pow, radians, random, read, sin, sqrt, tan, vector);
+NamedEnum(Function, unsigned int, abs, acos, asin, atan, atan2, ceil, cos, datetime, degrees, exists, exp, fileexists, fileread, floor, isnan, log, max, min, mod, pow, radians, random, sin, sqrt, tan, vector);
 
 const char *const InvalidExistsMessage = "invalid 'exists' expression";
 const char *const ExpectedNonNegativeIntMessage = "expected non-negative integer";
@@ -122,7 +122,7 @@ void ExpressionParser::ParseExpectKet(ExpressionValue& rslt, bool evaluate, char
 				}
 				else if (evaluate)
 				{
-					throw GCodeException(gb.GetLineNumber(), indexCol, "array index out of range");
+					throw GCodeException(&gb, indexCol, "array index out of range");
 				}
 				else
 				{
@@ -138,7 +138,7 @@ void ExpressionParser::ParseExpectKet(ExpressionValue& rslt, bool evaluate, char
 				{
 					if (evaluate)
 					{
-						throw GCodeException(gb.GetLineNumber(), indexCol, "array index out of range");
+						throw GCodeException(&gb, indexCol, "array index out of range");
 					}
 					else
 					{
@@ -151,7 +151,7 @@ void ExpressionParser::ParseExpectKet(ExpressionValue& rslt, bool evaluate, char
 		default:
 			if (evaluate)
 			{
-				throw GCodeException(gb.GetLineNumber(), indexCol, "left operand of [ ] is not an array");
+				throw GCodeException(&gb, indexCol, "left operand of [ ] is not an array");
 			}
 			rslt.SetNull(nullptr);
 			break;
@@ -859,7 +859,7 @@ void ExpressionParser::ReadArrayFromFile(ExpressionValue& rslt, unsigned int off
 {
 	if (length > MaxFileReadArrayElements)
 	{
-		ThrowParseException("read() function: too many elements requested");
+		ThrowParseException("fileRead function: too many elements requested");
 	}
 
 	FileStore *f;
@@ -873,7 +873,7 @@ void ExpressionParser::ReadArrayFromFile(ExpressionValue& rslt, unsigned int off
 		f = MassStorage::OpenFile(fname.c_str(), OpenMode::read, 0);
 		if (f == nullptr)
 		{
-			ThrowParseException("read() function: failed to open file");
+			ThrowParseException("fileRead function: failed to open file");
 		}
 	}
 
@@ -1728,7 +1728,7 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 				}
 				break;
 
-			case Function::read:
+			case Function::fileread:
 				{
 					if (evaluate && rslt.GetType() != TypeCode::CString && rslt.GetType() != TypeCode::HeapString)
 					{
@@ -2056,17 +2056,17 @@ int ExpressionParser::GetColumn() const noexcept
 
 void ExpressionParser::ThrowParseException(const char *str) const THROWS(GCodeException)
 {
-	throw GCodeException(gb.GetLineNumber(), GetColumn(), str);
+	throw GCodeException(&gb, GetColumn(), str);
 }
 
 void ExpressionParser::ThrowParseException(const char *str, const char *param) const THROWS(GCodeException)
 {
-	throw GCodeException(gb.GetLineNumber(), GetColumn(), str, param);
+	throw GCodeException(&gb, GetColumn(), str, param);
 }
 
 void ExpressionParser::ThrowParseException(const char *str, uint32_t param) const THROWS(GCodeException)
 {
-	throw GCodeException(gb.GetLineNumber(), GetColumn(), str, param);
+	throw GCodeException(&gb, GetColumn(), str, param);
 }
 
 // Call this before making a recursive call, or before calling a function that needs a lot of stack from a recursive function
@@ -2084,7 +2084,7 @@ void ExpressionParser::CheckStack(uint32_t calledFunctionStackUsage) const THROW
 	// The stack is in danger of overflowing. Throw an exception if we have enough stack to do so (ideally, this should always be the case)
 	if (stackLimit + StackUsage::Throw <= stackPtr)
 	{
-		throw GCodeException(gb.GetLineNumber(), GetColumn(), "Expression nesting too deep");
+		throw GCodeException(&gb, GetColumn(), "Expression nesting too deep");
 	}
 
 	// Not enough stack left to throw an exception

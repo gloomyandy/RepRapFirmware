@@ -502,11 +502,12 @@ void ZProbe::SetLastStoppedHeight(float h) noexcept
 }
 
 // Scanning support
-GCodeResult ZProbe::SetScanningCoefficients(float aParam, float bParam) noexcept
+GCodeResult ZProbe::SetScanningCoefficients(float aParam, float bParam, float cParam) noexcept
 {
-	scanCoefficients[0] = scanCoefficients[3] = 0.0;
+	scanCoefficients[0] = 0.0;
 	scanCoefficients[1] = aParam;
 	scanCoefficients[2] = bParam;
+	scanCoefficients[3] =  cParam;
 	isCalibrated = true;
 	return GCodeResult::ok;
 }
@@ -521,7 +522,7 @@ GCodeResult ZProbe::ReportScanningCoefficients(const StringRef& reply) noexcept
 {
 	if (isCalibrated)
 	{
-		reply.printf("Scanning probe coefficients [%.3g %.3g %.3g %.3g]", (double)scanCoefficients[0], (double)scanCoefficients[1], (double)scanCoefficients[2], (double)scanCoefficients[3]);
+		reply.printf("Scanning probe coefficients [%.3e, %.3e, %.3e, %.3e]", (double)scanCoefficients[0], (double)scanCoefficients[1], (double)scanCoefficients[2], (double)scanCoefficients[3]);
 		return GCodeResult::ok;
 	}
 
