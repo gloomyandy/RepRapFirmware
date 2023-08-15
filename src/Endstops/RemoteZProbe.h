@@ -29,6 +29,9 @@ public:
 	GCodeResult Create(const StringRef& pinNames, const StringRef& reply) noexcept;
 	void HandleRemoteInputChange(CanAddress src, uint8_t handleMinor, bool newState) noexcept override;
 
+	// Process a remote reading that relates to this Z probe
+	void UpdateRemoteReading(CanAddress src, uint8_t handleMinor, uint32_t reading) noexcept override;
+
 	// Functions used only with modulated Z probes
 	void SetIREmitter(bool on) const noexcept override { }
 
@@ -46,8 +49,8 @@ private:
 	uint32_t lastValue;							// the most recent value received from a scanning analog Z probe
 	bool state;									// the state of a digital Z probe
 
-	static constexpr uint16_t ActiveProbeReportInterval = 2;
-	static constexpr uint16_t InactiveProbeReportInterval = 25;
+	static constexpr uint32_t ActiveProbeReportInterval = 2;
+	static constexpr uint32_t InactiveProbeReportInterval = 25;
 };
 
 #endif

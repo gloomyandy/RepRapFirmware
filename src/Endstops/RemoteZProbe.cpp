@@ -153,7 +153,9 @@ GCodeResult RemoteZProbe::CalibrateDriveLevel(GCodeBuffer& gb, const StringRef& 
 	bool dummy = false;
 	gb.TryGetIValue('S', driveLevel, dummy);
 	uint8_t returnedDriveLevel;
-	const uint16_t param = (driveLevel >= 0) ? (uint16_t)driveLevel : (driveLevel == -1) ? 0xFFFF : 0xFFFE;
+	const uint32_t param = (driveLevel >= 0) ? (uint16_t)driveLevel
+							: (driveLevel == -1) ? CanMessageChangeInputMonitorNew::paramAutoCalibrateDriveLevelAndReport
+								: CanMessageChangeInputMonitorNew::paramReportDriveLevel;
 	return CanInterface::SetHandleDriveLevel(boardAddress, handle, param, returnedDriveLevel, reply);
 }
 
@@ -163,6 +165,15 @@ void RemoteZProbe::HandleRemoteInputChange(CanAddress src, uint8_t handleMinor, 
 	if (src == boardAddress)
 	{
 		state = newState;
+	}
+}
+
+// Process a remote reading that relates to this Z probe
+void RemoteZProbe::UpdateRemoteReading(CanAddress src, uint8_t handleMinor, uint32_t reading) noexcept
+{
+	if (src == boardAddress)
+	{
+		lastValue = reading;
 	}
 }
 
