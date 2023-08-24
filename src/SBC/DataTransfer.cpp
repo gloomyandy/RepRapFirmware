@@ -405,7 +405,11 @@ extern "C" void SBC_SPI_HANDLER() noexcept
 
 // Static data. Note, the startup code we use doesn't make any provision for initialising non-cached memory, other than to zero. So don't specify initial value here
 
-#if SAME70 || STM32H7
+#if SAME70 || STM32
+// On the STM32H7 and SAME70 we need to ensure that the following are in memory that is not cached (see above). 
+// On STM32F4 we need to ensure that memory used by the SBC interface is not in the top 32Kb of RAM as this is
+// used for the SBC IAP. Since we have a separate build for SBC on STM configurations we simply force the buffers
+// to be statically alloacted rather than mallocing them.
 __nocache TransferHeader DataTransfer::rxHeader;
 __nocache TransferHeader DataTransfer::txHeader;
 __nocache uint32_t DataTransfer::rxResponse;
@@ -438,7 +442,7 @@ void DataTransfer::Init() noexcept
 	// Initialise transfer ready pin
 	pinMode(SbcTfrReadyPin, OUTPUT_LOW);
 
-#if !SAME70 && !STM32H7
+#if !SAME70 && !STM32
 	if (reprap.UsingSbcInterface())
 	{
 		// Allocate buffers in SBC mode

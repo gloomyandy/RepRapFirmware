@@ -62,12 +62,27 @@ SbcInterface::SbcInterface() noexcept : isConnected(false), numDisconnects(0), n
 	, fileCodesRead(0), fileCodesHandled(0), fileMacrosRunning(0), fileMacrosClosing(0)
 #endif
 {
+#if STM32
+	// We need to ensure that memory used for SBC comms is below the last 32Kb of RAM as this is used
+	// by the SBC IAP program. The constructor is called early in the start up sequence so we allocate
+	// memory here on the STM versions.
+	fileMutex.Create("SBCFile");
+	gcodeReplyMutex.Create("SBCReply");
+	codeBuffer = (char *)new uint32_t[(SpiCodeBufferSize + 3)/4];
+	sbcTask = new Task<SBCTaskStackWords>();
+	iapRamAvailable = (const char*)&_estack - Tasks::GetHeapTop();
+#endif
 }
 
 void SbcInterface::Init() noexcept
 {
 	if (reprap.UsingSbcInterface())
 	{
+#if STM32
+		// We have already allocated memory in the constructor so just start things here
+		transfer.Init();
+		sbcTask->Create(SBCTaskStart, "SBC", nullptr, TaskPriority::SbcPriority);
+#else
 		fileMutex.Create("SBCFile");
 		gcodeReplyMutex.Create("SBCReply");
 		codeBuffer = (char *)new uint32_t[(SpiCodeBufferSize + 3)/4];
@@ -75,6 +90,7 @@ void SbcInterface::Init() noexcept
 		sbcTask = new Task<SBCTaskStackWords>();
 		sbcTask->Create(SBCTaskStart, "SBC", nullptr, TaskPriority::SbcPriority);
 		iapRamAvailable = (const char*)&_estack - Tasks::GetHeapTop();
+#endif
 	}
 	else
 	{

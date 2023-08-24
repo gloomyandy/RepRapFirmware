@@ -110,10 +110,16 @@ private:
 	unsigned int failedTransfers, checksumErrors;
 
 	// Transfer buffers
-#if SAME70 || STM32H7
+#if SAME70 || STM32
 	// SAME70 has a write-back cache, so these must be in non-cached memory because we DMA to/from them.
 	// See http://ww1.microchip.com/downloads/en/DeviceDoc/Managing-Cache-Coherency-on-Cortex-M7-Based-MCUs-DS90003195A.pdf
 	// This in turn means that we must declare them static, so we can only have one DataTransfer instance
+
+	// On the STM32H7 and SAME70 we need to ensure that the following are in memory that is not cached (see above). 
+	// On STM32F4 we need to ensure that memory used by the SBC interface is not in the top 32Kb of RAM as this is
+	// used for the SBC IAP. Since we have a separate build for SBC on STM configurations we simply force the buffers
+	// to be statically alloacted rather than mallocing them.
+
 	static __nocache TransferHeader rxHeader;
 	static __nocache TransferHeader txHeader;
 	static __nocache uint32_t rxResponse;
