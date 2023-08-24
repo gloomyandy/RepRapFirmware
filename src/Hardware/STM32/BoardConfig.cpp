@@ -613,6 +613,9 @@ void BoardConfig::Init() noexcept
         delay(1);
         if (SERIAL_MAIN_DEVICE.IsConnected())
         {
+            // For some reason if we start using USB straightaway we end up reading back some data we just
+            // sent. Adding a small delay seems to fix the problem.
+            delay(100);
             debugPrintf("RRF Started....\n");
             break;
         }
