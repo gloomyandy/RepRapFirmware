@@ -4,6 +4,7 @@ Version 3.5.0-beta.4+105
 * Added support for Fly Gemini V3
 * Added support for TMC5160 drivers for RP2040 boards
 * Added support for PITB board (in picocan mode)
+* Fixed fail to flash new code in SBC mode
 
 Version 3.5.0-beta.4+104
 ========================
