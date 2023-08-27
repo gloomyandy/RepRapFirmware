@@ -1,10 +1,6 @@
 #ifndef GENERIC_H
 #define GENERIC_H
 
-#include "../Pins_STM32.h"
-
-
-
 constexpr PinEntry PinTable_Generic[] =
 {
 

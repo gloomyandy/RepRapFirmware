@@ -155,7 +155,6 @@ constexpr size_t NumDirectDrivers = 14;               // The maximum number of d
 #if defined(SUPPORT_TMC22xx)
     constexpr size_t MaxSmartDrivers = NumDirectDrivers;            // The maximum number of smart drivers
     constexpr size_t NumTmcDriversSenseChannels = 1;
-    #define TMC_SOFT_UART                   1
     #define TMC22xx_HAS_ENABLE_PINS			1
     #define TMC22xx_VARIABLE_NUM_DRIVERS	1
     #define TMC22xx_USE_SLAVEADDR           0
@@ -178,7 +177,6 @@ constexpr size_t NumDirectDrivers = 14;               // The maximum number of d
     #define TMC51xx_VARIABLE_NUM_DRIVERS    1
 #else
     constexpr size_t MaxSmartDrivers = 0;            // The maximum number of smart drivers
-    #define TMC_SOFT_UART 0
 #endif
 
 
@@ -254,12 +252,14 @@ NamedEnum(DriverType, uint8_t,
 	tmc5160,
 	tmc2240
 );
+
 // HAS_SMART_DRIVERS is defined in Pins.h, we duplicate it for the board files to use
-#define HAS_SMART_DRIVERS		(SUPPORT_TMC2660 || SUPPORT_TMC22xx || SUPPORT_TMC51xx)
+//#define HAS_SMART_DRIVERS		(SUPPORT_TMC2660 || SUPPORT_TMC22xx || SUPPORT_TMC51xx)
 extern Pin ENABLE_PINS[NumDirectDrivers];
 extern Pin STEP_PINS[NumDirectDrivers];
 extern Pin DIRECTION_PINS[NumDirectDrivers];
-#if HAS_SMART_DRIVERS
+//#if HAS_SMART_DRIVERS
+#if (SUPPORT_TMC2660 || SUPPORT_TMC22xx || SUPPORT_TMC51xx)
 extern DriverType TMC_DRIVER_TYPE[NumDirectDrivers];
 extern Pin TMC_PINS[NumDirectDrivers];
 extern Pin DriverDiagPins[NumDirectDrivers];
@@ -268,8 +268,7 @@ extern size_t num5160SmartDrivers;
 extern SSPChannel SmartDriversSpiChannel;
 extern uint32_t SmartDriversSpiCsDelay;
 #endif
-#if TMC_SOFT_UART
-    constexpr Pin GlobalTmc22xxEnablePin = NoPin;			// The pin that drives ENN of all drivers
+#if SUPPORT_TMC22xx
     constexpr uint32_t DriversBaudRate = 50000;
 #endif
 
@@ -404,91 +403,13 @@ extern SSPChannel AccelerometerSpiChannel;
 #define STEP_TC_IRQN        TIM5_IRQn
 #define STEP_TC_HANDLER     TIM5_IRQHandler
 
-extern volatile uint32_t BrownoutEvents;
-
-struct PinEntry
-{
-    Pin GetPin() const  noexcept{ return pin; }
-    const char* GetNames() const  noexcept{ return names; }
-    
-    const Pin pin;
-    const char *names;
-};
-
-extern PinEntry *PinTable;
-extern size_t NumNamedLPCPins;
-
-
 bool LookupPinName(const char *pn, LogicalPin& lpin, bool& hardwareInverted) noexcept;
 const char *GetPinNames(LogicalPin lp) noexcept;
-
-#if ALLOCATE_LOCAL_PORTS
-constexpr const char *DefaultEndstopPinNames[] = { "nil", "nil", "nil" };
-constexpr const char *DefaultZProbePinNames = "nil";
-constexpr const char *DefaultFanPinNames[] = { "nil", "nil" };
-constexpr PwmFrequency DefaultFanPwmFrequencies[] = { DefaultFanPwmFreq };
-#endif
-
-
-//Boards
-
-bool SetBoard(const char* bn)  noexcept;
-void PrintBoards(MessageType mtype) noexcept;
-void ClearPinArrays() noexcept;
 
 constexpr size_t MaxBoardNameLength = 32;
 extern char lpcBoardName[MaxBoardNameLength];
 extern size_t totalSmartDrivers;
 extern size_t num5160SmartDrivers;
-constexpr size_t MaxSignatures = 3;
-typedef enum {
-    SD_SPI1_A,
-    SD_SPI1_B,
-    SD_SDIO,
-    SD_SPI3_A,
-    SD_SPI3_B,
-    SD_UNKNOWN = 0xfe,
-    SD_NONE = 0xff
-} SDConfigs;
-
-constexpr uint32_t UNKNOWN_BOARD = 0;
-
-struct BoardDefaults
-{
-    const uint32_t signatures[MaxSignatures];
-    const SDConfigs SDConfig;
-    const Pin spiPins[NumSPIDevices][NumSPIPins];
-    const uint32_t numDrivers;
-    const Pin enablePins[NumDirectDrivers];
-    const Pin stepPins[NumDirectDrivers];
-    const Pin dirPins[NumDirectDrivers];
-#if HAS_SMART_DRIVERS
-    const Pin uartPins[NumDirectDrivers];
-    const uint32_t numSmartDrivers;
-#endif
-    const float digipotFactor;
-#if HAS_VOLTAGE_MONITOR
-    const Pin vinDetectPin;
-#endif
-    const Pin stepperPowerEnablePin;
-#if HAS_SBC_INTERFACE
-    Pin SbcTfrReadyPin;
-    Pin SbcCsPin;
-    SSPChannel SbcSpiChannel;
-#endif     
-};
-
-struct BoardEntry
-{
-    const char *boardName[3];
-    const PinEntry *boardPinTable;
-    const size_t numNamedEntries;
-    const BoardDefaults &defaults;
-};
-
-#undef HAS_SMART_DRIVERS
-extern const BoardEntry LPC_Boards[];
-extern const size_t NumBoardEntries;
 
 // Enum to represent allowed types of pin access
 // We don't have a separate bit for servo, because Duet PWM-capable ports can be used for servos if they are on the Duet main board

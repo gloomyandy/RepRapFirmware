@@ -1,3 +1,10 @@
+Version 3.5.0-beta.4+105
+========================
+* Refactored per board configuration
+* Added support for Fly Gemini V3
+* Added support for TMC5160 drivers for RP2040 boards
+* Added support for PITB board (in picocan mode)
+
 Version 3.5.0-beta.4+104
 ========================
 * Updated version no format to be compatible with DWC

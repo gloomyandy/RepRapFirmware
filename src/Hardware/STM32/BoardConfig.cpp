@@ -39,129 +39,318 @@
 # include "DMABitIO.h"
 #endif
 
+#include "Board.h"
+#include "Boards/BIQU_SKR.h"
+#include "Boards/FLY.h"
+#include "Boards/FYSETC.h"
+#include "Boards/Generic.h"
+
+//Known boards with built in stepper configurations and pin table
+// Note the generic entry must be the first entry in the table.
+static constexpr BoardEntry LPC_Boards[] =
+{
+    {{"generic"},      PinTable_Generic,    ARRAY_SIZE(PinTable_Generic),    Generic_Defaults},
+#if STM32H7
+# if STM32H743xx
+    {{"fly_super5"},      PinTable_FLY_SUPER5,    ARRAY_SIZE(PinTable_FLY_SUPER5),    fly_super5_Defaults},
+    {{"fly_super8h7", "fly_super8_pro"},      PinTable_FLY_SUPER8H7,    ARRAY_SIZE(PinTable_FLY_SUPER8H7),    fly_super8h7_Defaults},
+    {{"biquskr_se_bx_2.0"},      PinTable_BIQU_SKR_SE_BX_v2_0,    ARRAY_SIZE(PinTable_BIQU_SKR_SE_BX_v2_0),    biqu_skr_se_bx_v2_0_Defaults},
+    {{"biquskr_3", "biquskr_3_ez"},      PinTable_BTT_SKR_3,    ARRAY_SIZE(PinTable_BTT_SKR_3),    btt_skr_3_Defaults},
+# elif STM32H723xx
+    {{"fly_super5_h723"},      PinTable_FLY_SUPER5,    ARRAY_SIZE(PinTable_FLY_SUPER5),    fly_super5_Defaults},
+    {{"fly_super8_pro_h723"},      PinTable_FLY_SUPER8H7,    ARRAY_SIZE(PinTable_FLY_SUPER8H7),    fly_super8h7_Defaults},
+    {{"fly_openpnp_tool"},      PinTable_FLY_OPENPNP_TOOL,    ARRAY_SIZE(PinTable_FLY_OPENPNP_TOOL),    fly_openpnp_tool_Defaults},
+    {{"biquskr_3_h723", "biquskr_3_ez_h723"},      PinTable_BTT_SKR_3,    ARRAY_SIZE(PinTable_BTT_SKR_3),    btt_skr_3_Defaults},
+    {{"fysetc_spider_king723"}, PinTable_FYSETC_SPIDER_KING407, ARRAY_SIZE(PinTable_FYSETC_SPIDER_KING407), fysetc_spider_king407_Defaults},
+# endif
+#else
+    {{"biquskrpro_1.1"},      PinTable_BIQU_SKR_PRO_v1_1,    ARRAY_SIZE(PinTable_BIQU_SKR_PRO_v1_1),    biquskr_pro_1_1_Defaults},
+    {{"biqugtr_1.0"},      PinTable_BIQU_GTR_v1_0,    ARRAY_SIZE(PinTable_BIQU_GTR_v1_0),    biqu_gtr_1_0_Defaults},
+    {{"fly_e3_pro"},      PinTable_FLY_E3_PRO,    ARRAY_SIZE(PinTable_FLY_E3_PRO),    fly_e3_pro_Defaults},
+    {{"fly_e3_prov3"},      PinTable_FLY_E3_PROV3,    ARRAY_SIZE(PinTable_FLY_E3_PROV3),    fly_e3_prov3_Defaults},
+    {{"fly_f407zg"},      PinTable_FLY_F407ZG,    ARRAY_SIZE(PinTable_FLY_F407ZG),    fly_f407zg_Defaults},
+    {{"fly_e3"},      PinTable_FLY_E3,    ARRAY_SIZE(PinTable_FLY_E3),    fly_e3_Defaults},
+    {{"fly_e3_v2"},      PinTable_FLY_E3_V2,    ARRAY_SIZE(PinTable_FLY_E3_V2),    fly_e3_v2_Defaults},
+    {{"fly_cdyv2", "fly_cdyv3"},      PinTable_FLY_CDYV2,    ARRAY_SIZE(PinTable_FLY_CDYV2),    fly_cdyv2_Defaults},
+    {{"fly_super8"},      PinTable_FLY_SUPER8,    ARRAY_SIZE(PinTable_FLY_SUPER8),    fly_super8_Defaults},
+#if HAS_SBC_INTERFACE    
+    {{"fly_gemini"},      PinTable_FLY_GEMINI,    ARRAY_SIZE(PinTable_FLY_GEMINI),    fly_gemini_Defaults},    
+    {{"fly_geminiv1.1"},      PinTable_FLY_GEMINI_V1_1,    ARRAY_SIZE(PinTable_FLY_GEMINI_V1_1),    fly_gemini_v1_1_Defaults},    
+    {{"fly_geminiv2.0"},      PinTable_FLY_GEMINI_V2_0,    ARRAY_SIZE(PinTable_FLY_GEMINI_V2_0),    fly_gemini_v2_0_Defaults},    
+    {{"fly_geminiv3.0"},      PinTable_FLY_GEMINI_V3_0,    ARRAY_SIZE(PinTable_FLY_GEMINI_V3_0),    fly_gemini_v3_0_Defaults},
+#endif   
+    {{"biquskr_rrf_e3_1.1"},      PinTable_BTT_RRF_E3_v1_1,    ARRAY_SIZE(PinTable_BTT_RRF_E3_v1_1),    btt_rrf_e3_1_1_Defaults},
+    {{"biquskr_2"}, PinTable_BTT_SKR_2, ARRAY_SIZE(PinTable_BTT_SKR_2), btt_skr_2_Defaults},
+    {{"biqoctopus_1.1", "biquoctopus_1.1"}, PinTable_BTT_OCTOPUS, ARRAY_SIZE(PinTable_BTT_OCTOPUS), btt_octopus_Defaults},
+    {{"biqoctopuspro_1.0", "biquoctopuspro_1.0"}, PinTable_BTT_OCTOPUSPRO, ARRAY_SIZE(PinTable_BTT_OCTOPUSPRO), btt_octopuspro_Defaults},
+    {{"biquoctopus_x7", "troodon_v2"}, PinTable_BIQU_OCTOPUS_X7, ARRAY_SIZE(PinTable_BIQU_OCTOPUS_X7), biquoctopus_x7_Defaults},
+    {{"fysetc_spider"}, PinTable_FYSETC_SPIDER, ARRAY_SIZE(PinTable_FYSETC_SPIDER), fysetc_spider_Defaults},
+    {{"fysetc_spider_king407"}, PinTable_FYSETC_SPIDER_KING407, ARRAY_SIZE(PinTable_FYSETC_SPIDER_KING407), fysetc_spider_king407_Defaults},
+#endif
+};
+static constexpr size_t NumBoardEntries = ARRAY_SIZE(LPC_Boards);
+static PinEntry *PinTable;
+static size_t NumNamedLPCPins;
+char lpcBoardName[MaxBoardNameLength];
+
 static constexpr char boardConfigFile[] = "board.txt";
 
 //Single entry for Board name
 static const boardConfigEntry_t boardEntryConfig[]=
 {
-    {"board", &lpcBoardName, nullptr, cvStringType},
+    {"board", &lpcBoardName, 1, cvStringType},
 };
 
 //All other board configs
 static const boardConfigEntry_t boardConfigs[]=
 {
-    {"leds.diagnostic", &DiagPin, nullptr, cvPinType},
-    {"leds.diagnosticOn", &DiagOnPolarity, nullptr, cvBoolType},
-    {"leds.activity", &ActLedPin, nullptr, cvPinType},
-    {"leds.activityOn", &ActOnPolarity, nullptr, cvBoolType},
+    {"leds.diagnostic", &DiagPin, 1, cvPinType},
+    {"leds.diagnosticOn", &DiagOnPolarity, 1, cvBoolType},
+    {"leds.activity", &ActLedPin, 1, cvPinType},
+    {"leds.activityOn", &ActOnPolarity, 1, cvBoolType},
 
     // initial pin states
-    {"pins.SetHigh", PinsSetHigh, &MaxInitialPins, cvPinType},
-    {"pins.SetLow", PinsSetLow, &MaxInitialPins, cvPinType},
+    {"pins.SetHigh", PinsSetHigh, MaxInitialPins, cvPinType},
+    {"pins.SetLow", PinsSetLow, MaxInitialPins, cvPinType},
 
     //Steppers
-    {"stepper.powerEnablePin", &StepperPowerEnablePin, nullptr, cvPinType},
-    {"stepper.enablePins", ENABLE_PINS, &NumDirectDrivers, cvPinType},
-    {"stepper.stepPins", STEP_PINS, &NumDirectDrivers, cvPinType},
-    {"stepper.directionPins", DIRECTION_PINS, &NumDirectDrivers, cvPinType},
-    {"stepper.digipotFactor", &digipotFactor, nullptr, cvFloatType},
+    {"stepper.powerEnablePin", &StepperPowerEnablePin, 1, cvPinType},
+    {"stepper.enablePins", ENABLE_PINS, NumDirectDrivers, cvPinType},
+    {"stepper.stepPins", STEP_PINS, NumDirectDrivers, cvPinType},
+    {"stepper.directionPins", DIRECTION_PINS, NumDirectDrivers, cvPinType},
+    {"stepper.digipotFactor", &digipotFactor, 1, cvFloatType},
 #if HAS_SMART_DRIVERS
-    {"stepper.TmcUartPins", TMC_PINS, &NumDirectDrivers, cvPinType},
-    {"stepper.DriverType", TMC_DRIVER_TYPE, &NumDirectDrivers, cvDriverType},
-    {"stepper.numSmartDrivers", &totalSmartDrivers, nullptr, cvUint32Type},
+    {"stepper.TmcUartPins", TMC_PINS, NumDirectDrivers, cvPinType},
+    {"stepper.DriverType", TMC_DRIVER_TYPE, NumDirectDrivers, cvDriverType},
+    {"stepper.numSmartDrivers", &totalSmartDrivers, 1, cvUint32Type},
 #if SUPPORT_TMC51xx
-    {"stepper.num5160Drivers", &num5160SmartDrivers, nullptr, cvUint32Type},
-    {"stepper.spiChannel", &SmartDriversSpiChannel, nullptr, cvUint8Type},
-    {"stepper.csDelay", &SmartDriversSpiCsDelay, nullptr, cvUint32Type},
+    {"stepper.num5160Drivers", &num5160SmartDrivers, 1, cvUint32Type},
+    {"stepper.spiChannel", &SmartDriversSpiChannel, 1, cvUint8Type},
+    {"stepper.csDelay", &SmartDriversSpiCsDelay, 1, cvUint32Type},
 #endif
 #if HAS_STALL_DETECT && SUPPORT_TMC22xx
-    {"stepper.TmcDiagPins", DriverDiagPins, &NumDirectDrivers, cvPinType},
+    {"stepper.TmcDiagPins", DriverDiagPins, NumDirectDrivers, cvPinType},
 #endif
 #endif
     //Heater sensors
-    {"heat.tempSensePins", TEMP_SENSE_PINS, &NumThermistorInputs, cvPinType},
-    {"heat.spiTempSensorCSPins", SpiTempSensorCsPins, &MaxSpiTempSensors, cvPinType},
-    {"heat.spiTempSensorChannel", &TempSensorSSPChannel, nullptr, cvUint8Type},
-    {"heat.thermistorSeriesResistor", &DefaultThermistorSeriesR, nullptr, cvFloatType},
+    {"heat.tempSensePins", TEMP_SENSE_PINS, NumThermistorInputs, cvPinType},
+    {"heat.spiTempSensorCSPins", SpiTempSensorCsPins, MaxSpiTempSensors, cvPinType},
+    {"heat.spiTempSensorChannel", &TempSensorSSPChannel, 1, cvUint8Type},
+    {"heat.thermistorSeriesResistor", &DefaultThermistorSeriesR, 1, cvFloatType},
     
     //ATX Power
-    {"atx.powerPin", &ATX_POWER_PIN, nullptr, cvPinType},
-    {"atx.powerPinInverted", &ATX_POWER_INVERTED, nullptr, cvBoolType},
-    {"atx.initialPowerOn", &ATX_INITIAL_POWER_ON, nullptr, cvBoolType},
+    {"atx.powerPin", &ATX_POWER_PIN, 1, cvPinType},
+    {"atx.powerPinInverted", &ATX_POWER_INVERTED, 1, cvBoolType},
+    {"atx.initialPowerOn", &ATX_INITIAL_POWER_ON, 1, cvBoolType},
 
     //SDCards
-    {"sdCard.internal.spiFrequencyHz", &InternalSDCardFrequency, nullptr, cvUint32Type},
-    {"sdCard.external.csPin", &SdSpiCSPins[1], nullptr, cvPinType},
-    {"sdCard.external.cardDetectPin", &SdCardDetectPins[1], nullptr, cvPinType},
-    {"sdCard.external.spiFrequencyHz", &ExternalSDCardFrequency, nullptr, cvUint32Type},
-    {"sdCard.external.spiChannel", &ExternalSDCardSSPChannel, nullptr, cvUint8Type},
+    {"sdCard.internal.spiFrequencyHz", &InternalSDCardFrequency, 1, cvUint32Type},
+    {"sdCard.external.csPin", &SdSpiCSPins[1], 1, cvPinType},
+    {"sdCard.external.cardDetectPin", &SdCardDetectPins[1], 1, cvPinType},
+    {"sdCard.external.spiFrequencyHz", &ExternalSDCardFrequency, 1, cvUint32Type},
+    {"sdCard.external.spiChannel", &ExternalSDCardSSPChannel, 1, cvUint8Type},
 
 #if SUPPORT_12864_LCD
-    {"lcd.lcdCSPin", &LcdCSPin, nullptr, cvPinType},
-    {"lcd.lcdBeepPin", &LcdBeepPin, nullptr, cvPinType},
-    {"lcd.encoderPinA", &EncoderPinA, nullptr, cvPinType},
-    {"lcd.encoderPinB", &EncoderPinB, nullptr, cvPinType},
-    {"lcd.encoderPinSw", &EncoderPinSw, nullptr, cvPinType},
-    {"lcd.lcdDCPin", &LcdA0Pin, nullptr, cvPinType},
-    {"lcd.panelButtonPin", &PanelButtonPin, nullptr, cvPinType},
-    {"lcd.spiChannel", &LcdSpiChannel, nullptr, cvUint8Type},
+    {"lcd.lcdCSPin", &LcdCSPin, 1, cvPinType},
+    {"lcd.lcdBeepPin", &LcdBeepPin, 1, cvPinType},
+    {"lcd.encoderPinA", &EncoderPinA, 1, cvPinType},
+    {"lcd.encoderPinB", &EncoderPinB, 1, cvPinType},
+    {"lcd.encoderPinSw", &EncoderPinSw, 1, cvPinType},
+    {"lcd.lcdDCPin", &LcdA0Pin, 1, cvPinType},
+    {"lcd.panelButtonPin", &PanelButtonPin, 1, cvPinType},
+    {"lcd.spiChannel", &LcdSpiChannel, 1, cvUint8Type},
 #endif
     
-    {"SPI0.pins", SPIPins[0], &NumSPIPins, cvPinType}, //SCK, MISO, MOSI
-    {"SPI1.pins", SPIPins[1], &NumSPIPins, cvPinType}, //SCK, MISO, MOSI
-    {"SPI2.pins", SPIPins[2], &NumSPIPins, cvPinType}, //SCK, MISO, MOSI
-    {"SPI3.pins", SPIPins[3], &NumSPIPins, cvPinType}, //SCK, MISO, MOSI
-    {"SPI4.pins", SPIPins[4], &NumSPIPins, cvPinType}, //SCK, MISO, MOSI
-    {"SPI5.pins", SPIPins[5], &NumSPIPins, cvPinType}, //SCK, MISO, MOSI
+    {"SPI0.pins", SPIPins[0], NumSPIPins, cvPinType}, //SCK, MISO, MOSI
+    {"SPI1.pins", SPIPins[1], NumSPIPins, cvPinType}, //SCK, MISO, MOSI
+    {"SPI2.pins", SPIPins[2], NumSPIPins, cvPinType}, //SCK, MISO, MOSI
+    {"SPI3.pins", SPIPins[3], NumSPIPins, cvPinType}, //SCK, MISO, MOSI
+    {"SPI4.pins", SPIPins[4], NumSPIPins, cvPinType}, //SCK, MISO, MOSI
+    {"SPI5.pins", SPIPins[5], NumSPIPins, cvPinType}, //SCK, MISO, MOSI
 #if STM32H7
-    {"SPI6.pins", SPIPins[6], &NumSPIPins, cvPinType}, //SCK, MISO, MOSI
-    {"SPI7.pins", SPIPins[7], &NumSPIPins, cvPinType}, //SCK, MISO, MOSI
-    {"SPI8.pins", SPIPins[8], &NumSPIPins, cvPinType}, //SCK, MISO, MOSI
+    {"SPI6.pins", SPIPins[6], NumSPIPins, cvPinType}, //SCK, MISO, MOSI
+    {"SPI7.pins", SPIPins[7], NumSPIPins, cvPinType}, //SCK, MISO, MOSI
+    {"SPI8.pins", SPIPins[8], NumSPIPins, cvPinType}, //SCK, MISO, MOSI
 #endif
     
 #if HAS_WIFI_NETWORKING
-    {"8266wifi.espDataReadyPin", &EspDataReadyPin, nullptr, cvPinType},
-    {"8266wifi.lpcTfrReadyPin", &SamTfrReadyPin, nullptr, cvPinType},
-    {"8266wifi.TfrReadyPin", &SamTfrReadyPin, nullptr, cvPinType},
-    {"8266wifi.espResetPin", &EspResetPin, nullptr, cvPinType},
-    {"8266wifi.csPin", &SamCsPin, nullptr, cvPinType},
-    {"8266wifi.serialRxTxPins", &WifiSerialRxTxPins, &NumberSerialPins, cvPinType},
-    {"8266wifi.spiChannel", &WiFiSpiChannel, nullptr, cvUint8Type},    
-    {"8266wifi.clockReg", &WiFiClockReg, nullptr, cvUint32Type},
+    {"8266wifi.espDataReadyPin", &EspDataReadyPin, 1, cvPinType},
+    {"8266wifi.lpcTfrReadyPin", &SamTfrReadyPin, 1, cvPinType},
+    {"8266wifi.TfrReadyPin", &SamTfrReadyPin, 1, cvPinType},
+    {"8266wifi.espResetPin", &EspResetPin, 1, cvPinType},
+    {"8266wifi.csPin", &SamCsPin, 1, cvPinType},
+    {"8266wifi.serialRxTxPins", &WifiSerialRxTxPins, NumberSerialPins, cvPinType},
+    {"8266wifi.spiChannel", &WiFiSpiChannel, 1, cvUint8Type},    
+    {"8266wifi.clockReg", &WiFiClockReg, 1, cvUint32Type},
 #endif
 
 #if HAS_SBC_INTERFACE
-//    {"sbc.lpcTfrReadyPin", &SbcTfrReadyPin, nullptr, cvPinType},
-    {"sbc.TfrReadyPin", &SbcTfrReadyPin, nullptr, cvPinType},
-    {"sbc.csPin", &SbcCsPin, nullptr, cvPinType},
-    {"sbc.spiChannel", &SbcSpiChannel, nullptr, cvUint8Type},    
-    {"sbc.loadConfig", &SbcLoadConfig, nullptr, cvBoolType},    
+    {"sbc.TfrReadyPin", &SbcTfrReadyPin, 1, cvPinType},
+    {"sbc.csPin", &SbcCsPin, 1, cvPinType},
+    {"sbc.spiChannel", &SbcSpiChannel, 1, cvUint8Type},    
+    {"sbc.loadConfig", &SbcLoadConfig, 1, cvBoolType},    
 #endif
 
 #if defined(SERIAL_AUX_DEVICE)
-    {"serial.aux.rxTxPins", &AuxSerialRxTxPins, &NumberSerialPins, cvPinType},
+    {"serial.aux.rxTxPins", &AuxSerialRxTxPins, NumberSerialPins, cvPinType},
 #endif
 #if defined(SERIAL_AUX2_DEVICE)
-    {"serial.aux2.rxTxPins", &Aux2SerialRxTxPins, &NumberSerialPins, cvPinType},
+    {"serial.aux2.rxTxPins", &Aux2SerialRxTxPins, NumberSerialPins, cvPinType},
 #endif
     
 #if SUPPORT_LED_STRIPS
-    {"led.neopixelPin", &NeopixelOutPin, nullptr, cvPinType},
+    {"led.neopixelPin", &NeopixelOutPin, 1, cvPinType},
 #endif
 
 #if HAS_VOLTAGE_MONITOR
-    {"power.VInDetectPin", &PowerMonitorVinDetectPin, nullptr, cvPinType},
-    {"power.voltage", &VInDummyReading, nullptr, cvUint32Type},
+    {"power.VInDetectPin", &PowerMonitorVinDetectPin, 1, cvPinType},
+    {"power.voltage", &VInDummyReading, 1, cvUint32Type},
 #endif
 #if SUPPORT_ACCELEROMETERS
-    {"accelerometer.spiChannel", &AccelerometerSpiChannel, nullptr, cvUint8Type},
+    {"accelerometer.spiChannel", &AccelerometerSpiChannel, 1, cvUint8Type},
 #endif
 #if SUPPORT_SPICAN
-    {"can.spiChannel", &CanSpiChannel, nullptr, cvUint8Type},
-    {"can.csPin", &CanCsPin, nullptr, cvPinType},
-    {"can.spiFrequencyHz", &CanSpiFrequency, nullptr, cvUint32Type},
+    {"can.spiChannel", &CanSpiChannel, 1, cvUint8Type},
+    {"can.csPin", &CanCsPin, 1, cvPinType},
+    {"can.spiFrequencyHz", &CanSpiFrequency, 1, cvUint32Type},
 #endif
 };
+
+
+// Copy the default src pin array to dst array
+static void SetDefaultPinArray(const Pin *src, Pin *dst, size_t len) noexcept
+{
+    //array is empty from board.txt config, set to defaults
+    for(size_t i=0; i<len; i++)
+    {
+        dst[i] = src[i];
+    }
+}
+
+static void ClearConfig() noexcept
+{
+    const size_t numConfigs = ARRAY_SIZE(boardConfigs);
+    for(size_t i=0; i<numConfigs; i++)
+    {
+        boardConfigEntry_t next = boardConfigs[i];
+        for(size_t p=0; p<(next.numItems); p++)
+        {
+            switch(next.type)
+            {
+                case cvPinType:
+                    ((Pin *)(next.variable))[p] = NoPin;
+                    break;
+                case cvDriverType:
+                    ((DriverType *)(next.variable))[p] = DriverType::unknown;
+                    break;
+                case cvBoolType:
+                    ((bool *)(next.variable))[p] = false;
+                    break;
+                case cvFloatType:
+                    ((float *)(next.variable))[p] = 0.0f;
+                    break;
+                case cvUint8Type:
+                    ((uint8_t *)(next.variable))[p] = 0;
+                    break;
+                case cvUint16Type:
+                    ((uint16_t *)(next.variable))[p] = 0;
+                   break;
+                case cvUint32Type:
+                    ((uint32_t *)(next.variable))[p] = 0;
+                    break;
+                case cvStringType:
+                    strcpy(((char **)(next.variable))[p], "");
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    // We have a few settings that have "special" default values
+    TempSensorSSPChannel = SSPNONE;
+    DefaultThermistorSeriesR = 4700.0;
+    ATX_INITIAL_POWER_ON = true;
+    SdSpiCSPins[0] = PA_4;
+    SdCardDetectPins[0] = NoPin;
+    ExternalSDCardFrequency = 4000000;
+    ExternalSDCardSSPChannel = SSPNONE;
+    InternalSDCardFrequency = 25000000;
+    LcdSpiChannel = SSPNONE;
+    DiagOnPolarity = true;
+    ActOnPolarity = true;
+    SmartDriversSpiChannel = SSPNONE;
+#if HAS_WIFI_NETWORKING
+    SamCsPin = PB_12;
+    WiFiSpiChannel = SSP2;
+#endif
+#if defined(SERIAL_AUX_DEVICE)
+    AuxSerialRxTxPins[0] = PA_10;
+    AuxSerialRxTxPins[1] = PA_9;
+#endif
+#if HAS_SBC_INTERFACE
+    SbcCsPin = PB_12;
+    SbcSpiChannel = SSP2;
+#endif
+#if SUPPORT_SPICAN
+    CanSpiFrequency = 15000000;
+#endif
+#if HAS_VOLTAGE_MONITOR
+    VInDummyReading = 24;
+#endif
+#if SUPPORT_ACCELEROMETERS
+    AccelerometerSpiChannel = SSPNONE;
+#endif
+}
+
+static void InitDiagPin()
+{
+    bool dummy;
+    LogicalPin pin;
+    if (LookupPinName("status", pin, dummy))
+    {
+        DiagPin = (Pin)pin;
+    }
+}
+
+//Find Board settings from string
+static bool SetBoard(const char* bn) noexcept
+{
+    const size_t numBoards = ARRAY_SIZE(LPC_Boards);
+    for(size_t i=0; i<numBoards; i++)
+    {
+        for(size_t j=0; j < ARRAY_SIZE(LPC_Boards[0].boardName); j++)
+            if(LPC_Boards[i].boardName[j] && StringEqualsIgnoreCase(bn, LPC_Boards[i].boardName[j]))
+            {
+                SafeStrncpy(lpcBoardName, bn, sizeof(lpcBoardName));
+                PinTable = (PinEntry *)LPC_Boards[i].boardPinTable;
+                NumNamedLPCPins = LPC_Boards[i].numNamedEntries;
+                ClearConfig();
+                //copy default settings
+                for(size_t j = 0; j < ARRAY_SIZE(SPIPins); j++)
+                    SetDefaultPinArray(LPC_Boards[i].defaults.spiPins[j], SPIPins[j], NumSPIPins);
+                SetDefaultPinArray(LPC_Boards[i].defaults.enablePins, ENABLE_PINS, LPC_Boards[i].defaults.numDrivers);
+                SetDefaultPinArray(LPC_Boards[i].defaults.stepPins, STEP_PINS, LPC_Boards[i].defaults.numDrivers);
+                SetDefaultPinArray(LPC_Boards[i].defaults.dirPins, DIRECTION_PINS, LPC_Boards[i].defaults.numDrivers);
+#if HAS_SMART_DRIVERS
+                SetDefaultPinArray(LPC_Boards[i].defaults.uartPins, TMC_PINS, LPC_Boards[i].defaults.numDrivers);
+                totalSmartDrivers = LPC_Boards[i].defaults.numSmartDrivers;
+#endif
+                digipotFactor = LPC_Boards[i].defaults.digipotFactor;
+#if HAS_VOLTAGE_MONITOR
+                PowerMonitorVinDetectPin = LPC_Boards[i].defaults.vinDetectPin;
+#endif
+                StepperPowerEnablePin = LPC_Boards[i].defaults.stepperPowerEnablePin;
+#if HAS_SBC_INTERFACE
+                SbcTfrReadyPin = LPC_Boards[i].defaults.SbcTfrReadyPin;
+                SbcCsPin = LPC_Boards[i].defaults.SbcCsPin;
+                SbcSpiChannel = LPC_Boards[i].defaults.SbcSpiChannel;
+#endif
+                InitDiagPin();
+                return true;
+            }
+    }
+    return false;
+}
 
 uint32_t crc32_for_byte(uint32_t r) 
 {
@@ -221,7 +410,7 @@ void InMemoryBoardConfiguration::setConfiguration() noexcept
     for(size_t i=0; i<numConfigs; i++)
     {
         const boardConfigEntry_t item = boardConfigs[i];
-        uint32_t len = (item.maxArrayEntries == nullptr ? CVTLengths[item.type] : *item.maxArrayEntries*CVTLengths[item.type]);
+        uint32_t len = item.numItems*CVTLengths[item.type];
         memcpy(item.variable, pmem, len);
         pmem += len;
     }
@@ -236,7 +425,7 @@ void InMemoryBoardConfiguration::getConfiguration() noexcept
     for(size_t i=0; i<numConfigs; i++)
     {
         const boardConfigEntry_t item = boardConfigs[i];
-        uint32_t len = (item.maxArrayEntries == nullptr ? CVTLengths[item.type] : *item.maxArrayEntries*CVTLengths[item.type]);
+        uint32_t len = item.numItems*CVTLengths[item.type];
         memcpy(pmem, item.variable, len);
         pmem += len;
         if (pmem - data > maxData)
@@ -621,7 +810,7 @@ void BoardConfig::Init() noexcept
         }
     }
 #endif
-    ClearPinArrays();
+    SetBoard("generic");
     uint32_t boardId = IdentifyBoard();
 #if HAS_SBC_INTERFACE
     // See if there is an (optional) config file on the SD card
@@ -642,7 +831,7 @@ void BoardConfig::Init() noexcept
     {
         MessageF(UsbMessage, "Using SBC based configuration files\n");
         // Check for a configuration stored in RAM (supplied by the SBC),
-        // if found use it over ride any config from the card
+        // if found use it and override any config from the card
         InMemoryBoardConfiguration inMemoryConfig;
         inMemoryConfig.loadFromBackupRAM();
         if (inMemoryConfig.isValid())
@@ -785,6 +974,115 @@ void BoardConfig::Init() noexcept
 #endif
 }
 
+
+static void PrintBoards(MessageType mtype) noexcept
+{
+    const size_t numBoards = ARRAY_SIZE(LPC_Boards);
+    for(size_t i=0; i<numBoards; i++)
+    {
+        for(size_t j=0; j < ARRAY_SIZE(LPC_Boards[0].boardName); j++)
+            if(LPC_Boards[i].boardName[j])
+            {
+                reprap.GetPlatform().MessageF(mtype, "Board %d.%d: %s iomode %d Signatures:", i, j, LPC_Boards[i].boardName[j], LPC_Boards[i].defaults.SDConfig);
+                for (size_t k = 0; k < MaxSignatures; k++)
+                    if (LPC_Boards[i].defaults.signatures[k] != 0)
+                        reprap.GetPlatform().MessageF(mtype, " 0x%x", (unsigned)LPC_Boards[i].defaults.signatures[k]);
+                reprap.GetPlatform().MessageF(mtype, "\n");
+            }
+    }
+}
+
+// Function to look up a pin name pass back the corresponding index into the pin table
+// On this platform, the mapping from pin names to pins is fixed, so this is a simple lookup
+bool LookupPinName(const char*pn, LogicalPin& lpin, bool& hardwareInverted) noexcept
+{
+    if (StringEqualsIgnoreCase(pn, NoPinName))
+    {
+        lpin = NoLogicalPin;
+        hardwareInverted = false;
+        return true;
+    }
+
+    for (size_t lp = 0; lp < NumNamedLPCPins; ++lp)
+    {
+        const char *q = PinTable[lp].names;
+        while (*q != 0)
+        {
+            // Try the next alias in the list of names for this pin
+            const char *p = pn;
+            // skip hardware pin options
+            if (*q == '+' || *q == '-' || *q == '^')
+                ++q;
+            bool hwInverted = (*q == '!');
+            if (hwInverted)
+            {
+                ++q;
+            }
+            // skip leading "_"
+            while (*p == '_') p++;
+            while (*q != ',' && *q != 0 && tolower(*p) == tolower(*q))
+            {
+                ++p;
+                ++q;
+                while (*p == '_' || *p =='-') p++;
+            }
+            if ((*p == 0 || *p == ',') && (*q == 0 || *q == ','))
+            {
+                // Found a match
+                lpin = (LogicalPin)PinTable[lp].pin;
+                hardwareInverted = hwInverted;
+                return true;
+            }
+            
+            // Skip to the start of the next alias
+            while (*q != 0 && *q != ',')
+            {
+                ++q;
+            }
+            if (*q == ',')
+            {
+                ++q;
+            }
+        }
+    }
+    
+    //pn did not match a label in the lookup table, so now
+    //look up by classic port.pin format
+    const Pin lpcPin = BoardConfig::StringToPin(pn);
+    if(lpcPin != NoPin){
+        lpin = (LogicalPin)lpcPin;
+        hardwareInverted = false;
+        return true;
+    }
+    return false;
+}
+
+// Return the string names associated with a pin
+const char *GetPinNames(LogicalPin lp) noexcept
+{
+    for (size_t i = 0; i < NumNamedLPCPins; ++i)
+    {
+        if ((LogicalPin)(PinTable[i].pin) == lp)
+            return PinTable[i].names;
+    }
+    // not found manufascture a name
+    static char name[5];
+    name[0] = 'A' + (lp >> 4);
+    name[1] = '.';
+    if ((lp & 0xf) > 9)
+    {
+        name[2] = '1';
+        name[3] = '0' + (lp & 0xf) - 10;
+        name[4] = '\0';
+    }
+    else
+    {
+        name[2] = '0' + (lp & 0xf);
+        name[3] = '\0';
+    }
+    // Next is very, very iffy, but ok for current usage!
+    return (const char *)name;
+}
 
 //Convert a pin string into a RRF Pin
 //Handle formats such as A.13, A_13, PA_13 or PA.13
@@ -932,10 +1230,10 @@ void BoardConfig::Diagnostics(MessageType mtype) noexcept
         boardConfigEntry_t next = boardConfigs[i];
 
         MessageF(mtype, "%s = ", next.key );
-        if(next.maxArrayEntries != nullptr)
+        if(next.numItems > 1)
         {
             MessageF(mtype, "{");
-            for(size_t p=0; p<*(next.maxArrayEntries); p++)
+            for(size_t p=0; p<(next.numItems); p++)
             {
                 if (p > 0)
                     MessageF(mtype, ", ");
@@ -1125,7 +1423,7 @@ bool BoardConfig::LoadBoardConfigFromFile() noexcept
     {
         //Failed to find string in known boards array
         debugPrintf("Warning: Failed to find board name '%s' using generic\n", lpcBoardName);
-        SafeStrncpy(lpcBoardName, "generic", sizeof(lpcBoardName)); //replace the string in lpcBoardName to "unknown"
+        SetBoard("generic");
     }
 
     //Load all other config settings now that PinTable is loaded.
@@ -1143,9 +1441,12 @@ bool BoardConfig::LoadBoardConfigFromSBC() noexcept
     if (!SbcLoadConfig) return false;
     InMemoryBoardConfiguration oldConfig, newConfig;
     oldConfig.getConfiguration();
-    //debugPrintf("Num smart drivers %d\n", totalSmartDrivers);
     BoardConfig::LoadBoardConfigFromFile();
-    //debugPrintf("Num smart drivers after %d\n", totalSmartDrivers);
+#if HAS_SMART_DRIVERS
+    ConfigureDriveType();
+#endif       
+    // SbcLoadConfig may have been reset force it back on
+    SbcLoadConfig = true;
     newConfig.getConfiguration();
     if (oldConfig.isEqual(newConfig))
         MessageF(UsbMessage, "Configurations match\n");
@@ -1155,6 +1456,7 @@ bool BoardConfig::LoadBoardConfigFromSBC() noexcept
         newConfig.saveToBackupRAM();
         MessageF(UsbMessage, "Configurations do not match rebooting to load new settings\n");
         FlushMessages();
+        reprap.EmergencyStop();
         delay(1000);
         SoftwareReset(SoftwareResetReason::erase); // Reboot
     }
@@ -1217,12 +1519,12 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
                         //Currently only handles Arrays of Pins
                         
                         
-                        if(next.maxArrayEntries != nullptr && (next.type == cvPinType || next.type == cvDriverType) && StringEqualsIgnoreCase(key, next.key))
+                        if(next.numItems > 1 && (next.type == cvPinType || next.type == cvDriverType) && StringEqualsIgnoreCase(key, next.key))
                         {
                             //matched an entry in boardConfigEntryArray
 
                             //create a temp array to read into. Only copy the array entries into the final destination when we know the array is properly defined
-                            const size_t maxArraySize = *next.maxArrayEntries;
+                            const size_t maxArraySize = next.numItems;
                             
                             //Pin Array Type
                             Pin readArray[maxArraySize];
@@ -1385,8 +1687,8 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
                         for(size_t i=0; i<numConfigs; i++)
                         {
                             boardConfigEntry_t next = boardConfigEntryArray[i];
-                            //Single Value config entries have nullptr for maxArrayEntries
-                            if(next.maxArrayEntries == nullptr && StringEqualsIgnoreCase(key, next.key))
+                            //Single Value config entries have 1 for numItems
+                            if(next.numItems == 1 && StringEqualsIgnoreCase(key, next.key))
                             {
                                 //debugPrintf("Setting value\n");
                                 //match

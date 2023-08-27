@@ -1666,10 +1666,8 @@ void Platform::InitialiseInterrupts() noexcept
 	// WiFi UART interrupt priority is now set in module WiFiInterface
 
 #if SUPPORT_TMC22xx && !SAME5x											// SAME5x uses a DMA interrupt instead of the UART interrupt
-# if TMC_SOFT_UART
 # if STM32
 	NVIC_SetPriority(DMA2_Stream5_IRQn, NvicPriorityDriversSerialTMC); // Software serial
-# endif
 # elif TMC22xx_HAS_MUX
 	NVIC_SetPriority(TMC22xx_UART_IRQn, NvicPriorityDriversSerialTMC);	// set priority for TMC2660 SPI interrupt
 # else

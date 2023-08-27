@@ -32,7 +32,7 @@ struct boardConfigEntry_t
 {
     const char* key;
     void *variable;
-    const size_t *maxArrayEntries;
+    const size_t numItems;
     configValueType type;
 };
 

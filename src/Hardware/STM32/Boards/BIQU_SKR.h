@@ -1,7 +1,6 @@
 #ifndef BIQU_SKR_H
 #define BIQU_SKR_H
 
-#include "../Pins_STM32.h"
 
 // List of assignable pins and their mapping from names to MPU ports. This is indexed by logical pin number.
 // The names must match user input that has been converted to lowercase and had _ and - characters stripped out.

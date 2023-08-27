@@ -1,7 +1,6 @@
 #ifndef FLY_H
 #define FLY_H
 
-#include "../Pins_STM32.h"
 // List of assignable pins and their mapping from names to MPU ports. This is indexed by logical pin number.
 // The names must match user input that has been converted to lowercase and had _ and - characters stripped out.
 // Aliases are separate by the , character.
@@ -863,7 +862,7 @@ constexpr BoardDefaults fly_e3_prov3_Defaults = {
 #endif
 };
 
-
+#if HAS_SBC_INTERFACE
 constexpr PinEntry PinTable_FLY_GEMINI[] =
 {
     //Thermistors
@@ -1088,6 +1087,79 @@ constexpr BoardDefaults fly_gemini_v2_0_Defaults = {
     PB_3, PB_12, SSP2,
 #endif
 };
+
+constexpr PinEntry PinTable_FLY_GEMINI_V3_0[] =
+{
+    //Thermistors
+    {PC_0, "e0temp,t0"},
+    {PC_2, "bedtemp,tb"},
+ 
+    //Endstops
+    {PA_4, "xstop"},
+    {PA_5, "ystop"},
+    {PA_6, "zstop"},
+    {PB_1, "e0stop"},
+
+    // Servo
+    {PB_0,  "servo0" },
+
+    // Porbe
+    {PA_1, "probe"},
+
+    //Heaters and Fans (Big and Small Mosfets)
+    {PA_2,  "bed,hbed" },
+    {PA_0,  "e0heat,he0" },
+    {PC_6,  "fan0,fan" },
+    {PC_7,  "fan1" },
+
+    //EXP1
+    {PA_8, "LCDD5"},
+    {PB_10, "BTNENC"},
+    {PA_13, "LCDEN"},
+    {PA_9, "LCDD4"},
+    {PA_10, "LCDRS"},
+
+    
+    //EXP2
+    {PA_7, "LCDCD"},
+    {PA_14, "BTNEN1"},
+    {PA_15, "BTNEN2"},
+    {PB_14, "LCDMISO"},
+    {PB_13, "LCDSCK"},
+    {PB_12, "LCDSS"},
+    {PB_15, "LCDMOSI"},
+
+};
+
+constexpr BoardDefaults fly_gemini_v3_0_Defaults = {
+    {0xa409fa9},                         // Signatures
+    SD_NONE,                             // SD Card access, no sd card
+    {   //CLK, MISO, MOSI
+        {PA_5, PA_6, PA_7},                     //SPI0 
+        {PB_13, PB_14, PB_15},                  //SPI1 SBC
+        {PB_3, PB_4, PB_5},                     //SPI2 Drivers
+        {NoPin, NoPin, NoPin},                  //SPI3
+        {NoPin, NoPin, NoPin},                  //SPI4
+        {NoPin, NoPin, NoPin},                  //SPI5
+    },
+    4,                                          // Number of drivers
+    {PA_3, PD_2, PC_12, PC_11},                   //enablePins
+    {PC_13, PC_14, PC_15, PC_3},                //stepPins
+    {PC_1, PC_4, PC_5, PC_8},                   //dirPins
+#if HAS_SMART_DRIVERS
+    {PB_11, PC_10, PB_7, PB_6},
+     4,                                         //uartPins                                              // Smart drivers
+#endif
+    0,
+#if HAS_VOLTAGE_MONITOR
+    NoPin,
+#endif
+    NoPin,
+#if HAS_SBC_INTERFACE
+    PC_9, PB_12, SSP2,
+#endif
+};
+#endif
 
 constexpr PinEntry PinTable_FLY_E3_V2[] =
 {
