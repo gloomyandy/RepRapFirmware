@@ -405,10 +405,7 @@ bool StringParser::CheckMetaCommand(const StringRef& reply) THROWS(GCodeExceptio
 		if (commandIndent > gb.GetBlockIndent())
 		{
 			// Indentation has increased so start new block(s)
-			if (!gb.CurrentFileMachineState().CreateBlock(commandIndent))
-			{
-				throw ConstructParseException("blocks nested too deeply");
-			}
+			gb.CurrentFileMachineState().CreateBlock(commandIndent);
 		}
 	}
 
@@ -1142,9 +1139,12 @@ void StringParser::PutCommand(const char *str) noexcept
 	} while (c != 0);
 }
 
-void StringParser::ResetIndentation() noexcept
+void StringParser::ResetIndentationAfterPop() noexcept
 {
-	indentToSkipTo = (gb.GetBlockIndent() > 0) ? gb.GetBlockIndent() : NoIndentSkip;
+	if (indentToSkipTo != NoIndentSkip)
+	{
+		indentToSkipTo = (gb.GetBlockIndent() > 0) ? gb.GetBlockIndent() : NoIndentSkip;
+	}
 }
 
 void StringParser::SetFinished() noexcept

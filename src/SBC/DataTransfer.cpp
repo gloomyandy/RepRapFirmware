@@ -1258,6 +1258,7 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, const Expressio
 	case TypeCode::Uint32:
 	case TypeCode::Float:
 	case TypeCode::Int32:
+	case TypeCode::Char:
 		payloadLength = expressionLength;
 		break;
 	case TypeCode::Uint64:
@@ -1310,6 +1311,10 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, const Expressio
 	case TypeCode::Bool:
 		header->dataType = DataType::Bool;
 		header->intValue = value.bVal ? 1 : 0;
+		break;
+	case TypeCode::Char:
+		header->dataType = DataType::Char;
+		header->intValue = value.cVal;
 		break;
 	case TypeCode::CString:
 		header->dataType = DataType::String;
@@ -1485,6 +1490,7 @@ bool DataTransfer::WriteSetVariableResult(const char *varName, const ExpressionV
 	case TypeCode::Uint32:
 	case TypeCode::Float:
 	case TypeCode::Int32:
+	case TypeCode::Char:
 		payloadLength = varNameLength;
 		break;
 	case TypeCode::CString:
@@ -1529,6 +1535,10 @@ bool DataTransfer::WriteSetVariableResult(const char *varName, const ExpressionV
 	case TypeCode::Bool:
 		header->dataType = DataType::Bool;
 		header->intValue = value.bVal ? 1 : 0;
+		break;
+	case TypeCode::Char:
+		header->dataType = DataType::Char;
+		header->intValue = value.cVal;
 		break;
 	case TypeCode::CString:
 		header->dataType = DataType::String;

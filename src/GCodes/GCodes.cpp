@@ -31,6 +31,7 @@
 #include <Heating/Heat.h>
 #include <Platform/Platform.h>
 #include <Movement/Move.h>
+#include <Movement/MoveDebugFlags.h>
 #include <PrintMonitor/PrintMonitor.h>
 #include <Platform/RepRap.h>
 #include <Platform/Tasks.h>
@@ -480,6 +481,12 @@ bool GCodes::SpinGCodeBuffer(GCodeBuffer& gb) noexcept
 			{
 				if (gb.LatestMachineState().GetPrevious() == nullptr)
 				{
+#if HAS_SBC_INTERFACE
+					if (reprap.UsingSbcInterface())
+					{
+						gb.AbortFile(false);
+					}
+#endif
 					StopPrint(StopPrintReason::userCancelled);
 				}
 				else
@@ -5079,7 +5086,7 @@ void GCodes::AllocateAxes(const GCodeBuffer& gb, MovementState& ms, AxesBitmap a
 	//debugPrintf("alloc done\n");
 	if (!badAxes.IsEmpty())
 	{
-		if (reprap.Debug(Module::Move))
+		if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::AxisAllocation))
 		{
 			debugPrintf("Failed to allocate axes %07" PRIx32 " to MS %u letters %08"
 #if defined(DUET3)

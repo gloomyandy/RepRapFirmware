@@ -335,7 +335,7 @@ bool FilamentMonitor::IsValid(size_t extruderNumber) const noexcept
 						fromIsr = false;
 						locIsrMillis = 0;
 					}
-					if ((fs.enableMode = 2 || gCodes.IsReallyPrinting()) && !gCodes.IsSimulating())
+					if ((fs.enableMode == 2 || gCodes.IsReallyPrinting()) && !gCodes.IsSimulating())
 					{
 						const float extrusionCommanded = (float)extruderStepsCommanded/reprap.GetPlatform().DriveStepsPerUnit(fs.driveNumber);
 						fst = fs.Check(isPrinting, fromIsr, locIsrMillis, extrusionCommanded);
@@ -362,10 +362,12 @@ bool FilamentMonitor::IsValid(size_t extruderNumber) const noexcept
 					}
 
 					fs.lastStatus = fst;
-					if (   fst != FilamentSensorStatus::ok && gCodes.IsReallyPrinting() && !gCodes.IsSimulating()
+					if (   fst != FilamentSensorStatus::ok
 #if SUPPORT_REMOTE_COMMANDS
 						&& !CanInterface::InExpansionMode()
 #endif
+						&& !gCodes.IsSimulating()
+						&& (fs.GetEnableMode() == 2 || (fs.GetEnableMode() == 1 && gCodes.IsReallyPrinting()))
 					   )
 					{
 						const size_t extruder = LogicalDriveToExtruder(fs.driveNumber);
