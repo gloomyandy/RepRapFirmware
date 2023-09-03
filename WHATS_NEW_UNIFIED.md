@@ -1,3 +1,7 @@
+Version 3.5.0-rc.1+101
+======================
+* Duet3d 3.5.0-rc.1
+
 Version 3.5.0-beta.4+105
 ========================
 * Refactored per board configuration
