@@ -7,7 +7,6 @@ Version 3.5.0-beta.4+105
 * Refactored per board configuration
 * Added support for Fly Gemini V3
 * Added support for TMC5160 drivers for RP2040 boards
-* Added support for PITB board (in picocan mode)
 * Fixed fail to flash new code in SBC mode
 
 Version 3.5.0-beta.4+104
@@ -16,7 +15,7 @@ Version 3.5.0-beta.4+104
 * Latest Duet3D fixes
 * Added support for TMC2240 drivers in SPI mode
 * Return actual driver temperature if available (experimental)
-* Allow access to individual driver temperatires (experimental)
+* Allow access to individual driver temperatures (experimental)
 * Add DriverType to board.txt to allow arbitary driver order
 
 Version 3.5.0-beta.4_101
