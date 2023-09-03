@@ -69,7 +69,7 @@ Pin SPIPins[NumSPIDevices][NumSPIPins];                 //GPIO pins for hardware
     Pin EspDataReadyPin;
     Pin SamTfrReadyPin;
     Pin EspResetPin;
-    Pin EspEnablePin;
+    Pin EspEnablePin = NoPin;
     Pin SamCsPin;
     Pin APIN_SerialWiFi_TXD = NoPin;
     Pin APIN_SerialWiFi_RXD = NoPin;
