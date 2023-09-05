@@ -272,6 +272,8 @@ static void ClearConfig() noexcept
     ATX_INITIAL_POWER_ON = true;
     SdSpiCSPins[0] = PA_4;
     SdCardDetectPins[0] = NoPin;
+    SdSpiCSPins[1] = NoPin;
+    SdCardDetectPins[1] = NoPin;
     ExternalSDCardFrequency = 4000000;
     ExternalSDCardSSPChannel = SSPNONE;
     InternalSDCardFrequency = 25000000;

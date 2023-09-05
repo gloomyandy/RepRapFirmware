@@ -1,5 +1,9 @@
 Version 3.5.0-rc.1+101
 ======================
+* Fix bug: SD card not detected on boards using SPI based SD cards
+
+Version 3.5.0-rc.1+101
+======================
 * Duet3d 3.5.0-rc.1
 
 Version 3.5.0-beta.4+105
@@ -16,7 +20,7 @@ Version 3.5.0-beta.4+104
 * Added support for TMC2240 drivers in SPI mode
 * Return actual driver temperature if available (experimental)
 * Allow access to individual driver temperatures (experimental)
-* Add DriverType to board.txt to allow arbitary driver order
+* Add DriverType to board.txt to allow arbitrary driver order
 
 Version 3.5.0-beta.4_101
 ========================
