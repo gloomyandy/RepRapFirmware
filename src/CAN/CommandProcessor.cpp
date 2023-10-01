@@ -310,6 +310,9 @@ static GCodeResult EutGetInfo(const CanMessageReturnInfo& msg, const StringRef& 
 
 	case CanMessageReturnInfo::typeBoardName:
 		reply.copy(BOARD_SHORT_NAME);
+#if BOARD_USES_UF2_BINARY
+		extra |= 0x01;
+#endif
 		break;
 
 	case CanMessageReturnInfo::typeBootloaderName:
@@ -731,7 +734,7 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				break;
 
 			case CanMessageType::driversStatusReport:
-				//TODO
+				reprap.GetExpansion().ProcessDriveStatusReport(buf);
 				break;
 
 			case CanMessageType::boardStatusReport:
@@ -754,8 +757,8 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				reprap.GetExpansion().ProcessAnnouncement(buf, true);
 				break;
 
-			case CanMessageType::filamentMonitorsStatusReport:
-				FilamentMonitor::UpdateRemoteFilamentStatus(buf->id.Src(), buf->msg.filamentMonitorsStatus);
+			case CanMessageType::filamentMonitorsStatusReportNew:
+				FilamentMonitor::UpdateRemoteFilamentStatus(buf->id.Src(), buf->msg.filamentMonitorsStatusNew);
 				break;
 
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE

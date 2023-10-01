@@ -40,6 +40,7 @@ ifeq ($(TMC22XX), true)
 else ifeq ($(TMC51XX), true)
 	RRF_OBJ_SRC_CXX += $(RRF_SRC_BASE)/Movement/StepperDrivers/DriverMode.cpp
 endif
+RRF_OBJ_SRC_CXX += $(RRF_SRC_BASE)/Movement/StepperDrivers/DriverData.cpp
 
 # use Duet versions of FatFs files
 RRF_OBJ_SRC_C += $(RRF_SRC_BASE)/Libraries/Fatfs/ff.c

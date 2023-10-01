@@ -15,6 +15,8 @@
 #include <Platform/Event.h>
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 
+ReadWriteLock ExpansionManager::boardsLock;
+
 #if SUPPORT_OBJECT_MODEL
 
 // Object model table and functions
@@ -22,8 +24,23 @@
 // Otherwise the table will be allocate in RAM instead of flash, which wastes too much RAM.
 
 // Macro to build a standard lambda function that includes the necessary type conversions
-#define OBJECT_MODEL_FUNC(...)					OBJECT_MODEL_FUNC_BODY(ExpansionManager, __VA_ARGS__)
-#define OBJECT_MODEL_FUNC_IF(_condition, ...)	OBJECT_MODEL_FUNC_IF_BODY(ExpansionManager, _condition, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC(...)							OBJECT_MODEL_FUNC_BODY(ExpansionManager, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC_IF(_condition, ...)			OBJECT_MODEL_FUNC_IF_BODY(ExpansionManager, _condition, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC_ARRAY_IF(_condition, ...)		OBJECT_MODEL_FUNC_ARRAY_IF_BODY(ExpansionManager, _condition, __VA_ARGS__)
+
+constexpr ObjectModelArrayTableEntry ExpansionManager::objectModelArrayTable[] =
+{
+	// 0. Drivers
+	{
+		&boardsLock,
+		[] (const ObjectModel *self, const ObjectExplorationContext& context) noexcept -> size_t
+				{ return ((const ExpansionManager*)self)->FindIndexedBoard(context.GetLastIndex()).numDrivers; },
+		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
+				{ return ExpressionValue(&((const ExpansionManager*)self)->FindIndexedBoard(context.GetIndex(1)).driverData[context.GetLastIndex()]); }
+	}
+};
+
+DEFINE_GET_OBJECT_MODEL_ARRAY_TABLE(ExpansionManager)
 
 constexpr ObjectModelTableEntry ExpansionManager::objectModelTable[] =
 {
@@ -31,6 +48,7 @@ constexpr ObjectModelTableEntry ExpansionManager::objectModelTable[] =
 	{ "accelerometer",		OBJECT_MODEL_FUNC_IF(self->FindIndexedBoard(context.GetLastIndex()).hasAccelerometer, self, 4),					ObjectModelEntryFlags::none },
 	{ "canAddress",			OBJECT_MODEL_FUNC((int32_t)(&(self->FindIndexedBoard(context.GetLastIndex())) - self->boards)),					ObjectModelEntryFlags::none },
 	{ "closedLoop",			OBJECT_MODEL_FUNC_IF(self->FindIndexedBoard(context.GetLastIndex()).hasClosedLoop, self, 5),					ObjectModelEntryFlags::none },
+	{ "drivers",			OBJECT_MODEL_FUNC_ARRAY_IF(self->FindIndexedBoard(context.GetLastIndex()).HasDrivers(), 0),						ObjectModelEntryFlags::live },
 	{ "firmwareDate",		OBJECT_MODEL_FUNC(self->FindIndexedBoard(context.GetLastIndex()).typeName, ExpansionDetail::firmwareDate),		ObjectModelEntryFlags::none },
 	{ "firmwareFileName",	OBJECT_MODEL_FUNC(self->FindIndexedBoard(context.GetLastIndex()).typeName, ExpansionDetail::firmwareFileName),	ObjectModelEntryFlags::none },
 	{ "firmwareVersion",	OBJECT_MODEL_FUNC(self->FindIndexedBoard(context.GetLastIndex()).typeName, ExpansionDetail::firmwareVersion),	ObjectModelEntryFlags::none },
@@ -74,7 +92,7 @@ constexpr ObjectModelTableEntry ExpansionManager::objectModelTable[] =
 constexpr uint8_t ExpansionManager::objectModelTableDescriptor[] =
 {
 	7,				// number of sections
-	15,				// section 0: boards[]
+	16,				// section 0: boards[]
 	3,				// section 1: mcuTemp
 	3,				// section 2: vIn
 	3,				// section 3: v12
@@ -91,6 +109,7 @@ ExpansionBoardData::ExpansionBoardData() noexcept
 	: typeName(nullptr),
 	  accelerometerLastRunDataPoints(0), closedLoopLastRunDataPoints(0),
 	  whenLastStatusReportReceived(0),
+	  driverData(nullptr),
 	  accelerometerRuns(0), closedLoopRuns(0),
 	  hasMcuTemp(false), hasVin(false), hasV12(false), hasAccelerometer(false),
 	  state(BoardState::unknown), numDrivers(0)
@@ -142,6 +161,8 @@ void ExpansionManager::ProcessAnnouncement(CanMessageBuffer *buf, bool isNewForm
 	if (src <= CanId::MaxCanAddress)
 	{
 		ExpansionBoardData& board = boards[src];
+		WriteLocker lock(boardsLock);
+
 		board.whenLastStatusReportReceived = millis();
 		if (board.state == BoardState::running)
 		{
@@ -179,6 +200,7 @@ void ExpansionManager::ProcessAnnouncement(CanMessageBuffer *buf, bool isNewForm
 			}
 
 			board.typeName = newTypeName;
+			DeleteObject(board.driverData);
 			if (isNewFormat)
 			{
 				board.numDrivers = buf->msg.announceNew.numDrivers;
@@ -189,6 +211,7 @@ void ExpansionManager::ProcessAnnouncement(CanMessageBuffer *buf, bool isNewForm
 				board.numDrivers = buf->msg.announceOld.numDrivers;
 				board.uniqueId.Clear();
 			}
+			board.driverData = new DriverData[board.numDrivers];
 		}
 		UpdateBoardState(src, BoardState::running);
 
@@ -247,6 +270,37 @@ void ExpansionManager::ProcessBoardStatusReport(const CanMessageBuffer *buf) noe
 	}
 }
 
+// Process a drive status report
+void ExpansionManager::ProcessDriveStatusReport(const CanMessageBuffer *buf) noexcept
+{
+	const CanAddress address = buf->id.Src();
+	ExpansionBoardData& board = boards[address];
+	if (board.HasDrivers())
+	{
+		const CanMessageDriversStatus& msg = buf->msg.driversStatus;
+		for (size_t driver = 0; driver < min<size_t>(board.numDrivers, msg.numDriversReported); ++driver)
+		{
+			DriverData& dd = board.driverData[driver];
+			if (msg.hasClosedLoopData)
+			{
+				dd.status.all = msg.closedLoopData[driver].status;
+				dd.averageCurrentFraction = msg.closedLoopData[driver].averageCurrentFraction;
+				dd.maxCurrentFraction = msg.closedLoopData[driver].maxCurrentFraction;
+				dd.rmsPositionError = msg.closedLoopData[driver].rmsPositionError;
+				dd.maxAbsPositionError = msg.closedLoopData[driver].maxAbsPositionError;
+				dd.haveClosedLoopData = true;
+			}
+			else
+			{
+				dd.status.all = msg.openLoopData[driver].status;
+			}
+		}
+
+		// TODO
+		(void)msg;
+	}
+}
+
 // Return a pointer to the expansion board, if it is present
 const ExpansionBoardData *ExpansionManager::GetBoardDetails(uint8_t address) const noexcept
 {
@@ -266,6 +320,7 @@ GCodeResult ExpansionManager::UpdateRemoteFirmware(uint32_t boardAddress, GCodeB
 	}
 
 	// Ask the board for its type and check we have the firmware file for it
+	uint8_t extra;
 	{
 		CanMessageBuffer * const buf1 = CanInterface::AllocateBuffer(&gb);
 		CanRequestId rid1 = CanInterface::AllocateRequestId(boardAddress, buf1);
@@ -273,7 +328,7 @@ GCodeResult ExpansionManager::UpdateRemoteFirmware(uint32_t boardAddress, GCodeB
 
 		msg1->type = (moduleNumber == (unsigned int)FirmwareModule::bootloader) ? CanMessageReturnInfo::typeBootloaderName : CanMessageReturnInfo::typeBoardName;
 		{
-			const GCodeResult rslt = CanInterface::SendRequestAndGetStandardReply(buf1, rid1, reply);
+			const GCodeResult rslt = CanInterface::SendRequestAndGetStandardReply(buf1, rid1, reply, &extra);
 			if (rslt != GCodeResult::ok)
 			{
 				return rslt;
@@ -282,7 +337,6 @@ GCodeResult ExpansionManager::UpdateRemoteFirmware(uint32_t boardAddress, GCodeB
 	}
 
 	String<StringLength50> firmwareFilename;
-	String<StringLength50> firmwareFilename2;
 	#if STM32
 	// allow use of non Duet firmware
 	if (!strncmp("stm", reply.c_str(), 3))
@@ -295,17 +349,15 @@ GCodeResult ExpansionManager::UpdateRemoteFirmware(uint32_t boardAddress, GCodeB
 		firmwareFilename.copy((moduleNumber == 3) ? "Duet3Bootloader-" : "Duet3Firmware_");
 	}
 	firmwareFilename.cat(reply.c_str());
-	firmwareFilename2.copy(firmwareFilename.c_str());
-	firmwareFilename.cat(".bin");
-	firmwareFilename2.cat(".uf2");
+	// If we are updating the main firmware binary, set the extension to ".uf2" if the expansion board requested it or (for backwards compatibility) if it is a Duet 3 Mini
+	firmwareFilename.cat(moduleNumber == 0 && ((extra & 0x01) != 0 || strcmp(reply.c_str(), "Mini5plus") == 0) ? ".uf2" : ".bin");
 
 	reply.Clear();
 
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE
-	if (!reprap.GetPlatform().FileExists(FIRMWARE_DIRECTORY, firmwareFilename.c_str()) &&
-		!reprap.GetPlatform().FileExists(FIRMWARE_DIRECTORY, firmwareFilename2.c_str()))
+	if (!reprap.GetPlatform().FileExists(FIRMWARE_DIRECTORY, firmwareFilename.c_str()))
 	{
-		reply.printf("Firmware file %s/%s not found", firmwareFilename.c_str(), firmwareFilename2.c_str());
+		reply.printf("Firmware file %s not found", firmwareFilename.c_str());
 		return GCodeResult::error;
 	}
 #endif
@@ -359,17 +411,28 @@ GCodeResult ExpansionManager::ResetRemote(uint32_t boardAddress, GCodeBuffer& gb
 
 const ExpansionBoardData& ExpansionManager::FindIndexedBoard(unsigned int index) const noexcept
 {
+	// The common case is where we are looking for the same board as last time, so check for that first
+	if (index == lastIndexSearched)
+	{
+		return boards[lastAddressFound];
+	}
+
+	// If index 0 or out of range, return the dummy entry for the main board
 	if (index == 0 || index > numExpansionBoards)
 	{
 		return boards[0];
 	}
+
+	TaskCriticalSectionLocker lock;
+
+	// If we are looking for a board earlier in the table than the last one, restart the search from the beginning
 	if (lastIndexSearched > index)
 	{
 		lastIndexSearched = 0;
+		lastAddressFound = 0;
 	}
 
-	TaskCriticalSectionLocker lock;
-	unsigned int address = (lastIndexSearched == 0) ? 0 : lastAddressFound;
+	unsigned int address = lastAddressFound;
 	unsigned int currentIndex = lastIndexSearched;
 	while (currentIndex < index)
 	{
