@@ -977,6 +977,10 @@ bool CanInterface::ReceivePlainMessage(CanMessageBuffer *null buf, uint32_t cons
 extern "C" [[noreturn]] void CanReceiverLoop(void *) noexcept
 {
 	CanMessageBuffer buf;
+	// Discard any messages that may be pending
+	while(can0dev->ReceiveMessage(RxBufferIndexRequest, 5, &buf))
+	{
+	}
 	for (;;)
 	{
 		if (can0dev->ReceiveMessage(RxBufferIndexRequest, TaskBase::TimeoutUnlimited, &buf))
