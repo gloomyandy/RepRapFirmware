@@ -781,6 +781,7 @@ inline void Tmc22xxDriverState::SetAxisNumber(size_t p_axisNumber) noexcept
 // Write all registers. This is called when the drivers are known to be powered up.
 inline void Tmc22xxDriverState::WriteAll() noexcept
 {
+	AtomicCriticalSectionLocker lock;
 	registersToUpdate = (1 << (IsTmc2209() ? NumWriteRegisters : NumWriteRegistersNon09)) - 1;
 }
 
@@ -1317,11 +1318,13 @@ DriversState Tmc22xxDriverState::SetupDriver(bool reset) noexcept
 		return state;
 	}
 	if (state == DriversState::noDriver)
+	{
 		return state;
+	}
 	// check for device not present
 	if (numTimeouts > DriverNotPresentTimeouts || readErrors > DriverNotPresentTimeouts)
 	{
-		//debugPrintf(" disabling driver\n");
+		//debugPrintf(" disabling driver %d\n", driverNumber);
 		if (reprap.Debug(Module::Driver))
 			debugPrintf("TMCUART: Too many errors drive %d driver disabled\n", driverNumber);
 		ResetReadRegisters();
@@ -1378,8 +1381,7 @@ DriversState Tmc22xxDriverState::SetupDriver(bool reset) noexcept
 		//debugPrintf(" ready\n");
 		state = DriversState::ready;
 	}
-	//debugPrintf(" waiting\n");
-	return DriversState::initialising;
+	return state;
 }
 
 static TASKMEM Task<TmcTaskStackWords> tmc22Task;
