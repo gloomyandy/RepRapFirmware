@@ -336,7 +336,7 @@ public:
 	float GetMaxCurrent() const noexcept;
 	void SetMaxCurrent(float value) noexcept;
 	void AppendDriverStatus(const StringRef& reply) noexcept;
-	float GetTemperature() noexcept;
+	float GetDriverTemperature() noexcept;
 	bool UpdatePending() const noexcept { return (registersToUpdate | newRegistersToUpdate.load()) != 0; }
 #if HAS_STALL_DETECT
 	void SetStallDetectThreshold(int sgThreshold) noexcept;
@@ -932,7 +932,7 @@ void Tmc51xxDriverState::AppendDriverStatus(const StringRef& reply) noexcept
 	ResetLoadRegisters();
 	if (IsTmc2240())
 	{
-		reply.catf(", temp %.1fC", (double)((float)(((readRegisters[ReadAdcTemp] & ADC_TEMP_MASK) >> ADC_TEMP_SHIFT) - 2038)/7.7));
+		reply.catf(", temp %.1fC", (double)GetDriverTemperature());
 	}
 
 	reply.catf(", mspos %u, reads %u, writes %u", (unsigned int)(readRegisters[ReadMsCnt] & 1023), numReads, numWrites);
@@ -941,7 +941,7 @@ void Tmc51xxDriverState::AppendDriverStatus(const StringRef& reply) noexcept
 	numReads = numWrites = numWriteErrors = 0;
 }
 
-float Tmc51xxDriverState::GetTemperature() noexcept
+float Tmc51xxDriverState::GetDriverTemperature() noexcept
 {
 	if (IsTmc2240())
 	{

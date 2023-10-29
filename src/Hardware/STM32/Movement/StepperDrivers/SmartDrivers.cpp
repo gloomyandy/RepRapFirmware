@@ -333,9 +333,9 @@ float SmartDrivers::GetMaxCurrent(size_t driver) noexcept
 	return (driver < numDrivers ? driverStates[driver]->GetMaxCurrent() : 0.0f);
 }
 
-float SmartDrivers::GetTemperature(size_t driver) noexcept
+float SmartDrivers::GetDriverTemperature(size_t driver) noexcept
 {
-	return (driver < numDrivers ? driverStates[driver]->GetTemperature() : 0.0f);
+	return (driver < numDrivers ? driverStates[driver]->GetDriverTemperature() : 0.0f);
 }
 
 #endif

@@ -407,7 +407,7 @@ public:
 	float GetMaxCurrent() const noexcept;
 	void SetMaxCurrent(float value) noexcept;
 	void AppendDriverStatus(const StringRef& reply) noexcept;
-	float GetTemperature() noexcept;
+	float GetDriverTemperature() noexcept;
 	uint8_t GetDriverNumber() const noexcept { return driverNumber; }
 	bool UpdatePending() const noexcept;
 	
@@ -1127,7 +1127,7 @@ void Tmc22xxDriverState::AppendDriverStatus(const StringRef& reply) noexcept
 	readErrors = writeErrors = numReads = numWrites = numTimeouts = 0;
 }
 
-float Tmc22xxDriverState::GetTemperature() noexcept
+float Tmc22xxDriverState::GetDriverTemperature() noexcept
 {
 	uint32_t status = readRegisters[ReadDrvStat];
 

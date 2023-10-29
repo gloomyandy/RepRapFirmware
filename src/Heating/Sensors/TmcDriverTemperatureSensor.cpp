@@ -33,7 +33,7 @@ void TmcDriverTemperatureSensor::Poll() noexcept
 #if STM32
 	float maxTemp = 0.0f;
 	for(size_t drive = 0; drive < totalSmartDrivers; drive++)
-		maxTemp = max<float>(maxTemp, SmartDrivers::GetTemperature(drive));
+		maxTemp = max<float>(maxTemp, SmartDrivers::GetDriverTemperature(drive));
 	SetResult(maxTemp, TemperatureError::ok);
 #else	
 	SetResult(reprap.GetPlatform().GetTmcDriversTemperature(channel), TemperatureError::ok);
@@ -42,7 +42,7 @@ void TmcDriverTemperatureSensor::Poll() noexcept
 
 
 #if STM32
-// Class DhtHumiditySensor members
+// Class TmcDriverActualTemperatureSensor members
 TmcDriverActualTemperatureSensor::TmcDriverActualTemperatureSensor(unsigned int sensorNum) noexcept
 	: AdditionalOutputSensor(sensorNum, "Stepper driver temperature", false)
 {
@@ -54,7 +54,7 @@ TmcDriverActualTemperatureSensor::~TmcDriverActualTemperatureSensor() noexcept
 
 void TmcDriverActualTemperatureSensor::Poll() noexcept
 {
-	SetResult(SmartDrivers::GetTemperature(outputNumber), TemperatureError::ok);
+	SetResult(SmartDrivers::GetDriverTemperature(outputNumber), TemperatureError::ok);
 }
 
 #endif
