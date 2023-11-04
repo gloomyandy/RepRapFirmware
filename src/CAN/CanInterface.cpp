@@ -173,7 +173,11 @@ static CanDevice *can1dev = nullptr;
 
 #endif
 
+#ifdef STM32
+// Transmit buffer usage. All dedicated buffer numbers must be contiguous and (<buffno> - fifo) < Can0Config.numTxBuffers.
+#else
 // Transmit buffer usage. All dedicated buffer numbers must be < Can0Config.numTxBuffers.
+#endif
 constexpr auto TxBufferIndexUrgent = CanDevice::TxBufferNumber::buffer0;
 constexpr auto TxBufferIndexTimeSync = CanDevice::TxBufferNumber::buffer1;
 constexpr auto TxBufferIndexRequest = CanDevice::TxBufferNumber::buffer2;
@@ -529,7 +533,11 @@ static void SendCanMessage(CanDevice::TxBufferNumber whichBuffer, uint32_t timeo
 	const uint32_t cancelledId = can0dev->SendMessage(whichBuffer, timeout, buffer);
 	if (cancelledId != 0)
 	{
+#if STM32
+		++txTimeouts[(unsigned int)whichBuffer - (unsigned int)CanDevice::TxBufferNumber::fifo];
+#else
 		++txTimeouts[(unsigned int)whichBuffer];
+#endif
 		lastCancelledId = cancelledId;
 	}
 }
