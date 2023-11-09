@@ -2,6 +2,7 @@
 #include <RepRapFirmware.h>
 #include <AnalogIn.h>
 #include <AnalogOut.h>
+USBSerial serialUSB;
 
 
 
