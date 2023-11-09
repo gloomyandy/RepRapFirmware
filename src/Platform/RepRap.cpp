@@ -670,6 +670,8 @@ void RepRap::Init() noexcept
 			// using the main Spin loop.
 			sbcInterface->Spin();
 			platform->FlushMessages();
+			ticksInSpinState = 0;
+
 #else
 			Spin();
 #endif
