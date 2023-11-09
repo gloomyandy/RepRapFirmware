@@ -7,9 +7,8 @@ static HardwareSPI *spiDevice;
 
 volatile bool dataReceived = false, transferReadyHigh = false;
 volatile unsigned int spiTxUnderruns = 0, spiRxOverruns = 0;
-enum SpiState {Disabled, Ready, Busy};
-static volatile enum SpiState status = Disabled;
-
+enum SpiState {Uninitialised, Disabled, Ready, Busy};
+static volatile enum SpiState status = Uninitialised;
 void InitSpi() noexcept;
 
 // interrupt handler
@@ -42,10 +41,20 @@ void disable_spi()
 
 void setup_spi(void *inBuffer, const void *outBuffer, size_t bytesToTransfer)
 {
-    if (status == Busy) disable_spi();
-    if (status == Disabled)
+    switch (status)
     {
+    case Busy:
+        disable_spi();
+        // Fall through
+    case Disabled:
+        spiDevice->configureDevice(SPI_MODE_SLAVE, 8, (uint8_t)SPI_MODE_0, 100000000);
+        break;
+    case Uninitialised:
         InitSpi();
+        break;
+    case Ready:
+        // nothing to do
+        break;
     }
     status = Busy;
     spiDevice->flushRx();

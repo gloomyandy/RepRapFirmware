@@ -91,6 +91,8 @@ Pin SPIPins[NumSPIDevices][NumSPIPins];                 //GPIO pins for hardware
 #endif
 
 #if HAS_SBC_INTERFACE
+    Pin SbcTfrReadyPinConfig;
+    Pin SbcCsPinConfig;
     Pin SbcTfrReadyPin;
     Pin SbcCsPin;
     SSPChannel SbcSpiChannel;

@@ -185,8 +185,8 @@ static const boardConfigEntry_t boardConfigs[]=
 #endif
 
 #if HAS_SBC_INTERFACE
-    {"sbc.TfrReadyPin", &SbcTfrReadyPin, 1, cvPinType},
-    {"sbc.csPin", &SbcCsPin, 1, cvPinType},
+    {"sbc.TfrReadyPin", &SbcTfrReadyPinConfig, 1, cvPinType},
+    {"sbc.csPin", &SbcCsPinConfig, 1, cvPinType},
     {"sbc.spiChannel", &SbcSpiChannel, 1, cvUint8Type},    
     {"sbc.loadConfig", &SbcLoadConfig, 1, cvBoolType},    
 #endif
@@ -290,7 +290,7 @@ static void ClearConfig() noexcept
     AuxSerialRxTxPins[1] = PA_9;
 #endif
 #if HAS_SBC_INTERFACE
-    SbcCsPin = PB_12;
+    SbcCsPinConfig = PB_12;
     SbcSpiChannel = SSP2;
 #endif
 #if SUPPORT_SPICAN
@@ -343,8 +343,8 @@ static bool SetBoard(const char* bn) noexcept
 #endif
                 StepperPowerEnablePin = LPC_Boards[i].defaults.stepperPowerEnablePin;
 #if HAS_SBC_INTERFACE
-                SbcTfrReadyPin = LPC_Boards[i].defaults.SbcTfrReadyPin;
-                SbcCsPin = LPC_Boards[i].defaults.SbcCsPin;
+                SbcTfrReadyPinConfig = LPC_Boards[i].defaults.SbcTfrReadyPin;
+                SbcCsPinConfig = LPC_Boards[i].defaults.SbcCsPin;
                 SbcSpiChannel = LPC_Boards[i].defaults.SbcSpiChannel;
 #endif
                 InitDiagPin();
@@ -445,19 +445,31 @@ void InMemoryBoardConfiguration::getConfiguration() noexcept
 void InMemoryBoardConfiguration::saveToBackupRAM() noexcept
 {
     // enable access to backup RAM
-    __HAL_RCC_PWR_CLK_ENABLE();
+#if STM32H7
+    __HAL_RCC_BKPRAM_CLK_ENABLE();
     HAL_PWR_EnableBkUpAccess();
+    memcpy((void *)D3_BKPSRAM_BASE, this, sizeof(InMemoryBoardConfiguration));
+#else
+    __HAL_RCC_PWR_CLK_ENABLE();
     __HAL_RCC_BKPSRAM_CLK_ENABLE();
+    HAL_PWR_EnableBkUpAccess();
     memcpy((void *)BKPSRAM_BASE, this, sizeof(InMemoryBoardConfiguration));
+#endif
 }
 
 void InMemoryBoardConfiguration::loadFromBackupRAM() noexcept
 {
     // enable access to backup RAM
-    __HAL_RCC_PWR_CLK_ENABLE();
+#if STM32H7
+    __HAL_RCC_BKPRAM_CLK_ENABLE();
     HAL_PWR_EnableBkUpAccess();
+    memcpy(this, (void *)D3_BKPSRAM_BASE, sizeof(InMemoryBoardConfiguration));
+#else
+    __HAL_RCC_PWR_CLK_ENABLE();
     __HAL_RCC_BKPSRAM_CLK_ENABLE();
+    HAL_PWR_EnableBkUpAccess();
     memcpy(this, (void *)BKPSRAM_BASE, sizeof(InMemoryBoardConfiguration));
+#endif
     //if (isValid())
         //debugPrintf("Loaded valid configuration data from backup RAM\n");
 }
@@ -845,7 +857,7 @@ void BoardConfig::Init() noexcept
                 sdChannel = InitSDCard(boardId, false, false);
         }
     }
-    if (SbcCsPin == NoPin)
+    if (SbcCsPinConfig == NoPin)
     {
         FatalError("No SBC configuration\n");
         return;
@@ -864,7 +876,7 @@ void BoardConfig::Init() noexcept
         MassStorage::Unmount(0, reply.GetRef());
 
 #if HAS_SBC_INTERFACE
-    if (SbcCsPin == NoPin || SbcTfrReadyPin == NoPin || SbcSpiChannel == SSPNONE)
+    if (SbcCsPinConfig == NoPin || SbcTfrReadyPinConfig == NoPin || SbcSpiChannel == SSPNONE)
     {
         FatalError("No SBC configuration\n");
         return;
@@ -922,7 +934,9 @@ void BoardConfig::Init() noexcept
     MassStorage::Init2();
 #endif
 #if HAS_SBC_INTERFACE
-    pinMode(SbcCsPin, INPUT_PULLUP);
+    pinMode(SbcCsPinConfig, INPUT_PULLUP);
+    SbcTfrReadyPin = SbcTfrReadyPinConfig;
+    SbcCsPin = SbcCsPinConfig;
 #endif
 #if HAS_WIFI_NETWORKING
     pinMode(SamCsPin, OUTPUT_LOW);

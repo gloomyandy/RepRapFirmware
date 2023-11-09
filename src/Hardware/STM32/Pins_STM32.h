@@ -50,7 +50,7 @@
 #  define WIFI_BOARD_SHORT_NAME   "stm32h723-wifi"
 #  define SBC_BOARD_SHORT_NAME    "stm32h723-sbc"
 
-#  define IAP_IMAGE_START         0x0                 // FIXME: Needs updating for H7
+#  define IAP_IMAGE_START         0x24038000
 # else
 #  error "Processor undfined"
 # endif
@@ -303,6 +303,8 @@ extern Pin SpiTempSensorCsPins[MaxSpiTempSensors];  // Digital pins the 31855s h
 extern SSPChannel TempSensorSSPChannel;
 
 #if HAS_SBC_INTERFACE
+    extern Pin SbcTfrReadyPinConfig;
+    extern Pin SbcCsPinConfig;
     extern Pin SbcTfrReadyPin;
     extern Pin SbcCsPin;
     extern SSPChannel SbcSpiChannel;
