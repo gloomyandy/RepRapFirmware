@@ -1,5 +1,9 @@
 /*
 * RRF Memory configuration
+* The basic memory layout is:
+*  Bootloader 128K
+*  Entry point and vectors and main RRF code 1024K - 128K - 128K
+*  PMD Reset data and calibration settings 128K
 */
 
 /* Entry Point */

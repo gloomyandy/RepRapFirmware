@@ -34,7 +34,7 @@
 #  define WIFI_BOARD_SHORT_NAME   "stm32h7-wifi"
 #  define SBC_BOARD_SHORT_NAME    "stm32h7-sbc"
 
-#  define IAP_IMAGE_START         0x0                 // FIXME: Needs updating for H7
+#  define IAP_IMAGE_START         0x24060000
 # elif STM32H723xx
   // For now we use the generic stm32h7 name for stm32h743 based systems, this is compatible with released versions
 #  define STM_ELECTRONICS_STRING "STM32H723"

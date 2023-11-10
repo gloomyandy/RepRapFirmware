@@ -1,5 +1,10 @@
 /*
 * RRF Memory configuration
+* The basic memory layout is:
+*  Bootloader 32K
+*  Entry point and vectors 16K
+*  PMD Reset data and calibration settings 16K
+*  Main RRF - rest of available flash
 */
 
 /* Entry Point */
