@@ -1,3 +1,9 @@
+Version 3.5.0-rc.1+106
+======================
+* Updated with latest Duet3d code
+* Added MKS toolboard
+* Added preliminary SHT36V3 board
+
 Version 3.5.0-rc.1+104
 ======================
 * Updated to latest Duet3D code
