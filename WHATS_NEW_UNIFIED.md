@@ -4,6 +4,12 @@ Version 3.5.0-rc.1+106
 * Added MKS toolboard
 * Added preliminary SHT36V3 board
 
+Version 3.5.0-rc.1+107
+======================
+* Updated with latest Duet3d code
+* Added PITB V2.0 board
+* Made RRF36 i2c pins available
+
 Version 3.5.0-rc.1+104
 ======================
 * Updated to latest Duet3D code
