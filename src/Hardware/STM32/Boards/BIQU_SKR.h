@@ -195,6 +195,118 @@ constexpr BoardDefaults btt_skr_3_Defaults = {
 #endif
 };
 
+# if STM32H723xx
+constexpr PinEntry PinTable_BTT_KRAKEN[] =
+{
+    //Thermistors
+    {PB_0, "bedtemp"},
+    {PB_1, "e0temp"},
+    {PC_5, "e1temp"},
+	{PC_4, "e2temp"},
+	{PA_7, "e3temp"},
+
+    //Endstops
+    {PC_15, "xstop"},
+    {PF_0, "ystop"},
+    {PF_1, "zstop"},
+    {PF_2, "e0stop"},
+    {PF_3, "e1stop"},
+	{PF_4, "e2stop"},
+	{PF_10, "e3stop"},
+	{PC_0, "e4stop"},
+
+    //Servos
+    {PE_9,  "servo0" },
+	{PE_7,  "servo1" },
+
+    //Probe
+    {PG_1, "probe"},
+
+    //Heaters and Fans (Big and Small Mosfets}
+    {PF_5,  "bed" },
+    {PF_6,  "e0heat" },
+    {PF_7,  "e1heat" },
+	{PF_9,  "e2heat" },
+	{PF_8,  "e3heat" },
+    {PA_0,  "fan0" },
+    {PA_1,  "fan1" },
+    {PA_2,  "fan2" },
+	{PA_3,  "fan3" },
+	{PA_4,  "fan4" },
+	{PA_5,  "fan5" },
+	{PA_6,  "fan6" },
+	{PE_8,  "fan7" },
+	{PC_1,  "fan6.tacho" },
+	{PG_0,  "fan7.tacho" },
+
+    //Neopixel
+    {PF_12, "Neopixel"},
+	{PF_11, "Neopixel1"},
+
+    //PSON
+    {PD_10, "PSON"},
+
+    //IND-Det
+    {PD_11, "INDDET"},
+	
+	//ADC
+	{PC_2, "ADC1"},
+	{PC_3, "ADC2"},
+	{PB_10, "SCL2"},
+	{PB_11, "SDA2"},
+	
+    //EXP1
+    {PG_5, "BEEP"},
+    {PG_4, "BTNENC"},
+    {PG_3, "LCDEN"},
+    {PG_2, "LCDRS"},
+    {PD_15, "LCDD4"},
+    {PD_14, "LCDD5"},
+    {PD_13, "LCDD6"},
+    {PD_12, "LCDD7"},
+
+    //EXP2
+    {PE_13, "LCDMISO"},
+    {PE_12, "LCDSCK"},
+    {PG_8, "BTNEN1"},
+    {PE_11, "LCDSS"},
+    {PG_7, "BTNEN2"},
+    {PE_14, "LCDMOSI"},
+    {PG_6, "LCDCD"},
+};
+
+constexpr BoardDefaults btt_kraken_Defaults = {
+    {0x5450ab93},                             // Signatures
+    SD_SPI2_A,                                  // SD Card access
+    {   //CLK, MISO, MOSI
+        {NoPin, NoPin, NoPin},                   //SPI0
+        {PB_13, PB_14, PB_15},                //SPI1 SD Card
+        {PC_10, PC_11, PC_12},                //SPI2 31865
+        {PC_6, PC_7, PC_8},                //SPI3 Drivers
+        {NoPin, NoPin, NoPin},                  //SPI4 31865
+        {NoPin, NoPin, NoPin},                  //SPI5 RepRapDiscount Display
+        {PE_14, PE_15, PE_13},                //SPI6 EXP2
+        {NoPin, NoPin, NoPin},                //SPI7
+        {NoPin, NoPin, NoPin},                //SPI8
+    },
+    8,                            // Number of drivers
+    {PE_6, PE_3, PE_0, PB_7, PG_13, PG_12, PB_5, PG_14}, // enablePins
+    {PC_14, PE_5, PE_2, PB_9, PG_9, PG_11, PB_4, PG_15},  // stepPins
+    {PC_13, PE_4, PE_1, PB_8, PG_10, PD_7, PB_3, PB_6},    // dirPins
+#if HAS_SMART_DRIVERS
+    {PD_6, PD_5, PD_4, PD_3, PD_2, PA_15, PA_9, PA_10},    // uartpins
+    8,                            // Smart drivers
+#endif
+    0,                            // digiPot Factor
+#if HAS_VOLTAGE_MONITOR
+    NoPin,
+#endif
+    NoPin,
+#if HAS_SBC_INTERFACE
+    NoPin, NoPin, SSPNONE,
+#endif
+};
+# endif
 #endif
 #if STM32F4
 constexpr PinEntry PinTable_BIQU_SKR_PRO_v1_1[] =
