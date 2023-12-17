@@ -19,6 +19,7 @@ typedef enum {
     SD_SDIO,
     SD_SPI3_A,
     SD_SPI3_B,
+    SD_SPI2_A,
     SD_UNKNOWN = 0xfe,
     SD_NONE = 0xff
 } SDConfigs;

@@ -670,6 +670,7 @@ static constexpr SDCardConfig SDCardConfigs[] = {
     {SSPSDIO, {PC_8, PC_9, PC_10, PC_11, PC_12, PD_2}, {0xc02, 0xc02, 0xc02, 0xc02, 0xc02, 0xc02}}, // Fly/SDIO
     {SSP3, {PC_10, PC_11, PC_12, PC_9, NoPin, NoPin}, {0x602, 0x602, 0x602, 0x1}}, // MKS?
     {SSP3, {PC_10, PC_11, PC_12, PA_15, NoPin, NoPin}, {0x602, 0x602, 0x602, 0x1}}, // BTT BX
+    {SSP2, {PB_13, PB_14, PB_15, PB_12, NoPin, NoPin}, {0x502, 0x502, 0x502, 0x1}}, // BTT kraken?
 };
 
 static bool CheckPinConfig(uint32_t config) noexcept
