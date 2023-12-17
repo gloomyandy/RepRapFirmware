@@ -214,6 +214,10 @@ static const boardConfigEntry_t boardConfigs[]=
     {"can.csPin", &CanCsPin, 1, cvPinType},
     {"can.spiFrequencyHz", &CanSpiFrequency, 1, cvUint32Type},
 #endif
+#if STM32H7
+    {"can.readPin", &CanReadPin, 1, cvPinType},
+    {"can.writePin", &CanWritePin, 1, cvPinType},
+#endif
 };
 
 
@@ -295,6 +299,10 @@ static void ClearConfig() noexcept
 #endif
 #if SUPPORT_SPICAN
     CanSpiFrequency = 15000000;
+#endif
+#if STM32H7
+    CanReadPin = PB_8;
+    CanWritePin = PB_9;
 #endif
 #if HAS_VOLTAGE_MONITOR
     VInDummyReading = 24;

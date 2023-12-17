@@ -316,6 +316,10 @@ extern SSPChannel TempSensorSSPChannel;
     extern SSPChannel CanSpiChannel;
     extern uint32_t CanSpiFrequency;
 #endif
+#if STM32H7
+    extern Pin CanReadPin;
+    extern Pin CanWritePin;
+#endif
 
 // Power control
 extern Pin ATX_POWER_PIN;// Digital pin number that controls the ATX power on/off

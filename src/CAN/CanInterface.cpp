@@ -352,7 +352,11 @@ void CanInterface::Init() noexcept
 	CanTiming timing;
 	timing.SetDefaults_1Mb();
 #if STM32
+#if STM32H7
+	can0dev = CanDevice::Init(0, CanDeviceNumber, Can0Config, nullptr, timing, nullptr, CanReadPin, CanWritePin);
+#else
 	can0dev = CanDevice::Init(0, CanDeviceNumber, Can0Config, nullptr, timing, nullptr);
+#endif
 	if (can0dev == nullptr) return;
 	CanMessageBuffer::Init(NumCanBuffers);
 #else

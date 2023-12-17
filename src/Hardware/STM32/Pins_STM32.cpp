@@ -105,6 +105,11 @@ Pin SPIPins[NumSPIDevices][NumSPIPins];                 //GPIO pins for hardware
     uint32_t CanSpiFrequency;
 #endif
 
+#if STM32H7
+    Pin CanReadPin;
+    Pin CanWritePin;
+#endif
+
 #if SUPPORT_LED_STRIPS
 Pin NeopixelOutPin;
 #endif
