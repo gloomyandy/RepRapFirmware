@@ -196,6 +196,137 @@ constexpr BoardDefaults btt_skr_3_Defaults = {
 };
 
 # if STM32H723xx
+
+constexpr PinEntry PinTable_BTT_OCTOPUSPRO_V1_1[] =
+{
+    //Thermistors
+    {PF_3, "bedtemp,tb"},
+    {PF_4, "e0temp,th0"},
+    {PF_5, "e1temp,th1"},
+    {PF_6, "e2temp,th2"},
+    {PF_7, "e3temp,th3"},
+
+    //Endstops
+    {PG_6, "xstop"},
+    {PG_9, "ystop"},
+    {PG_10, "zstop"},
+    {PG_11, "e0stop,e0det"},
+    {PG_12, "e1stop,e1det"},
+    {PG_13, "e2stop,e2det"},
+    {PG_14, "e3stop,e3det"},
+    {PG_15, "e4stop,e4det"},
+
+    //Servos
+    {PB_6,  "servo0" },
+
+    //Probe
+    {PB_7, "probe"},
+    {PC_5, "probe1"},
+
+    //Heaters and Fans (Big and Small Mosfets}
+    {PA_1,  "bed,hbed" },
+    {PA_0,  "e0heat,heat0" },
+    {PA_3,  "e1heat,heat1" },
+    {PB_0, "e2heat,heat2" },
+    {PB_11, "e3heat,heat3" },
+    {PA_8,  "fan0,fan" },
+    {PE_5,  "fan1" },
+    {PD_12, "fan2" },
+    {PD_13, "fan3" },
+    {PD_14, "fan4" },
+    {PD_15, "fan5" },
+
+    //EXP1
+    {PE_15, "LCDD7"},
+    {PE_13, "LCDD5"},
+    {PE_10, "LCDRS"},
+    {PE_7, "BTNENC"},
+    {PE_8, "BEEP"},
+    {PE_9, "LCDEN"},
+    {PE_12, "LCDD4"},
+    {PE_14, "LCDD6"},
+
+    //EXP2
+    {PC_15, "LCDCD"},
+    {PB_2, "BTNEN2"},
+    {PB_1, "BTNEN1"},
+    {PA_6, "LCDMISO"},
+    {PA_5, "LCDSCK"},
+    {PA_4, "LCDSS"},
+    {PA_7, "LCDMOSI"},
+
+    //Neopixel
+    {PB_10, "Neopixel"},
+
+    //TFT
+    {PA_9, "TX1,tfttx"},
+    {PA_10, "RX1,tftrx"},
+	{PD_6, "TX2"},
+	{PD_5, "RX2"},
+
+    //SPI
+    {PC_4, "XCS"},
+    {PD_11, "YCS"},
+    {PC_6, "ZCS"},
+    {PC_7, "E0CS"},
+    {PF_2, "E1CS"},
+    {PE_4, "E2CS"},
+    {PE_1, "E3CS"},
+    {PD_3, "E4CS"},
+    {PA_6, "MISO"},
+    {PA_7, "MOSI"},
+    {PA_5, "SCK"},
+
+    //I2C
+    {PB_8, "SCL1"},
+    {PB_9, "SDA1"},
+
+    //PSON
+    {PE_11, "PSON"},
+
+    //PWRDET
+    {PC_0, "PWRDET"},
+
+    //Status LED
+    {PA_13, "LED,status"},
+};
+
+constexpr BoardDefaults btt_octopuspro_Defaults = {
+    {0x5450ab93},                               // Signatures
+    SD_SDIO,                                    // SD Card access
+    {   //CLK, MISO, MOSI
+        {PA_5, PA_6, PA_7},                     //SPI0 Drivers + Screen + PT100
+        {PB_13, PC_2, PC_3},                    //SPI1 WiFi
+        {PB_3,  PB_4,  PB_5},                   //SPI2 SPI3 Header - J74
+        {NoPin, NoPin, NoPin},                  //SPI3
+        {PE_8, PE_9, PE_7},                     //SPI4 Accelerometer
+        {PE_12, NoPin, PE_9},                   //SPI5 RepRapDiscount Display
+    },
+    8,                                          // Number of drivers
+    {PF_14, PF_15, PG_5, PA_2, PG_2, PF_1, PD_4, PE_0}, // enablePins
+    {PF_13, PG_0, PF_11, PG_4, PF_9, PC_13, PE_2, PE_6},// stepPins
+    {PF_12, PG_1, PG_3, PC_1, PF_10, PF_0, PE_3,
+#if STARTUP_DELAY
+    NoPin
+#else
+    PA_14
+#endif 
+    },  // dirPins
+#if HAS_SMART_DRIVERS
+    {PC_4, PD_11, PC_6, PC_7, PF_2, PE_4, PE_1, PD_3},  // uartpins
+    8,                                          // Smart drivers
+#endif
+    0,                                          // digiPot Factor
+#if HAS_VOLTAGE_MONITOR
+    NoPin,
+#endif
+    NoPin,
+#if HAS_SBC_INTERFACE
+    PD_10, PB_12, SSP2,
+#endif
+};
+
+
 constexpr PinEntry PinTable_BTT_KRAKEN[] =
 {
     //Thermistors
@@ -285,7 +416,7 @@ constexpr BoardDefaults btt_kraken_Defaults = {
         {PC_6, PC_7, PC_8},                //SPI3 Drivers
         {NoPin, NoPin, NoPin},                  //SPI4 31865
         {NoPin, NoPin, NoPin},                  //SPI5 RepRapDiscount Display
-        {PE_14, PE_15, PE_13},                //SPI6 EXP2
+        {PE_12, PE_13, PE_14},                //SPI6 EXP2
         {NoPin, NoPin, NoPin},                //SPI7
         {NoPin, NoPin, NoPin},                //SPI8
     },
