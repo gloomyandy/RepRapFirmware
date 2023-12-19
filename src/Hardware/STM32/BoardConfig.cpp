@@ -44,6 +44,15 @@
 #include "Boards/FLY.h"
 #include "Boards/FYSETC.h"
 #include "Boards/Generic.h"
+#ifdef TEST_CACHE
+extern uint32_t _nocache_ram_start;
+extern uint32_t _nocache_ram_end;
+#if STM32H7
+extern uint32_t _nocache2_ram_start;
+extern uint32_t _nocache2_ram_end;
+#endif
+#include <Cache.h>
+#endif
 
 //Known boards with built in stepper configurations and pin table
 // Note the generic entry must be the first entry in the table.
@@ -62,6 +71,7 @@ static constexpr BoardEntry LPC_Boards[] =
     {{"fly_openpnp_tool"},      PinTable_FLY_OPENPNP_TOOL,    ARRAY_SIZE(PinTable_FLY_OPENPNP_TOOL),    fly_openpnp_tool_Defaults},
     {{"biquskr_3_h723", "biquskr_3_ez_h723"},      PinTable_BTT_SKR_3,    ARRAY_SIZE(PinTable_BTT_SKR_3),    btt_skr_3_Defaults},
     {{"biqukraken_h723", "btt_kraken"},      PinTable_BTT_KRAKEN,    ARRAY_SIZE(PinTable_BTT_KRAKEN),    btt_kraken_Defaults},
+    {{"biquoctopuspro_V1.1_h723", "btt_octopuspro_V1.1"},      PinTable_BTT_OCTOPUSPRO_V1_1,    ARRAY_SIZE(PinTable_BTT_OCTOPUSPRO_V1_1),    btt_octopuspro_Defaults},
     {{"fysetc_spider_king723"}, PinTable_FYSETC_SPIDER_KING407, ARRAY_SIZE(PinTable_FYSETC_SPIDER_KING407), fysetc_spider_king407_Defaults},
 # endif
 #else
@@ -833,6 +843,17 @@ void BoardConfig::Init() noexcept
             break;
         }
     }
+#ifdef TEST_CACHE
+    debugPrintf("Testing cache configuration\n");
+    debugPrintf("_nocache_ram_start %x/%x _nocache2_ram_start %x/%x\n", _nocache_ram_start, &_nocache_ram_start, _nocache2_ram_start, &_nocache2_ram_start);
+    Cache::FlushBeforeDMAReceive(&_nocache_ram_start, 256);
+    Cache::FlushBeforeDMAReceive(&_nocache2_ram_start, 256);
+    Cache::InvalidateAfterDMAReceive(&_nocache_ram_start, 256);
+    Cache::InvalidateAfterDMAReceive(&_nocache2_ram_start, 256);
+    debugPrintf("Following two should fail\n");
+    Cache::FlushBeforeDMAReceive(lpcBoardName, 256);
+    Cache::InvalidateAfterDMAReceive(lpcBoardName, 256);
+#endif
 #endif
     SetBoard("generic");
     uint32_t boardId = IdentifyBoard();
