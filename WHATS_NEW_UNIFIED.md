@@ -1,3 +1,12 @@
+Version 3.5.0-rc.3+101
+======================
+* Duet3D RC2
+* STM32H7 allow CAN read/write pins to be changed.
+* STM32H7 allow use of all available pins for SPI5 and SPI6
+* Add new SD Card SPI configuration
+* Add preliminary Kraken and Octopus pro support
+* Change name/version of Stridemax to match release
+
 Version 3.5.0-rc.1+106
 ======================
 * Updated with latest Duet3d code
