@@ -1,4 +1,4 @@
-Version 3.5.0-rc.3+101
+Version 3.5.0-rc.2+101
 ======================
 * Duet3D RC2
 * STM32H7 allow CAN read/write pins to be changed.
