@@ -23,7 +23,7 @@ Version 3.5.0-rc.1+104
 ======================
 * Updated to latest Duet3D code
 * Use DMA for SPI1 on SMT32H7 based builds
-* Added SBC support for STM32H728 based boards
+* Added SBC support for STM32H723 based boards
 * Added SBC support for STM32H743 based boards
 * Fixed bug when using SBC based board.txt file
 * Added Fysetc Stridemax
