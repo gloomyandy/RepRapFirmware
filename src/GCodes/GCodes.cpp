@@ -1940,6 +1940,13 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 	ParameterLettersBitmap axisLettersMentioned = gb.AllParameters() & allAxisLetters;
 	if (ms.moveType == 0)
 	{
+		const float taperHeight = reprap.GetMove().GetTaperHeight();
+		if (reprap.GetMove().IsUsingMesh() && (ms.isCoordinated || machineType == MachineType::fff) && (taperHeight == 0.0F || ms.currentUserPosition[Z_AXIS] < taperHeight))
+		{
+			// If we are using a mesh then Z will probably be moving
+			axisLettersMentioned = axisLettersMentioned | ParameterLetterToBitmap('Z');
+		}
+
 		axisLettersMentioned.ClearBits(ms.GetOwnedAxisLetters());
 		if (axisLettersMentioned.IsNonEmpty())
 		{
@@ -2367,6 +2374,13 @@ bool GCodes::DoArcMove(GCodeBuffer& gb, bool clockwise)
 	axisLettersMentioned.SetBit(ParameterLetterToBitNumber('X') + axis0);		// add in the implicit axes
 	axisLettersMentioned.SetBit(ParameterLetterToBitNumber('X') + axis1);
 	axisLettersMentioned.ClearBits(ms.GetOwnedAxisLetters());
+	const float taperHeight = reprap.GetMove().GetTaperHeight();
+	if (reprap.GetMove().IsUsingMesh() && (ms.isCoordinated || machineType == MachineType::fff) && (taperHeight == 0.0F || ms.currentUserPosition[Z_AXIS] < taperHeight))
+	{
+		// If we are using a mesh then Z will probably be moving
+		axisLettersMentioned = axisLettersMentioned | ParameterLetterToBitmap('Z');
+	}
+
 	if (axisLettersMentioned.IsNonEmpty())
 	{
 		AllocateAxisLetters(gb, ms, axisLettersMentioned);
@@ -5263,6 +5277,7 @@ void GCodes::UpdateAllCoordinates(const GCodeBuffer& gb) noexcept
 {
 	MovementState& ms = GetMovementState(gb);
 	memcpyf(ms.coords, MovementState::GetLastKnownMachinePositions(), MaxAxes);
+	reprap.GetMove().InverseAxisAndBedTransform(ms.coords, ms.currentTool);
 	UpdateUserPositionFromMachinePosition(gb, ms);
 	reprap.GetMove().SetNewPosition(ms.coords, ms.GetMsNumber(), true);
 }
