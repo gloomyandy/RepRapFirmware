@@ -37,6 +37,7 @@ void BinaryParser::Put(const uint32_t *data, size_t len) noexcept
 	gb.bufferState = GCodeBufferState::parsingGCode;
 	gb.LatestMachineState().g53Active = (header->flags & CodeFlags::EnforceAbsolutePosition) != 0;
 	gb.CurrentFileMachineState().lineNumber = header->lineNumber;
+	gb.CurrentFileMachineState().fpos = GetFilePosition();
 }
 
 void BinaryParser::DecodeCommand() noexcept

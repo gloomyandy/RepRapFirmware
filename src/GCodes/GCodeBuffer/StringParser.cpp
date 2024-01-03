@@ -290,7 +290,7 @@ bool StringParser::LineFinished() noexcept
 	{
 		++gb.CurrentFileMachineState().lineNumber;
 	}
-
+	gb.CurrentFileMachineState().fpos = GetFilePosition();
 	if (gcodeLineEnd == 0)
 	{
 		// Empty line
@@ -396,6 +396,7 @@ bool StringParser::CheckMetaCommand(const StringRef& reply) THROWS(GCodeExceptio
 			{
 				// Go back to the start of the loop and re-evaluate the while-part
 				gb.CurrentFileMachineState().lineNumber = gb.GetBlockState().GetLineNumber();
+				gb.CurrentFileMachineState().fpos = gb.GetBlockState().GetFilePosition();
 				gb.RestartFrom(gb.GetBlockState().GetFilePosition());
 				Init();
 				return true;
@@ -664,6 +665,7 @@ void StringParser::ProcessContinueCommand() THROWS(GCodeException)
 
 	// Go back to the start of the loop and re-evaluate the while-part
 	gb.CurrentFileMachineState().lineNumber = gb.GetBlockState().GetLineNumber();
+	gb.CurrentFileMachineState().fpos = gb.GetBlockState().GetFilePosition();
 	gb.RestartFrom(gb.GetBlockState().GetFilePosition());
 }
 
