@@ -10,6 +10,7 @@
 #if HAS_SBC_INTERFACE
 
 #include "SbcInterface.h"
+#include <AppNotifyIndices.h>
 
 #include <Storage/CRC32.h>
 #include <algorithm>
@@ -362,7 +363,7 @@ extern "C" void SBC_SPI_HANDLER() noexcept
 
 		// Wake up the SBC task
 		dataReceived = true;
-		TaskBase::GiveFromISR(sbcTaskHandle);
+		TaskBase::GiveFromISR(sbcTaskHandle, NotifyIndices::SbcInterface);
 	}
 #else
 # if defined(DUET3_MB6HC) && HAS_WIFI_NETWORKING
@@ -391,7 +392,7 @@ extern "C" void SBC_SPI_HANDLER() noexcept
 
 		// Wake up the SBC task
 		dataReceived = true;
-		TaskBase::GiveFromISR(sbcTaskHandle);
+		TaskBase::GiveFromISR(sbcTaskHandle, NotifyIndices::SbcInterface);
 	}
 #endif
 }

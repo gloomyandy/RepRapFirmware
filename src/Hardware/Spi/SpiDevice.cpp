@@ -9,6 +9,7 @@
 	#include "STM32/Hardware/Spi/SpiDevice.hpp"
 #else
 #include <Hardware/IoPorts.h>
+#include <AppNotifyIndices.h>
 
 #if SAME5x
 # include <Serial.h>
@@ -363,7 +364,7 @@ bool SpiDevice::TransceivePacketNineBit(const uint16_t *_ecv_array null tx_data,
 		DmacManager::SetInterruptCallback(DmacChanLcdTx, SpiDevice::DmaComplete, CallbackParameter((void *)this));
 		DmacManager::EnableCompletedInterrupt(DmacChanLcdTx);
 		DmacManager::EnableChannel(DmacChanLcdTx, DmacPrioLcdTx);
-		TaskBase::Take(10);						// maximum 3kb transfer should complete in about 2ms @ 14MHz clock speed
+		TaskBase::TakeIndexed(NotifyIndices::Spi, 10);			// maximum 3kb transfer should complete in about 2ms @ 14MHz clock speed
 	}
 	else
 #endif
@@ -438,7 +439,7 @@ bool SpiDevice::TransceivePacketNineBit(const uint16_t *_ecv_array null tx_data,
 
 void SpiDevice::DmaComplete(DmaCallbackReason reason) noexcept
 {
-	TaskBase::GiveFromISR(waitingTask);
+	TaskBase::GiveFromISR(waitingTask, NotifyIndices::Spi);
 	waitingTask = nullptr;
 }
 

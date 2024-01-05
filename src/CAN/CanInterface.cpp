@@ -24,6 +24,7 @@
 #include <GCodes/GCodeException.h>
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <ClosedLoop/ClosedLoop.h>
+#include <AppNotifyIndices.h>
 
 #if HAS_SBC_INTERFACE
 # include "SBC/SbcInterface.h"
@@ -569,7 +570,7 @@ extern "C" [[noreturn]] void CanSenderLoop(void *) noexcept
 				SendCanMessage(TxBufferIndexUrgent, MaxUrgentSendWait, &buf);
 				reprap.GetPlatform().OnProcessingCanMessage();
 			}
-			TaskBase::Take(timeToWait);							// wait until we are woken up because a message is available, or we time out
+			TaskBase::TakeIndexed(NotifyIndices::CanSender, timeToWait);		// wait until we are woken up because a message is available, or we time out
 		}
 		else
 #endif
@@ -615,7 +616,7 @@ extern "C" [[noreturn]] void CanSenderLoop(void *) noexcept
 					break;
 				}
 			}
-			TaskBase::Take(Mutex::TimeoutUnlimited);
+			TaskBase::TakeIndexed(NotifyIndices::CanSender, Mutex::TimeoutUnlimited);
 		}
 	}
 }
@@ -830,7 +831,7 @@ void CanInterface::SendMotion(CanMessageBuffer *buf) noexcept
 #endif
 	}
 
-	canSenderTask.Give();
+	canSenderTask.Give(NotifyIndices::CanSender);
 }
 
 #if 0	// not currently used
@@ -1326,7 +1327,7 @@ GCodeResult CanInterface::GetRemoteFirmwareDetails(uint32_t boardAddress, GCodeB
 
 void CanInterface::WakeAsyncSenderFromIsr() noexcept
 {
-	canSenderTask.GiveFromISR();
+	canSenderTask.GiveFromISR(NotifyIndices::CanSender);
 }
 
 // Remote handle functions
