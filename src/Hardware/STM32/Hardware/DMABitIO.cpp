@@ -25,6 +25,7 @@
 #include "Movement/Move.h"
 #include "Movement/StepTimer.h"
 #include "Cache.h"
+#include "AppNotifyIndices.h"
 
 #define SU_OVERSAMPLE 4
 
@@ -236,7 +237,7 @@ static void DmaInterrupt(DMA_HandleTypeDef *_hdma)
         // fall through
     case SUStates::complete:
     case SUStates::error:
-        TaskBase::GiveFromISR(SUWaitingTask);
+        TaskBase::GiveFromISR(SUWaitingTask, NotifyIndices::BitIO);
         break;
     case SUStates::neowrite1:
     case SUStates::neowrite2:
@@ -246,7 +247,7 @@ static void DmaInterrupt(DMA_HandleTypeDef *_hdma)
         SUState = SUStates::complete;
         SUTimer.pause();
         HAL_DMA_Abort_IT(&SUDma);
-        TaskBase::GiveFromISR(SUWaitingTask);
+        TaskBase::GiveFromISR(SUWaitingTask, NotifyIndices::BitIO);
         break;
     }
 }
@@ -303,7 +304,7 @@ bool TMCSoftUARTTransfer(Pin pin, volatile uint8_t *WritePtr, uint32_t WriteCnt,
         DmaStart();
         while (SUState != SUStates::complete)
         {
-            if (!TaskBase::Take(timeout))
+            if (!TaskBase::TakeIndexed(NotifyIndices::BitIO, timeout))
             {
                 debugPrintf("TMC UART timeout\n");
                 SUTimer.pause();
@@ -422,7 +423,7 @@ bool NeopixelDMAWrite(Pin pin, uint32_t freq, uint8_t *bits, uint32_t cnt, uint3
     SUTimer.resume();
     while(SUState != SUStates::complete)
     {
-        if (!TaskBase::Take(timeout))
+        if (!TaskBase::TakeIndexed(NotifyIndices::BitIO, timeout))
         {
             debugPrintf("DMABitIO timeout\n");
             SUTimer.pause();

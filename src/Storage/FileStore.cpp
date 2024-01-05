@@ -18,6 +18,7 @@
 # include <Movement/StepTimer.h>
 # if HAS_WRITER_TASK
 #  include "TaskPriorities.h"
+#  include "AppNotifyIndices.h"
 # endif
 #endif
 
@@ -839,11 +840,11 @@ void FileWriteBuffer::Spin() noexcept
 			WriteQueue[CurrentWrite] = nullptr;
 			fb->writePending = false;
 			TaskHandle t = fb->waitingTask;
-			if (t != nullptr) t->Give();
+			if (t != nullptr) t->Give(NotifyIndices::FileIO);
 			CurrentWrite = (CurrentWrite + 1) % NumFileWriteBuffers;
 		}
 		else
-			TaskBase::Take();
+			TaskBase::TakeIndexed(NotifyIndices::FileIO);
 
 	}
 }
@@ -865,7 +866,7 @@ bool FileWriteBuffer::StartFlushBuffer() noexcept
 		WriteQueue[AddWrite] = this;
 		AddWrite = (AddWrite+1) % NumFileWriteBuffers;
 	}
-	WriterTask.Give();
+	WriterTask.Give(NotifyIndices::FileIO);
 	return true;
 }
 
@@ -878,7 +879,7 @@ bool FileWriteBuffer::WaitFlushComplete() noexcept
 		if (!writePending) return true;
 		waitingTask = TaskBase::GetCallerTaskHandle();
 	}
-	TaskBase::Take(FileIoTimeout);
+	TaskBase::TakeIndexed(NotifyIndices::FileIO, FileIoTimeout);
 	waitingTask = nullptr;
 	if (writePending)	
 	{

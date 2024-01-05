@@ -62,7 +62,7 @@ void WiFiInterface::SpiInterrupt() noexcept
         digitalWrite(SamTfrReadyPin, 0);
 
         transferPending = false;
-        TaskBase::GiveFromISR(espWaitingTask);
+        TaskBase::GiveFromISR(espWaitingTask, NotifyIndices::WiFi);
     }
 }
 

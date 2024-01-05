@@ -20,6 +20,7 @@
 #include <General/Portability.h>
 #include "TmcDriverState.h"
 #include "TMC51xxDriver.h"
+#include "AppNotifyIndices.h"
 #include <functional>
 
 // On some processors we need to ensure that memory mapped I/O operations are synced to the hardware
@@ -1275,7 +1276,7 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 		if (driversState <= DriversState::noDriver)
 		{
 			if (driversState != DriversState::noDriver) driversState = DriversState::powerWait;
-			TaskBase::Take();
+			TaskBase::TakeIndexed(NotifyIndices::Tmc);
 		}
 		else
 		{
@@ -1414,7 +1415,7 @@ void Tmc51xxDriver::Spin(bool powered) noexcept
 		if (driversState == DriversState::powerWait)
 		{
 			driversState = DriversState::notInitialised;
-			tmcTask.Give();									// wake up the TMC task because the drivers need to be initialised
+			tmcTask.Give(NotifyIndices::Tmc);									// wake up the TMC task because the drivers need to be initialised
 		}
 	}
 	else if (driversState > DriversState::powerWait)

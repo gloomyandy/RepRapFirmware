@@ -19,6 +19,7 @@
 #include "Movement/StepTimer.h"
 #include "Cache.h"
 #include <General/Portability.h>
+#include "AppNotifyIndices.h"
 #if HAS_STALL_DETECT
 #include "Endstops/Endstop.h"
 #endif
@@ -1393,7 +1394,7 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 		if (driversState <= DriversState::noDriver)
 		{
 			if (driversState != DriversState::noDriver) driversState = DriversState::powerWait;
-			TaskBase::Take();
+			TaskBase::TakeIndexed(NotifyIndices::Tmc);
 		}
 		else
 		{
@@ -1495,7 +1496,7 @@ void Tmc22xxDriver::Spin(bool powered) noexcept
 		if (driversState == DriversState::powerWait)
 		{
 			driversState = DriversState::notInitialised;
-			tmc22Task.Give();									// wake up the TMC task because the drivers need to be initialised
+			tmc22Task.Give(NotifyIndices::Tmc);									// wake up the TMC task because the drivers need to be initialised
 		}
 	}
 	else if (driversState > DriversState::powerWait)

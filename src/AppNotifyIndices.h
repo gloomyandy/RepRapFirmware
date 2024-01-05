@@ -25,6 +25,9 @@ namespace NotifyIndices
 #endif
 	constexpr uint32_t I2C = FirstAvailableApp;
 	constexpr uint32_t Spi = FirstAvailableApp;
+#if HAS_WRITER_TASK
+	constexpr uint32_t FileIO = FirstAvailableApp;
+#endif
 	constexpr uint32_t AccelerometerHardware = FirstAvailableApp + 1;
 	constexpr uint32_t HeightController = FirstAvailableApp + 2;
 	constexpr uint32_t AccelerometerDataCollector = FirstAvailableApp + 2;
@@ -32,6 +35,9 @@ namespace NotifyIndices
 	constexpr uint32_t Tmc = FirstAvailableApp + 2;
 	constexpr uint32_t Move = FirstAvailableApp + 2;
 	constexpr uint32_t DueX = FirstAvailableApp + 2;
+#if STM32
+	constexpr uint32_t BitIO = FirstAvailableApp + 2;
+#endif
 	constexpr uint32_t CanMessageQueue = FirstAvailableApp + 3;
 	constexpr uint32_t CanSender = FirstAvailableApp + 3;
 	constexpr uint32_t SbcInterface = FirstAvailableApp + 3;
