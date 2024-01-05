@@ -16,7 +16,7 @@ void SpiInterrupt(HardwareSPI *spi) noexcept
 {
     dataReceived = true;
     status = Ready;
-    TaskBase::GiveFromISR(sbcTaskHandle);
+    TaskBase::GiveFromISR(sbcTaskHandle, NotifyIndices::SbcInterface);
 }
 
 static inline bool spi_dma_check_rx_complete() noexcept
