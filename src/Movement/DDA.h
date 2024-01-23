@@ -99,7 +99,10 @@ public:
 	bool IsPrintingMove() const noexcept { return flags.isPrintingMove; }			// Return true if this involves both XY movement and extrusion
 	bool UsingStandardFeedrate() const noexcept { return flags.usingStandardFeedrate; }
 	bool IsCheckingEndstops() const noexcept { return flags.checkEndstops; }
+
+#if SUPPORT_SCANNING_PROBES
 	bool IsScanningProbeMove() const noexcept { return flags.scanningProbeMove; }
+#endif
 
 	DDAState GetState() const noexcept { return state; }
 	DDA* GetNext() const noexcept { return next; }
@@ -175,7 +178,11 @@ public:
 #endif
 
 	DriveMovement *FindDM(size_t drive) const noexcept;								// find the DM for a drive if there is one even if it is completed
+#if SUPPORT_CAN_EXPANSION
+	bool CheckEndstops(Platform& platform) noexcept;
+#else
 	void CheckEndstops(Platform& platform) noexcept;
+#endif
 
 	void DebugPrint(const char *tag) const noexcept;								// print the DDA only
 	void DebugPrintAll(const char *tag) const noexcept;								// print the DDA and active DMs
@@ -278,7 +285,9 @@ private:
 					 continuousRotationShortcut : 1, // True if continuous rotation axes take shortcuts
 					 checkEndstops : 1,				// True if this move monitors endstops or Z probe
 					 controlLaser : 1,				// True if this move controls the laser or iobits
+#if SUPPORT_SCANNING_PROBES
 					 scanningProbeMove : 1,	 	 	// True if this is a scanning Z probe move
+#endif
 					 isRemote : 1,					// True if this move was commanded from a remote
 					 wasAccelOnlyMove : 1;			// set by Prepare if this was an acceleration-only move, for the next move to look at
 		};
