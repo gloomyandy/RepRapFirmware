@@ -161,7 +161,7 @@ void SmartDrivers::EnableDrive(size_t drive, bool en) noexcept
 StandardDriverStatus SmartDrivers::GetStatus(size_t drive, bool accumulated, bool clearAccumulated) noexcept
 {
 	if (drive < numDrivers)
-		return driverStates[drive]->ReadStatus(accumulated, clearAccumulated);
+		return driverStates[drive]->GetStatus(accumulated, clearAccumulated);
 	StandardDriverStatus rslt;
 	rslt.all = 0;
 	rslt.notPresent = true;

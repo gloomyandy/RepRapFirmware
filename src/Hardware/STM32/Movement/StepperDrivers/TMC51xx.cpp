@@ -264,6 +264,7 @@ constexpr uint8_t REGNUM_COOLCONF = 0x6D;
 constexpr uint32_t COOLCONF_SGFILT = 1 << 24;				// set to update stallGuard status every 4 full steps instead of every full step
 constexpr uint32_t COOLCONF_SGT_SHIFT = 16;
 constexpr uint32_t COOLCONF_SGT_MASK = 127 << COOLCONF_SGT_SHIFT;	// stallguard threshold (signed)
+constexpr uint32_t COOLCONF_COOL_MASK = (1u << 16) - 1;
 
 constexpr uint32_t DefaultCoolConfReg = 0;
 
@@ -331,7 +332,7 @@ public:
 	DriverMode GetDriverMode() const noexcept;
 	void SetCurrent(float current) noexcept;
 	void Enable(bool en) noexcept;
-	StandardDriverStatus ReadStatus(bool accumulated, bool clearAccumulated) noexcept;
+	StandardDriverStatus GetStatus(bool accumulated, bool clearAccumulated) noexcept;
 	float GetSenseResistor() const noexcept;
 	void SetSenseResistor(float value) noexcept;
 	float GetMaxCurrent() const noexcept;
@@ -609,7 +610,7 @@ bool Tmc51xxDriverState::SetRegister(SmartDriverRegister reg, uint32_t regVal) n
 		return true;
 
 	case SmartDriverRegister::coolStep:
-		UpdateRegister(WriteTcoolthrs, regVal & ((1u << 20) - 1));
+		UpdateRegister(WriteCoolConf, (writeRegisters[WriteCoolConf] & ~COOLCONF_COOL_MASK) | (regVal & COOLCONF_COOL_MASK));
 		return true;
 
 	case SmartDriverRegister::hdec:
@@ -871,7 +872,7 @@ void Tmc51xxDriverState::SetMaxCurrent(float value) noexcept
 
 
 // Read the status
-StandardDriverStatus Tmc51xxDriverState::ReadStatus(bool accumulated, bool clearAccumulated) noexcept
+StandardDriverStatus Tmc51xxDriverState::GetStatus(bool accumulated, bool clearAccumulated) noexcept
 {
 	if (!IsReady())
 	{
