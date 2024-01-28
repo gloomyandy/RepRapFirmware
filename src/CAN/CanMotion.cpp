@@ -373,7 +373,7 @@ bool CanMotion::InternalStopDriverWhenMoving(DriverId driver, int32_t steps) noe
 bool CanMotion::StopDriver(const DDA& dda, size_t axis, DriverId driver) noexcept
 {
 #if SUPPORT_SPICAN
-	if (!canEnabled) return;
+	if (!canEnabled) return false;
 #endif
 	if (dda.GetState() == DDA::DDAState::provisional)
 	{
@@ -395,7 +395,7 @@ bool CanMotion::StopDriver(const DDA& dda, size_t axis, DriverId driver) noexcep
 bool CanMotion::StopAxis(const DDA& dda, size_t axis) noexcept
 {
 #if SUPPORT_SPICAN
-	if (!canEnabled) return;
+	if (!canEnabled) return false;
 #endif
 	const Platform& p = reprap.GetPlatform();
 	if (axis < reprap.GetGCodes().GetTotalAxes())
@@ -441,7 +441,7 @@ bool CanMotion::StopAxis(const DDA& dda, size_t axis) noexcept
 bool CanMotion::StopAll(const DDA& dda) noexcept
 {
 #if SUPPORT_SPICAN
-	if (!canEnabled) return;
+	if (!canEnabled) return false;
 #endif
 	if (dda.GetState() == DDA::DDAState::provisional)
 	{
