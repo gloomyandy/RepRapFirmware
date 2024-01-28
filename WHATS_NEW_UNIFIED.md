@@ -1,3 +1,8 @@
+Version 3.5.0-rc.3+101
+======================
+* Duet3d RC3
+* Updated Kraken signature
+
 Version 3.5.0-rc.2+101
 ======================
 * Duet3D RC2
