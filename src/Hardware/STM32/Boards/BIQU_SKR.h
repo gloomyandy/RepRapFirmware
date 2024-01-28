@@ -407,7 +407,7 @@ constexpr PinEntry PinTable_BTT_KRAKEN[] =
 };
 
 constexpr BoardDefaults btt_kraken_Defaults = {
-    {0x5450ab93},                             // Signatures
+    {0x5450ab93, 0x26b1a20f},                             // Signatures
     SD_SPI2_A,                                  // SD Card access
     {   //CLK, MISO, MOSI
         {NoPin, NoPin, NoPin},                   //SPI0
