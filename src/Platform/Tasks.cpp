@@ -396,6 +396,7 @@ void Tasks::Diagnostics(MessageType mtype) noexcept
 						str.catf(" %s", m->GetName());
 						break;
 					}
+					m = m->GetNext();
 				}
 			}
 			break;
