@@ -878,8 +878,12 @@ uint32_t Tmc22xxDriverState::GetRegister(SmartDriverRegister reg) const noexcept
 	case SmartDriverRegister::pwmAuto:
 		return readRegisters[ReadPwmAuto];
 
-	case SmartDriverRegister::hdec:
+#if HAS_STALL_DETECT
 	case SmartDriverRegister::coolStep:
+		return writeRegisters[WriteCoolconf];
+#endif
+
+	case SmartDriverRegister::hdec:
 	default:
 		return 0;
 	}

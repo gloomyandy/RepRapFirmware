@@ -645,7 +645,7 @@ uint32_t Tmc51xxDriverState::GetRegister(SmartDriverRegister reg) const noexcept
 		return writeRegisters[WriteThigh];
 
 	case SmartDriverRegister::coolStep:
-		return writeRegisters[WriteTcoolthrs];
+		return writeRegisters[WriteCoolConf];
 
 	case SmartDriverRegister::mstepPos:
 		return readRegisters[ReadMsCnt];
