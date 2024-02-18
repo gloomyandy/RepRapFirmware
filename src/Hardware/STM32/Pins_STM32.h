@@ -15,8 +15,8 @@
 #if STM32H7
 # define FIRMWARE_NAME "RepRapFirmware for STM32H7 based Boards"
 # define DEFAULT_BOARD_TYPE BoardType::Stm32H7
-# define SUPPORT_CAN_EXPANSION	     1
-# define DUAL_CAN				     0
+# define SUPPORT_CAN_EXPANSION       1
+# define DUAL_CAN                    0
 # define SUPPORT_SPICAN              0
 # define FLASH_DATA_LENGTH (128*1024) //size of the Software Reset Data in Flash
 
@@ -27,7 +27,7 @@
 #  define SBC_IAP_FIRMWARE_FILE   "firmware-stm32h7-sbc.bin"
 #  define IAP_UPDATE_FILE         "stm32h7_iap_SD.bin"
 #  define IAP_UPDATE_FILE_SBC     "stm32h7_iap_SBC.bin"
-#  define IAP_CAN_LOADER_FILE		"stm32h7_iap_CAN.bin"
+#  define IAP_CAN_LOADER_FILE     "stm32h7_iap_CAN.bin"
 
 #  define WIFI_BOARD_NAME         "STM32H7 WiFi"
 #  define SBC_BOARD_NAME          "STM32H7 SBC"
@@ -43,7 +43,7 @@
 #  define SBC_IAP_FIRMWARE_FILE   "firmware-stm32h723-sbc.bin"
 #  define IAP_UPDATE_FILE         "stm32h723_iap_SD.bin"
 #  define IAP_UPDATE_FILE_SBC     "stm32h723_iap_SBC.bin"
-#  define IAP_CAN_LOADER_FILE		"stm32h723_iap_CAN.bin"
+#  define IAP_CAN_LOADER_FILE     "stm32h723_iap_CAN.bin"
 
 #  define WIFI_BOARD_NAME         "STM32H723 WiFi"
 #  define SBC_BOARD_NAME          "STM32H723 SBC"
@@ -57,8 +57,8 @@
 #else
 # define FIRMWARE_NAME "RepRapFirmware for STM32F4 based Boards"
 # define DEFAULT_BOARD_TYPE BoardType::Stm32F4
-# define SUPPORT_CAN_EXPANSION	     1
-# define DUAL_CAN				     0
+# define SUPPORT_CAN_EXPANSION       1
+# define DUAL_CAN                    0
 # define SUPPORT_SPICAN              1
 # define FLASH_DATA_LENGTH (16*1024) //size of the Software Reset Data in Flash
 
@@ -68,7 +68,7 @@
 # define SBC_IAP_FIRMWARE_FILE   "firmware-stm32f4-sbc.bin"
 # define IAP_UPDATE_FILE         "stm32f4_iap_SD.bin"
 # define IAP_UPDATE_FILE_SBC     "stm32f4_iap_SBC.bin"
-# define IAP_CAN_LOADER_FILE		"stm32f4_iap_CAN.bin"
+# define IAP_CAN_LOADER_FILE     "stm32f4_iap_CAN.bin"
 # define IAP_IMAGE_START         0x20018000
 
 # define WIFI_BOARD_NAME         "STM32F4 WiFi"
@@ -92,17 +92,17 @@
 
 // Features definition
 #define SUPPORT_OBJECT_MODEL             1
-#define HAS_CPU_TEMP_SENSOR		         1	// enabling the CPU temperature sensor disables Due pin 13 due to bug in SAM3X
-#define HAS_HIGH_SPEED_SD		         0
-#define HAS_VOLTAGE_MONITOR		         1
-#define ACTIVE_LOW_HEAT_ON		         0
+#define HAS_CPU_TEMP_SENSOR              1	// enabling the CPU temperature sensor disables Due pin 13 due to bug in SAM3X
+#define HAS_HIGH_SPEED_SD                0
+#define HAS_VOLTAGE_MONITOR              1
+#define ACTIVE_LOW_HEAT_ON               0
 #define HAS_VREF_MONITOR                 0
 
-#define SUPPORT_INKJET		             0	// set nonzero to support inkjet control
-#define SUPPORT_ROLAND		             0	// set nonzero to support Roland mill
-#define SUPPORT_SCANNER		             0	// set nonzero to support FreeLSS scanners
-#define SUPPORT_IOBITS		             0	// set to support P parameter in G0/G1 commands
-#define SUPPORT_DHT_SENSOR	             1	// set nonzero to support DHT temperature/humidity sensors
+#define SUPPORT_INKJET                   0	// set nonzero to support inkjet control
+#define SUPPORT_ROLAND                   0	// set nonzero to support Roland mill
+#define SUPPORT_SCANNER                  0	// set nonzero to support FreeLSS scanners
+#define SUPPORT_IOBITS                   0	// set to support P parameter in G0/G1 commands
+#define SUPPORT_DHT_SENSOR               1	// set nonzero to support DHT temperature/humidity sensors
 #define SUPPORT_WORKPLACE_COORDINATES    1
 #define SUPPORT_LASER                    1
 
@@ -111,19 +111,22 @@
 #define SUPPORT_LED_STRIPS               1
 #define SUPPORT_BITBANG_NEOPIXEL         1
 #define SUPPORT_DMA_NEOPIXEL             1
-#define SUPPORT_ASYNC_MOVES		         1
+#define SUPPORT_ASYNC_MOVES              1
 #define ALLOCATE_DEFAULT_PORTS           0
-#define TRACK_OBJECT_NAMES		         1
+#define TRACK_OBJECT_NAMES               1
 #define HAS_DEFAULT_PSON_PIN             0
 #define SUPPORT_BME280                   1
+#define SUPPORT_12864_LCD                1
+#define SUPPORT_PROBE_POINTS_FILE        1
+#define SUPPORT_KEEPOUT_ZONES            1
+#define SUPPORT_ISR_DEBUG                1
 
 #if defined(ESP8266WIFI)
     #define HAS_RTOSPLUSTCP_NETWORKING   0
-    #define SUPPORT_12864_LCD            1
     #define HAS_WIFI_NETWORKING          1
     #define HAS_MASS_STORAGE             1
     #define SUPPORT_TELNET               0
-    #define SUPPORT_MQTT			     1
+    #define SUPPORT_MQTT                 1
     #define SUPPORT_FTP                  1
     #define SUPPORT_ACCELEROMETERS       1
     #define HAS_WRITER_TASK              1
@@ -133,7 +136,6 @@
 
 #elif defined(LPC_SBC)
     #define HAS_RTOSPLUSTCP_NETWORKING   0
-    #define SUPPORT_12864_LCD            1
     #define HAS_WIFI_NETWORKING          0
     #define HAS_MASS_STORAGE             1
     #define HAS_SBC_INTERFACE            1
@@ -155,24 +157,24 @@ constexpr size_t NumDirectDrivers = 14;               // The maximum number of d
 #if defined(SUPPORT_TMC22xx)
     constexpr size_t MaxSmartDrivers = NumDirectDrivers;            // The maximum number of smart drivers
     constexpr size_t NumTmcDriversSenseChannels = 1;
-    #define TMC22xx_HAS_ENABLE_PINS			1
-    #define TMC22xx_VARIABLE_NUM_DRIVERS	1
+    #define TMC22xx_HAS_ENABLE_PINS         1
+    #define TMC22xx_VARIABLE_NUM_DRIVERS    1
     #define TMC22xx_USE_SLAVEADDR           0
     #define TMC22xx_HAS_MUX                 0
     #define SUPPORT_TMC22xx                 1
     #define HAS_STALL_DETECT                1
     #define TMC22xx_DEFAULT_STEALTHCHOP     0
 # if defined(SUPPORT_TMC51xx)
-    #define SUPPORT_TMC51xx			        1
-    #define TMC51xx_USES_USART		        0
+    #define SUPPORT_TMC51xx                 1
+    #define TMC51xx_USES_USART              0
     #define TMC51xx_VARIABLE_NUM_DRIVERS    1
 
 # endif
 #elif defined(SUPPORT_TMC51xx)
     constexpr size_t MaxSmartDrivers = NumDirectDrivers;            // The maximum number of smart drivers
     constexpr size_t NumTmcDriversSenseChannels = 1;
-    #define SUPPORT_TMC51xx			        1
-    #define TMC51xx_USES_USART		        0
+    #define SUPPORT_TMC51xx                 1
+    #define TMC51xx_USES_USART              0
     #define HAS_STALL_DETECT                1
     #define TMC51xx_VARIABLE_NUM_DRIVERS    1
 #else
