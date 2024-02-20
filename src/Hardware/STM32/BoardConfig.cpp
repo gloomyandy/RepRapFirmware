@@ -69,7 +69,7 @@ static constexpr BoardEntry LPC_Boards[] =
     {{"fly_super5_h723"},      PinTable_FLY_SUPER5,    ARRAY_SIZE(PinTable_FLY_SUPER5),    fly_super5_Defaults},
     {{"fly_super8_pro_h723"},      PinTable_FLY_SUPER8H7,    ARRAY_SIZE(PinTable_FLY_SUPER8H7),    fly_super8h7_Defaults},
     {{"fly_openpnp_tool"},      PinTable_FLY_OPENPNP_TOOL,    ARRAY_SIZE(PinTable_FLY_OPENPNP_TOOL),    fly_openpnp_tool_Defaults},
-    {{"biquskr_3_h723", "biquskr_3_ez_h723"},      PinTable_BTT_SKR_3,    ARRAY_SIZE(PinTable_BTT_SKR_3),    btt_skr_3_Defaults},
+    {{"biquskr_3_h723", "biquskr_3_ez_h723", "biquskr_3"},      PinTable_BTT_SKR_3,    ARRAY_SIZE(PinTable_BTT_SKR_3),    btt_skr_3_Defaults},
     {{"biqukraken_h723", "btt_kraken"},      PinTable_BTT_KRAKEN,    ARRAY_SIZE(PinTable_BTT_KRAKEN),    btt_kraken_Defaults},
     {{"biquoctopuspro_V1.1_h723", "btt_octopuspro_V1.1"},      PinTable_BTT_OCTOPUSPRO_V1_1,    ARRAY_SIZE(PinTable_BTT_OCTOPUSPRO_V1_1),    btt_octopuspro_Defaults},
     {{"fysetc_spider_king723"}, PinTable_FYSETC_SPIDER_KING407, ARRAY_SIZE(PinTable_FYSETC_SPIDER_KING407), fysetc_spider_king407_Defaults},
