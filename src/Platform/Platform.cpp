@@ -473,17 +473,15 @@ Platform::Platform() noexcept :
 {
 }
 
-#if SUPPORT_ISR_DEBUG
-
 static RingBuffer<char> isrDebugBuffer;
-constexpr size_t DebugBufferSize = 512;
-static_assert((DebugBufferSize & (DebugBufferSize - 1)) == 0);		// DebugBufferSize must be a power of 2
 
-static inline void InitIsrDebug() noexcept
+// Return true if we have a debug buffer
+bool Platform::HasDebugBuffer() noexcept
 {
-	isrDebugBuffer.Init(DebugBufferSize);
+	return isrDebugBuffer.GetCapacity() != 0;
 }
 
+// Write a character to the debug buffer
 bool Platform::IsrDebugPutc(char c) noexcept
 {
 	if (c != 0)
@@ -495,7 +493,16 @@ bool Platform::IsrDebugPutc(char c) noexcept
 	return true;
 }
 
-#endif
+// Set the size of the debug buffer returning true if successful
+bool Platform::SetDebugBufferSize(uint32_t size) noexcept
+{
+	if ((size & (size - 1)) == 0)
+	{
+		isrDebugBuffer.Init(size);
+		return true;
+	}
+	return false;
+}
 
 // Initialise the Platform. Note: this is the first module to be initialised, so don't call other modules from here!
 void Platform::Init() noexcept
@@ -542,10 +549,6 @@ void Platform::Init() noexcept
 # if HAS_NETWORKING
 	defaultMacAddress.SetDefault();
 # endif
-#endif
-
-#if SUPPORT_ISR_DEBUG
-	InitIsrDebug();
 #endif
 
 	// Real-time clock
@@ -1161,7 +1164,6 @@ void Platform::Spin() noexcept
 	MassStorage::Spin();
 #endif
 
-#if SUPPORT_ISR_DEBUG
 	// Check for debug messages
 	while (!isrDebugBuffer.IsEmpty())
 	{
@@ -1170,7 +1172,6 @@ void Platform::Spin() noexcept
 		buf[charsRead] = 0;
 		Message(GenericMessage, buf);
 	}
-#endif
 
 	// Try to flush messages to serial ports
 	(void)FlushMessages();
