@@ -166,6 +166,15 @@ public:
 	// Get the end speed for an accelerating or decelerating move
 	float GetNonlinearEndSpeed(float pressureAdvanceK) const noexcept pre(!IsLinear()) { return (pressureAdvanceK - b + segTime) * acceleration; }
 
+#if 1
+	// Functions used to verify segments
+	// Get the start speed for any move assuming no pressure advance
+	float GetStartSpeed() const noexcept { return (IsLinear()) ? 1.0/c : -b * acceleration; }
+
+	// Get the calculated distance for any move assuming no pressure advance
+	float GetCalculatedDistance() const noexcept { return (GetStartSpeed() + 0.5 * acceleration * segTime) * segTime; }
+#endif
+
 	// Calculate the move A coefficient in step_clocks^2 for an accelerating or decelerating move
 	float CalcNonlinearA(float startDistance) const noexcept pre(!IsLinear());
 	float CalcNonlinearA(float startDistance, float pressureAdvanceK) const noexcept pre(!IsLinear());
@@ -194,6 +203,7 @@ public:
 	void AddToTail(MoveSegment *tail) noexcept;
 	void DebugPrint(char ch) const noexcept;
 	static void DebugPrintList(char ch, const MoveSegment *segs) noexcept;
+	static void DebugCheckSegments(const MoveSegment *segs) noexcept;
 
 	// Allocate a MoveSegment, clearing the flags
 	static MoveSegment *Allocate(MoveSegment *next) noexcept;
@@ -315,6 +325,7 @@ inline void MoveSegment::SetLinear(float pSegmentLength, float p_segTime, float 
 	segTime = p_segTime;
 	b = 0.0;
 	c = p_c;
+	acceleration = 0.0;
 	nextAndFlags |= LinearFlag;
 }
 

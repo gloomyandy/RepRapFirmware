@@ -442,6 +442,7 @@ void AxisShaper::PlanShaping(DDA& dda, PrepParams& params, bool shapingEnabled) 
 			for (;;)
 			{
 				AccelOrDecelPlan proposedAccelPlan;
+				proposedAccelPlan.distance = params.accelDistance;
 				if (idealPlan.shapeAccelEnd)
 				{
 					if (idealPlan.shapeAccelStart)
@@ -452,21 +453,10 @@ void AxisShaper::PlanShaping(DDA& dda, PrepParams& params, bool shapingEnabled) 
 					{
 						ProposeShapeAccelEnd(dda, params, proposedAccelPlan);
 					}
-					else
-					{
-						// We can't implement acceleration end shaping because the acceleration phase is too short
-						// As we're not applying shaping, we only need to store the original distance in the proposal
-						proposedAccelPlan.distance = params.accelDistance;
-					}
-				}
-				else
-				{
-					// We never implement acceleration start shaping unless we also implement acceleration end shaping; so we're not looking to shape acceleration at all.
-					// As we're not applying acceleration shaping, we only need to store the original distance in the proposal
-					proposedAccelPlan.distance = params.accelDistance;
 				}
 
 				AccelOrDecelPlan proposedDecelPlan;
+				proposedDecelPlan.distance = dda.totalDistance - params.decelStartDistance;
 				if (idealPlan.shapeDecelStart)
 				{
 					if (idealPlan.shapeDecelEnd)
@@ -477,16 +467,6 @@ void AxisShaper::PlanShaping(DDA& dda, PrepParams& params, bool shapingEnabled) 
 					{
 						ProposeShapeDecelStart(dda, params, proposedDecelPlan);
 					}
-					else
-					{
-						// As we're not applying shaping, we only need to store the original distance in the proposal
-						proposedDecelPlan.distance = dda.totalDistance - params.decelStartDistance;
-					}
-				}
-				else
-				{
-					// As we're not applying shaping, we only need to store the original distance in the proposal
-					proposedDecelPlan.distance = dda.totalDistance - params.decelStartDistance;
 				}
 
 				// If we didn't actually propose any shaping because of minimum acceleration limit, quit
@@ -573,6 +553,7 @@ void AxisShaper::PlanShaping(DDA& dda, PrepParams& params, bool shapingEnabled) 
 										(double)dda.startSpeed, (double)dda.endSpeed, (double)dda.topSpeed, (double)newTopSpeed, (double)dda.acceleration, (double)dda.deceleration,
 										(double)dda.totalDistance, (double)(proposedAccelPlan.distance + proposedDecelPlan.distance - dda.totalDistance), (double)params.accelDistance);
 					}
+
 					params.topSpeed = newTopSpeed;
 					params.modified = true;
 					if (newTopSpeed > dda.startSpeed)
@@ -631,6 +612,9 @@ void AxisShaper::PlanShaping(DDA& dda, PrepParams& params, bool shapingEnabled) 
 		MoveSegment * const accelSegs = GetAccelerationSegments(dda, params);
 		MoveSegment * const decelSegs = GetDecelerationSegments(dda, params);
 		dda.segments = FinishShapedSegments(dda, params, accelSegs, decelSegs);
+#if 1	//debug
+		MoveSegment::DebugCheckSegments(dda.segments);
+#endif
 	}
 	else
 	{
@@ -897,7 +881,7 @@ void AxisShaper::ProposeShapeDecelBoth(const DDA& dda, const PrepParams& params,
 	}
 	else
 	{
-		const float extraDecelDistance = GetExtraDecelStartDistance(dda.topSpeed, params.deceleration) + GetExtraDecelEndDistance(dda.endSpeed, params.deceleration);
+		const float extraDecelDistance = GetExtraDecelStartDistance(params.topSpeed, params.deceleration) + GetExtraDecelEndDistance(dda.endSpeed, params.deceleration);
 		proposal.distance = dda.totalDistance - params.decelStartDistance + extraDecelDistance;
 		proposal.clocks = params.decelClocks + extraClocksAtStart + extraClocksAtEnd;
 		proposal.acceleration = params.deceleration;
@@ -1068,11 +1052,11 @@ MoveSegment *AxisShaper::GetDecelerationSegments(const DDA& dda, PrepParams& par
 				endDecelSegs = MoveSegment::Allocate(endDecelSegs);
 				const float deceleration = params.deceleration * (1.0 - coefficients[i]);
 				const float segTime = durations[i];
-				const float speedDecreasee = deceleration * segTime;
-				segStartSpeed += speedDecreasee;
+				const float speedDecrease = deceleration * segTime;
+				segStartSpeed += speedDecrease;
 				const float b = segStartSpeed/deceleration;
 				const float c = -2.0/deceleration;
-				const float segLen = (segStartSpeed + (-0.5 * speedDecreasee)) * segTime;
+				const float segLen = (segStartSpeed - (0.5 * speedDecrease)) * segTime;
 				endDecelSegs->SetNonLinear(segLen, segTime, b, c, -deceleration);
 				endDistance -= segLen;
 			}
