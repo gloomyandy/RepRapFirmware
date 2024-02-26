@@ -1,8 +1,8 @@
 /*
  * ThermocoupleSensor6675.cpp
  *
- *  Created on: 8 Jun 2017
- *      Author: David
+ *  Created on: 14 Jan 2021
+ *      Author: GA (based on ThermocoupleSensor31855.cpp)
  */
 
 // MAX6675 thermocouple chip
@@ -48,7 +48,7 @@ GCodeResult ThermocoupleSensor6675::Configure(GCodeBuffer& gb, const StringRef& 
 		return GCodeResult::error;
 	}
 
-	TryConfigureSensorName(gb, changed);
+	ConfigureCommonParameters(gb, changed);
 
 	if (changed)
 	{

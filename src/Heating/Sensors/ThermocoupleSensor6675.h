@@ -1,8 +1,8 @@
 /*
- * ThermocoupleSensor31855.h
+ * ThermocoupleSensor6675.h
  *
- *  Created on: 8 Jun 2021
- *      Author: GA
+ *  Created on: 14 Jan 2021
+ *      Author: GA (based on ThermocoupleSensor31855.h
  */
 
 #ifndef SRC_HEATING_THERMOCOUPLESENSOR6675_H_
