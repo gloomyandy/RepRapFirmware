@@ -1213,7 +1213,12 @@ GCodeResult WiFiInterface::HandleWiFiCode(int mcode, GCodeBuffer &gb, const Stri
 		reply.copy("use M552 to abandon the current connection attempt before using this command");
 		return GCodeResult::error;
 	}
-
+	if (requestedMode != currentMode)
+	{
+			reply.copy("module is changing mode please try again later");
+		return GCodeResult::error;
+	}
+	
 	switch (mcode)
 	{
 	case 587:	// Add WiFi network or list remembered networks
