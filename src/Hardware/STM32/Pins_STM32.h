@@ -119,6 +119,7 @@
 #define SUPPORT_12864_LCD                1
 #define SUPPORT_PROBE_POINTS_FILE        1
 #define SUPPORT_KEEPOUT_ZONES            1
+#define HAS_EMBEDDED_CONFIG              1
 
 #if defined(ESP8266WIFI)
     #define HAS_RTOSPLUSTCP_NETWORKING   0

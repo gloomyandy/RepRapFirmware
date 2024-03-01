@@ -41,14 +41,14 @@ void FileStore::Init() noexcept
 	openCount = 0;
 	closeRequested = false;
 #endif
-#if HAS_EMBEDDED_FILES
+#if HAS_EMBEDDED_FILES || HAS_EMBEDDED_CONFIG
 	fileIndex = -1;
 #endif
 #if HAS_SBC_INTERFACE
 	handle = noFileHandle;
 	length = 0;
 #endif
-#if HAS_EMBEDDED_FILES || HAS_SBC_INTERFACE
+#if HAS_EMBEDDED_FILES || HAS_SBC_INTERFACE || HAS_EMBEDDED_CONFIG
 	offset = 0;
 #endif
 }
@@ -58,7 +58,7 @@ void FileStore::Init() noexcept
 bool FileStore::Open(const char *_ecv_array filePath, OpenMode mode, uint32_t preAllocSize) noexcept
 {
 	const bool writing = (mode == OpenMode::write || mode == OpenMode::writeWithCrc || mode == OpenMode::append);
-#if HAS_EMBEDDED_FILES
+#if HAS_EMBEDDED_FILES || HAS_EMBEDDED_CONFIG
 # if HAS_SBC_INTERFACE
 	if (!reprap.UsingSbcInterface())
 # endif
@@ -74,7 +74,7 @@ bool FileStore::Open(const char *_ecv_array filePath, OpenMode mode, uint32_t pr
 				return true;
 			}
 		}
-
+#if !HAS_EMBEDDED_CONFIG
 		// We no longer report an error if opening a file in read mode fails unless debugging is enabled, because sometimes that is quite normal.
 		// It is up to the caller to report an error if necessary.
 		if (reprap.Debug(Module::Storage))
@@ -82,6 +82,7 @@ bool FileStore::Open(const char *_ecv_array filePath, OpenMode mode, uint32_t pr
 			reprap.GetPlatform().MessageF(WarningMessage, "Failed to open %s to %sn", filePath, (writing) ? "write" : "read");
 		}
 		return false;
+#endif
 	}
 #endif
 
@@ -273,6 +274,13 @@ bool FileStore::Seek(FilePosition pos) noexcept
 			return false;
 		}
 #endif
+#if HAS_EMBEDDED_CONFIG
+		if (fileIndex >= 0)
+		{
+			offset = min<FilePosition>(pos, EmbeddedFiles::Length(fileIndex));
+			return true;
+		}
+#endif
 #if HAS_MASS_STORAGE
 		return f_lseek(&file, pos) == FR_OK;
 #elif HAS_EMBEDDED_FILES
@@ -292,6 +300,12 @@ FilePosition FileStore::Position() const noexcept
 {
 #if HAS_SBC_INTERFACE
 	if (reprap.UsingSbcInterface())
+	{
+		return offset;
+	}
+#endif
+#if HAS_EMBEDDED_CONFIG
+	if (fileIndex >= 0)
 	{
 		return offset;
 	}
@@ -387,7 +401,7 @@ bool FileStore::Truncate() noexcept
 
 #endif
 
-#if HAS_MASS_STORAGE || HAS_SBC_INTERFACE || HAS_EMBEDDED_FILES
+#if HAS_MASS_STORAGE || HAS_SBC_INTERFACE || HAS_EMBEDDED_FILES || HAS_EMBEDDED_CONFIG
 
 // Returns the number of bytes read or -1 if the read process failed
 int FileStore::Read(char *_ecv_array extBuf, size_t nBytes) noexcept
@@ -409,6 +423,17 @@ int FileStore::Read(char *_ecv_array extBuf, size_t nBytes) noexcept
 				offset += bytesRead;
 			}
 			return bytesRead;
+		}
+#endif
+#if HAS_EMBEDDED_CONFIG
+		if (fileIndex >= 0)
+		{
+			const int ret = EmbeddedFiles::Read(fileIndex, offset, extBuf, nBytes);
+			if (ret > 0)
+			{
+				offset += ret;
+			}
+			return ret;
 		}
 #endif
 #if HAS_MASS_STORAGE
@@ -512,7 +537,7 @@ bool FileStore::ForceClose() noexcept
 	return ok && fr == FR_OK;
 #endif
 
-#if HAS_EMBEDDED_FILES
+#if HAS_EMBEDDED_FILES || HAS_EMBEDDED_CONFIG
 	usageMode = FileUseMode::free;
 	closeRequested = false;
 	openCount = 0;

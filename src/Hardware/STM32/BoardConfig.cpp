@@ -103,8 +103,10 @@ static constexpr size_t NumBoardEntries = ARRAY_SIZE(LPC_Boards);
 static PinEntry *PinTable;
 static size_t NumNamedLPCPins;
 char lpcBoardName[MaxBoardNameLength];
+static size_t currentBoardId;
 
-static constexpr char boardConfigFile[] = "board.txt";
+static constexpr char boardConfigFile[] = "0:/sys/board.txt";
+static constexpr char bootConfigFile[] = "0:/rrfboot.txt";
 
 //Single entry for Board name
 static const boardConfigEntry_t boardEntryConfig[]=
@@ -345,6 +347,7 @@ static bool SetBoard(const char* bn) noexcept
                 SafeStrncpy(lpcBoardName, bn, sizeof(lpcBoardName));
                 PinTable = (PinEntry *)LPC_Boards[i].boardPinTable;
                 NumNamedLPCPins = LPC_Boards[i].numNamedEntries;
+                currentBoardId = i;
                 ClearConfig();
                 //copy default settings
                 for(size_t j = 0; j < ARRAY_SIZE(SPIPins); j++)
@@ -702,6 +705,14 @@ static bool CheckPinConfig(uint32_t config) noexcept
 // an actual board configuration.
 static uint32_t IdentifyBoard() noexcept
 {
+    // First we look for a bootfile on the embeded file system
+    BoardConfig::LoadBoardConfigFromFile(bootConfigFile);
+    if (currentBoardId != UNKNOWN_BOARD)
+    {
+        debugPrintf("Found embedded config: board %d %s\n", currentBoardId, LPC_Boards[currentBoardId].boardName[0]);
+        return currentBoardId;
+    }
+
     // We use the CRC of part of the bootloader to id the board
     signature = crc32((char *)0x8000000, 8192);
     // Try to find a matching board we accept the first match
@@ -865,7 +876,7 @@ void BoardConfig::Init() noexcept
         // Device does not have an SD card
         SbcLoadConfig = true;
     }
-    else if (!BoardConfig::LoadBoardConfigFromFile())
+    else if (!BoardConfig::LoadBoardConfigFromFile(boardConfigFile))
     {
         // No SD card, or no board.txt
         MessageF(UsbMessage, "Warning: unable to load configuration from file\n");
@@ -896,7 +907,7 @@ void BoardConfig::Init() noexcept
 #else
     // Try and mount the sd card and read the board.txt file, error if not present
     sdChannel = InitSDCard(boardId, true, true);
-    if (!BoardConfig::LoadBoardConfigFromFile())
+    if (!BoardConfig::LoadBoardConfigFromFile(boardConfigFile))
     {
         // failed to load a valid configuration
         FatalError("Failed to load board configuration\n");
@@ -1453,16 +1464,16 @@ void BoardConfig::SetValueFromString(configValueType type, void *variable, char 
     }
 }
 
-bool BoardConfig::LoadBoardConfigFromFile() noexcept
+bool BoardConfig::LoadBoardConfigFromFile(const char *filePath) noexcept
 {
-    FileStore * const configFile = reprap.GetPlatform().OpenSysFile(boardConfigFile, OpenMode::read);        //Open File
+    FileStore * const configFile = MassStorage::OpenFile(filePath, OpenMode::read, 0);
     if (configFile == nullptr)
     {
-        MessageF(UsbMessage, "Configuration file %s not found\n", boardConfigFile );
+        MessageF(UsbMessage, "Configuration file %s not found\n", filePath );
         FlushMessages();
         return false;
     }
-    MessageF(UsbMessage, "Loading config from %s...\n", boardConfigFile );
+    MessageF(UsbMessage, "Loading config from %s...\n", filePath );
 
     //First find the board entry to load the correct PinTable for looking up Pin by name
     BoardConfig::GetConfigKeys(configFile, boardEntryConfig, (size_t) ARRAY_SIZE(boardEntryConfig));
@@ -1488,7 +1499,7 @@ bool BoardConfig::LoadBoardConfigFromSBC() noexcept
     if (!SbcLoadConfig) return false;
     InMemoryBoardConfiguration oldConfig, newConfig;
     oldConfig.getConfiguration();
-    BoardConfig::LoadBoardConfigFromFile();
+    BoardConfig::LoadBoardConfigFromFile(boardConfigFile);
 #if HAS_SMART_DRIVERS
     ConfigureDriveType();
 #endif       

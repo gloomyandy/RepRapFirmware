@@ -8,7 +8,7 @@
 
 #include "MassStorage.h"
 
-#if HAS_EMBEDDED_FILES
+#if HAS_EMBEDDED_FILES || HAS_EMBEDDED_CONFIG
 
 #include <Platform/Platform.h>
 #include <Platform/RepRap.h>
@@ -49,6 +49,7 @@ static const char *SkipDriveNumber(const char *path) noexcept
 	return (path[0] == '0' && path[1] == ':') ? path + 2 : path;
 }
 
+#if !HAS_EMBEDDED_CONFIG
 // Members of MassStorage that are replaced
 bool MassStorage::FileExists(const char *filePath) noexcept
 {
@@ -69,6 +70,7 @@ bool MassStorage::FileExists(const char *filePath) noexcept
 	}
 	return false;
 }
+#endif
 
 // Test whether a directory exists. Any trailing '/' has already been removed.
 bool EmbeddedFiles::DirectoryExists(const StringRef& dirPath) noexcept

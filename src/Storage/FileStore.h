@@ -16,7 +16,7 @@
 class Platform;
 class FileWriteBuffer;
 
-#if HAS_EMBEDDED_FILES
+#if HAS_EMBEDDED_FILES || HAS_EMBEDDED_CONFIG
 typedef int32_t FileIndex;
 #endif
 
@@ -120,11 +120,11 @@ private:
 	FilePosition length;
 #endif
 
-#if HAS_EMBEDDED_FILES
+#if HAS_EMBEDDED_FILES || HAS_EMBEDDED_CONFIG
 	FileIndex fileIndex;
 #endif
 
-#if HAS_EMBEDDED_FILES || HAS_SBC_INTERFACE
+#if HAS_EMBEDDED_FILES || HAS_SBC_INTERFACE || HAS_EMBEDDED_CONFIG
 	FilePosition offset;
 #endif
 
