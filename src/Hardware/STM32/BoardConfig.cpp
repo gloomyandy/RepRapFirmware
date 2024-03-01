@@ -103,6 +103,11 @@ static constexpr size_t NumBoardEntries = ARRAY_SIZE(LPC_Boards);
 static PinEntry *PinTable;
 static size_t NumNamedLPCPins;
 char lpcBoardName[MaxBoardNameLength];
+#if HAS_SBC_INTERFACE
+char iapFirmwareFile[MaxBoardNameLength*2] = SBC_IAP_FIRMWARE_FILE;
+#else
+char iapFirmwareFile[MaxBoardNameLength*2] = WIFI_IAP_FIRMWARE_FILE;
+#endif
 static size_t currentBoardId;
 
 static constexpr char boardConfigFile[] = "0:/sys/board.txt";
@@ -710,6 +715,12 @@ static uint32_t IdentifyBoard() noexcept
     if (currentBoardId != UNKNOWN_BOARD)
     {
         debugPrintf("Found embedded config: board %d %s\n", currentBoardId, LPC_Boards[currentBoardId].boardName[0]);
+        // we use the name configured here for the firmware file
+#if HAS_SBC_INTERFACE
+        SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware-%s-sbc.bin", lpcBoardName);
+#else
+        SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware-%s-wifi.bin", lpcBoardName);
+#endif
         return currentBoardId;
     }
 

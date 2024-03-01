@@ -120,6 +120,10 @@
 #define SUPPORT_PROBE_POINTS_FILE        1
 #define SUPPORT_KEEPOUT_ZONES            1
 #define HAS_EMBEDDED_CONFIG              1
+#define BOARD_NAME                       (lpcBoardName)
+#define BOARD_SHORT_NAME                 (lpcBoardName)
+#define IAP_FIRMWARE_FILE                (iapFirmwareFile)
+
 
 #if defined(ESP8266WIFI)
     #define HAS_RTOSPLUSTCP_NETWORKING   0
@@ -130,9 +134,6 @@
     #define SUPPORT_FTP                  1
     #define SUPPORT_ACCELEROMETERS       1
     #define HAS_WRITER_TASK              1
-    #define BOARD_NAME                   WIFI_BOARD_NAME
-    #define BOARD_SHORT_NAME             WIFI_BOARD_SHORT_NAME
-    #define IAP_FIRMWARE_FILE            WIFI_IAP_FIRMWARE_FILE
 
 #elif defined(LPC_SBC)
     #define HAS_RTOSPLUSTCP_NETWORKING   0
@@ -142,10 +143,6 @@
     #define SUPPORT_TELNET               0
     #define SUPPORT_ACCELEROMETERS       1
     #define HAS_WRITER_TASK              0
-
-    #define BOARD_NAME                   SBC_BOARD_NAME
-    #define BOARD_SHORT_NAME             SBC_BOARD_SHORT_NAME
-    #define IAP_FIRMWARE_FILE            SBC_IAP_FIRMWARE_FILE
 
 #else
     #error "Undfined build configuration"
@@ -416,6 +413,7 @@ const char *GetPinNames(LogicalPin lp) noexcept;
 
 constexpr size_t MaxBoardNameLength = 32;
 extern char lpcBoardName[MaxBoardNameLength];
+extern char iapFirmwareFile[MaxBoardNameLength*2];
 extern size_t totalSmartDrivers;
 extern size_t num5160SmartDrivers;
 

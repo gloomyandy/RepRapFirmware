@@ -2569,7 +2569,7 @@ bool RepRap::CheckFirmwareUpdatePrerequisites(const StringRef& reply, const Stri
 #endif
 			)
 	{
-		reply.printf("Firmware binary \"%s\" is not valid for this electronics", FIRMWARE_DIRECTORY IAP_FIRMWARE_FILE);
+		reply.printf("Firmware binary \"%s/%s\" is not valid for this electronics", FIRMWARE_DIRECTORY, IAP_FIRMWARE_FILE);
 		return false;
 	}
 #if !STM32
