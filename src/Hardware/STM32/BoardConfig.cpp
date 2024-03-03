@@ -38,7 +38,10 @@
 #if SUPPORT_TMC22xx || SUPPORT_DMA_NEOPIXEL
 # include "DMABitIO.h"
 #endif
-
+#if DUMP_DATA
+#undef HAS_SBC_INTERFACE
+#define HAS_SBC_INTERFACE 1
+#endif
 #include "Board.h"
 #include "Boards/BIQU_SKR.h"
 #include "Boards/FLY.h"
@@ -71,12 +74,12 @@ static constexpr BoardEntry LPC_Boards[] =
     {{"fly_openpnp_tool"},      PinTable_FLY_OPENPNP_TOOL,    ARRAY_SIZE(PinTable_FLY_OPENPNP_TOOL),    fly_openpnp_tool_Defaults},
     {{"biquskr_3_h723", "biquskr_3_ez_h723", "biquskr_3"},      PinTable_BTT_SKR_3,    ARRAY_SIZE(PinTable_BTT_SKR_3),    btt_skr_3_Defaults},
     {{"biqukraken_h723", "btt_kraken"},      PinTable_BTT_KRAKEN,    ARRAY_SIZE(PinTable_BTT_KRAKEN),    btt_kraken_Defaults},
-    {{"biquoctopuspro_V1.1_h723", "btt_octopuspro_V1.1"},      PinTable_BTT_OCTOPUSPRO_V1_1,    ARRAY_SIZE(PinTable_BTT_OCTOPUSPRO_V1_1),    btt_octopuspro_Defaults},
+    {{"biquoctopuspro_V1_1_h723", "btt_octopuspro_V1_1"},      PinTable_BTT_OCTOPUSPRO_V1_1,    ARRAY_SIZE(PinTable_BTT_OCTOPUSPRO_V1_1),    btt_octopuspro_Defaults},
     {{"fysetc_spider_king723"}, PinTable_FYSETC_SPIDER_KING407, ARRAY_SIZE(PinTable_FYSETC_SPIDER_KING407), fysetc_spider_king407_Defaults},
 # endif
 #else
-    {{"biquskrpro_1.1"},      PinTable_BIQU_SKR_PRO_v1_1,    ARRAY_SIZE(PinTable_BIQU_SKR_PRO_v1_1),    biquskr_pro_1_1_Defaults},
-    {{"biqugtr_1.0"},      PinTable_BIQU_GTR_v1_0,    ARRAY_SIZE(PinTable_BIQU_GTR_v1_0),    biqu_gtr_1_0_Defaults},
+    {{"biquskrpro_1_1"},      PinTable_BIQU_SKR_PRO_v1_1,    ARRAY_SIZE(PinTable_BIQU_SKR_PRO_v1_1),    biquskr_pro_1_1_Defaults},
+    {{"biqugtr_1_0"},      PinTable_BIQU_GTR_v1_0,    ARRAY_SIZE(PinTable_BIQU_GTR_v1_0),    biqu_gtr_1_0_Defaults},
     {{"fly_e3_pro"},      PinTable_FLY_E3_PRO,    ARRAY_SIZE(PinTable_FLY_E3_PRO),    fly_e3_pro_Defaults},
     {{"fly_e3_prov3"},      PinTable_FLY_E3_PROV3,    ARRAY_SIZE(PinTable_FLY_E3_PROV3),    fly_e3_prov3_Defaults},
     {{"fly_f407zg"},      PinTable_FLY_F407ZG,    ARRAY_SIZE(PinTable_FLY_F407ZG),    fly_f407zg_Defaults},
@@ -86,19 +89,23 @@ static constexpr BoardEntry LPC_Boards[] =
     {{"fly_super8"},      PinTable_FLY_SUPER8,    ARRAY_SIZE(PinTable_FLY_SUPER8),    fly_super8_Defaults},
 #if HAS_SBC_INTERFACE    
     {{"fly_gemini"},      PinTable_FLY_GEMINI,    ARRAY_SIZE(PinTable_FLY_GEMINI),    fly_gemini_Defaults},    
-    {{"fly_geminiv1.1"},      PinTable_FLY_GEMINI_V1_1,    ARRAY_SIZE(PinTable_FLY_GEMINI_V1_1),    fly_gemini_v1_1_Defaults},    
-    {{"fly_geminiv2.0"},      PinTable_FLY_GEMINI_V2_0,    ARRAY_SIZE(PinTable_FLY_GEMINI_V2_0),    fly_gemini_v2_0_Defaults},    
-    {{"fly_geminiv3.0"},      PinTable_FLY_GEMINI_V3_0,    ARRAY_SIZE(PinTable_FLY_GEMINI_V3_0),    fly_gemini_v3_0_Defaults},
+    {{"fly_geminiv1_1"},      PinTable_FLY_GEMINI_V1_1,    ARRAY_SIZE(PinTable_FLY_GEMINI_V1_1),    fly_gemini_v1_1_Defaults},    
+    {{"fly_geminiv2_0"},      PinTable_FLY_GEMINI_V2_0,    ARRAY_SIZE(PinTable_FLY_GEMINI_V2_0),    fly_gemini_v2_0_Defaults},    
+    {{"fly_geminiv3_0"},      PinTable_FLY_GEMINI_V3_0,    ARRAY_SIZE(PinTable_FLY_GEMINI_V3_0),    fly_gemini_v3_0_Defaults},
 #endif   
-    {{"biquskr_rrf_e3_1.1"},      PinTable_BTT_RRF_E3_v1_1,    ARRAY_SIZE(PinTable_BTT_RRF_E3_v1_1),    btt_rrf_e3_1_1_Defaults},
+    {{"biquskr_rrf_e3_1_1"},      PinTable_BTT_RRF_E3_v1_1,    ARRAY_SIZE(PinTable_BTT_RRF_E3_v1_1),    btt_rrf_e3_1_1_Defaults},
     {{"biquskr_2"}, PinTable_BTT_SKR_2, ARRAY_SIZE(PinTable_BTT_SKR_2), btt_skr_2_Defaults},
-    {{"biqoctopus_1.1", "biquoctopus_1.1"}, PinTable_BTT_OCTOPUS, ARRAY_SIZE(PinTable_BTT_OCTOPUS), btt_octopus_Defaults},
-    {{"biqoctopuspro_1.0", "biquoctopuspro_1.0"}, PinTable_BTT_OCTOPUSPRO, ARRAY_SIZE(PinTable_BTT_OCTOPUSPRO), btt_octopuspro_Defaults},
+    {{"biquoctopus_1_1", "biquoctopus_1_1"}, PinTable_BTT_OCTOPUS, ARRAY_SIZE(PinTable_BTT_OCTOPUS), btt_octopus_Defaults},
+    {{"biquoctopuspro_1_0", "biquoctopuspro_1_0"}, PinTable_BTT_OCTOPUSPRO, ARRAY_SIZE(PinTable_BTT_OCTOPUSPRO), btt_octopuspro_Defaults},
     {{"biquoctopus_x7", "troodon_v2"}, PinTable_BIQU_OCTOPUS_X7, ARRAY_SIZE(PinTable_BIQU_OCTOPUS_X7), biquoctopus_x7_Defaults},
     {{"fysetc_spider"}, PinTable_FYSETC_SPIDER, ARRAY_SIZE(PinTable_FYSETC_SPIDER), fysetc_spider_Defaults},
     {{"fysetc_spider_king407"}, PinTable_FYSETC_SPIDER_KING407, ARRAY_SIZE(PinTable_FYSETC_SPIDER_KING407), fysetc_spider_king407_Defaults},
 #endif
 };
+#if DUMP_DATA
+#undef HAS_SBC_INTERFACE
+#define HAS_SBC_INTERFACE 0
+#endif
 static constexpr size_t NumBoardEntries = ARRAY_SIZE(LPC_Boards);
 static PinEntry *PinTable;
 static size_t NumNamedLPCPins;
@@ -1061,6 +1068,79 @@ static void PrintBoards(MessageType mtype) noexcept
     }
 }
 
+#if DUMP_DATA
+static void DumpPin(Pin pin)
+{
+    if (pin == NoPin)
+        debugPrintf("NoPin");
+    else
+        debugPrintf("%c.%d", 'A' + (pin >> 4), (pin & 0xF));
+}
+
+static void DumpPins(const Pin *pins, uint32_t cnt)
+{
+    debugPrintf("{");
+    for(uint32_t p = 0; p < cnt; p++)
+    {
+        DumpPin(pins[p]);
+        if (p < cnt-1) debugPrintf(",");
+    }
+    debugPrintf("}\n");
+}
+
+static void DumpBoards() noexcept
+{
+    const size_t numBoards = ARRAY_SIZE(LPC_Boards);
+    for(size_t i=0; i<numBoards; i++)
+    {
+        for(size_t j=0; j < ARRAY_SIZE(LPC_Boards[0].boardName); j++)
+            if(LPC_Boards[i].boardName[j])
+            {
+                debugPrintf("%s\n", LPC_Boards[i].boardName[j]);
+                PinEntry * pt = (PinEntry *)LPC_Boards[i].boardPinTable;
+                uint32_t numPins = LPC_Boards[i].numNamedEntries;
+                debugPrintf("%d\n", numPins);
+                for(uint32_t p = 0; p < numPins; p++)
+                {
+                    char lower[32];
+                    char *lp = lower;
+                    for(const char *l = pt[p].names; *l; l++) *lp++ = tolower(*l);
+                    *lp++ = '\0';
+                    debugPrintf("%c.%d %s\n", 'A' + (pt[p].pin >> 4), (pt[p].pin & 0xF), lower);
+                }
+                debugPrintf("board=%s\n", LPC_Boards[i].boardName[j]);
+                const BoardDefaults *def = &LPC_Boards[i].defaults;
+                debugPrintf("sdcard.internal.type=%d\n", def->SDConfig);
+                for(uint32_t s = 0; s < NumSPIDevices; s++)
+                {
+                    debugPrintf("SPI%d.pins=", s);
+                    DumpPins(def->spiPins[s], NumSPIPins);
+                }
+                debugPrintf("stepper.powerEnablePin=");
+                DumpPin(def->stepperPowerEnablePin);
+                debugPrintf("\nstepper.numDrivers=%d\n", def->numDrivers);
+                debugPrintf("stepper.enablePins=");
+                DumpPins(def->enablePins, def->numDrivers);
+                debugPrintf("stepper.stepPins=");
+                DumpPins(def->stepPins, def->numDrivers);
+                debugPrintf("stepper.directionPins=");
+                DumpPins(def->dirPins, def->numDrivers);
+                debugPrintf("stepper.numSmartDrivers=%d\n", def->numSmartDrivers);
+                debugPrintf("stepper.TmcUartPins=");
+                DumpPins(def->uartPins, def->numSmartDrivers);
+                debugPrintf("power.VInDetectPin=");
+                DumpPin(def->vinDetectPin);
+                debugPrintf("\nsbc.TfrReadyPin=");
+                DumpPin(def->SbcTfrReadyPin);
+                debugPrintf("\nsbc.csPin=");
+                DumpPin(def->SbcCsPin);
+                debugPrintf("\nsbc.spiChannel=%d\n", def->SbcSpiChannel);
+                debugPrintf("XXENDXX\n");
+            }
+    }
+}
+#endif
+
 // Function to look up a pin name pass back the corresponding index into the pin table
 // On this platform, the mapping from pin names to pins is fixed, so this is a simple lookup
 bool LookupPinName(const char*pn, LogicalPin& lpin, bool& hardwareInverted) noexcept
@@ -1271,6 +1351,10 @@ extern uint32_t _nocache2_ram_end;
 //Information printed by M122 P200
 void BoardConfig::Diagnostics(MessageType mtype) noexcept
 {
+#if DUMP_DATA
+    DumpBoards();
+    return;
+#endif
     MessageF(mtype, "=== Diagnostics ===\n");
 #if HAS_SBC_INTERFACE
 	MessageF(mtype, "%s version %s running on %s (%s mode) at %dMhz\n", FIRMWARE_NAME, VERSION, reprap.GetPlatform().GetElectronicsString(),
