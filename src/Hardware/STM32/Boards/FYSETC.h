@@ -204,6 +204,11 @@ constexpr BoardDefaults fysetc_spider_king407_Defaults = {
         {PE_12, PE_13, PE_14},                  //SPI3
         {NoPin, NoPin, NoPin},                  //SPI4
         {NoPin, NoPin, NoPin},                  //SPI5
+#if STM32H723xx
+        {NoPin, NoPin, NoPin},                  //SPI6
+        {NoPin, NoPin, NoPin},                  //SPI7
+        {NoPin, NoPin, NoPin},                  //SPI8
+#endif
     },
 	  10,											// Number of drivers
     {PE_11, PG_10, PG_15, PD_5, PE_6,  PE_2,  PG_9,  PB_2,  PF_2, PG_5,},   //enablePins

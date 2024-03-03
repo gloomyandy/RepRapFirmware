@@ -1010,7 +1010,7 @@ constexpr BoardDefaults fly_gemini_v1_1_Defaults = {
 #endif
     NoPin,
 #if HAS_SBC_INTERFACE
-    PB_3, PB_12, SSP2,
+    PC_9, PB_12, SSP2,
 #endif
 };
 
@@ -1084,7 +1084,7 @@ constexpr BoardDefaults fly_gemini_v2_0_Defaults = {
 #endif
     NoPin,
 #if HAS_SBC_INTERFACE
-    PB_3, PB_12, SSP2,
+    PC_9, PB_12, SSP2,
 #endif
 };
 

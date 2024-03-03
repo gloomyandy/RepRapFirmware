@@ -301,6 +301,9 @@ constexpr BoardDefaults btt_octopuspro_Defaults = {
         {NoPin, NoPin, NoPin},                  //SPI3
         {PE_8, PE_9, PE_7},                     //SPI4 Accelerometer
         {PE_12, NoPin, PE_9},                   //SPI5 RepRapDiscount Display
+        {NoPin, NoPin, NoPin},                  //SPI6
+        {NoPin, NoPin, NoPin},                  //SPI7
+        {NoPin, NoPin, NoPin},                  //SPI8
     },
     8,                                          // Number of drivers
     {PF_14, PF_15, PG_5, PA_2, PG_2, PF_1, PD_4, PE_0}, // enablePins
