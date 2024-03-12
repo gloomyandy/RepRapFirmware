@@ -542,7 +542,7 @@ constexpr PinEntry PinTable_FLY_CDYV2[] =
     {PB_5, "MOTMOSI"},
 
     //Signal light   Neopixel
-    {PD_15, "status"},
+    {PD_15, "status,neopixel"},
 
     //Laser 
     {PB_9, "Laser"},
