@@ -55,7 +55,7 @@ public:
     
 private:
     BoardConfig()  noexcept;
-    static bool GetConfigKeys(FileStore * const configFile, const boardConfigEntry_t *boardConfigEntryArray, const size_t numConfigs) noexcept;
+    static bool GetConfigKeys(FileStore * const configFile) noexcept;
     static void SetValueFromString(configValueType type, void *variable, char *valuePtr) noexcept;
     static void PrintValue(MessageType mtype, configValueType configType, void *variable) noexcept;
 };

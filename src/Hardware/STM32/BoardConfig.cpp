@@ -149,8 +149,8 @@ static const boardConfigEntry_t boardConfigs[]=
     
 #if HAS_WIFI_NETWORKING
     {"8266wifi.espDataReadyPin", &EspDataReadyPin, 1, cvPinType},
-    {"8266wifi.lpcTfrReadyPin", &SamTfrReadyPin, 1, cvPinType},
     {"8266wifi.TfrReadyPin", &SamTfrReadyPin, 1, cvPinType},
+    {"8266wifi.lpcTfrReadyPin", &SamTfrReadyPin, 1, cvPinType},
     {"8266wifi.espResetPin", &EspResetPin, 1, cvPinType},
     {"8266wifi.csPin", &SamCsPin, 1, cvPinType},
     {"8266wifi.serialRxTxPins", &WifiSerialRxTxPins, NumberSerialPins, cvPinType},
@@ -201,7 +201,6 @@ static void ClearConfig() noexcept
     for(size_t i=0; i<numConfigs; i++)
     {
         boardConfigEntry_t next = boardConfigs[i];
-        debugPrintf("config item %d name %s\n", i, next.key);
         for(size_t p=0; p<(next.numItems); p++)
         {
             switch(next.type)
@@ -250,7 +249,6 @@ static void ClearConfig() noexcept
     DiagOnPolarity = true;
     ActOnPolarity = true;
     SmartDriversSpiChannel = SSPNONE;
-    debugPrintf("clear 1\n");
 #if HAS_WIFI_NETWORKING
     SamCsPin = PB_12;
     WiFiSpiChannel = SSP2;
@@ -263,7 +261,6 @@ static void ClearConfig() noexcept
     SbcCsPinConfig = PB_12;
     SbcSpiChannel = SSP2;
 #endif
-debugPrintf("clear 2\n");
 #if SUPPORT_SPICAN
     CanSpiFrequency = 15000000;
 #endif
@@ -278,7 +275,6 @@ debugPrintf("clear 2\n");
     AccelerometerSpiChannel = SSPNONE;
 #endif
     sdConfig = SD_UNKNOWN;
-    debugPrintf("clear 3\n");
 }
 
 
@@ -294,9 +290,7 @@ static void InitDiagPin()
 
 static bool LoadBoardDefaults() noexcept
 {
-    debugPrintf("Load board defaults\n");
     ClearConfig();
-    debugPrintf("after clear\n");
     // Load the configuration from the embedded file system
     if (BoardConfig::LoadBoardConfigFromFile(bootConfigFile))
     {
@@ -713,7 +707,6 @@ void BoardConfig::Init() noexcept
     }
     else if (!BoardConfig::LoadBoardConfigFromFile(boardConfigFile))
     {
-        debugPrintf("no config file\n");
         // No SD card, or no board.txt
         MessageF(UsbMessage, "Warning: unable to load configuration from file\n");
         // Enable loading of config from the SBC
@@ -721,19 +714,15 @@ void BoardConfig::Init() noexcept
     }
     if (SbcLoadConfig)
     {
-        debugPrintf("using SBC\n");
         MessageF(UsbMessage, "Using SBC based configuration files\n");
         // Check for a configuration stored in RAM (supplied by the SBC),
         // if found use it and override any config from the card
         InMemoryBoardConfiguration inMemoryConfig;
         inMemoryConfig.loadFromBackupRAM();
-        debugPrintf("After load\n");
         if (inMemoryConfig.isValid())
         {
-            debugPrintf("Got valid data\n");
             MessageF(UsbMessage, "Using RAM based configuration data\n");
             inMemoryConfig.setConfiguration();
-            debugPrintf("after set config\n");
             // Set SD config if we haven't already
             if (!MassStorage::IsDriveMounted(0))
                 sdChannel = InitSDCard(sdConfig, false, false);
@@ -888,7 +877,6 @@ bool LookupPinName(const char*pn, LogicalPin& lpin, bool& hardwareInverted) noex
         FatalError("Pins file not found\n");
         return false;
     }
-    debugPrintf("Lookup pin %s\n", pn);
     constexpr size_t maxLineLength = 120;
     char line[maxLineLength];
     while(configFile->ReadLine(line, maxLineLength) >= 0)
@@ -930,7 +918,6 @@ bool LookupPinName(const char*pn, LogicalPin& lpin, bool& hardwareInverted) noex
                 lpin = BoardConfig::StringToPin(line);
                 hardwareInverted = hwInverted;
                 configFile->Close();
-                debugPrintf("Match pin %s\n", line);
                 return true;
             }
             
@@ -946,7 +933,6 @@ bool LookupPinName(const char*pn, LogicalPin& lpin, bool& hardwareInverted) noex
         }
     }
     configFile->Close();
-    debugPrintf("No match\n");
     //pn did not match a label in the lookup table, so now
     //look up by classic port.pin format
     const Pin lpcPin = BoardConfig::StringToPin(pn);
@@ -968,7 +954,6 @@ const char *GetPinNames(LogicalPin lp) noexcept
         FatalError("Pins file not found\n");
         return NULL;
     }
-    debugPrintf("Lookup pin %c.%d", 'A' + (lp >> 4), (lp & 0xF));
     constexpr size_t maxLineLength = 120;
     char line[maxLineLength];
     while(configFile->ReadLine(line, maxLineLength) >= 0)
@@ -984,14 +969,12 @@ const char *GetPinNames(LogicalPin lp) noexcept
         }
         if (BoardConfig::StringToPin(line) == lp)
         {
-            debugPrintf("Found %s\n", q);
             configFile->Close();
             SafeStrncpy(name, q, sizeof(name));
             return name;
         }
     }
     configFile->Close();
-    debugPrintf("No found\n");
     // not found manufascture a name
     name[0] = 'A' + (lp >> 4);
     name[1] = '.';
@@ -1323,13 +1306,12 @@ void BoardConfig::SetValueFromString(configValueType type, void *variable, char 
             }
             break;
         default:
-            debugPrintf("Unhandled ValueType\n");
+            debugPrintf("Unhandled ValueType %d\n", (int)type);
     }
 }
 
 bool BoardConfig::LoadBoardConfigFromFile(const char *filePath) noexcept
 {
-    debugPrintf("load from file\n");
     FileStore * const configFile = MassStorage::OpenFile(filePath, OpenMode::read, 0);
     if (configFile == nullptr)
     {
@@ -1337,12 +1319,9 @@ bool BoardConfig::LoadBoardConfigFromFile(const char *filePath) noexcept
         FlushMessages();
         return false;
     }
-    debugPrintf("After open\n");
     MessageF(UsbMessage, "Loading config from %s...\n", filePath );
-    BoardConfig::GetConfigKeys(configFile, boardConfigs, (size_t) ARRAY_SIZE(boardConfigs));
-    debugPrintf("after load\n");
+    BoardConfig::GetConfigKeys(configFile);
     configFile->Close();
-    debugPrintf("after close\n");
     FlushMessages();
     return true;
 }
@@ -1350,27 +1329,22 @@ bool BoardConfig::LoadBoardConfigFromFile(const char *filePath) noexcept
 #if HAS_SBC_INTERFACE
 bool BoardConfig::LoadBoardConfigFromSBC() noexcept
 {
-    debugPrintf("Load sbc config from file\n");
     // Is this feature disabled?
     if (!SbcLoadConfig) return false;
     InMemoryBoardConfiguration oldConfig, newConfig;
     oldConfig.getConfiguration();
-    debugPrintf("about to load\n");
     LoadBoardDefaults();
     BoardConfig::LoadBoardConfigFromFile(boardConfigFile);
-    debugPrintf("After load\n");
 #if HAS_SMART_DRIVERS
     ConfigureDriveType();
 #endif       
     // SbcLoadConfig may have been reset force it back on
     SbcLoadConfig = true;
     newConfig.getConfiguration();
-    debugPrintf("after get config\n");
     if (oldConfig.isEqual(newConfig))
         MessageF(UsbMessage, "Configurations match\n");
     else
     {
-        debugPrintf("reboot to reload config\n");
         // store new config into memory that will survive a reboot
         newConfig.saveToBackupRAM();
         MessageF(UsbMessage, "Configurations do not match rebooting to load new settings\n");
@@ -1389,7 +1363,40 @@ void BoardConfig::InvalidateBoardConfiguration() noexcept
 }
 #endif
 
-bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigEntry_t *boardConfigEntryArray, const size_t numConfigs) noexcept
+static
+const boardConfigEntry_t* FindConfigKey(const char *key)
+{
+    const size_t numConfigs = ARRAY_SIZE(boardConfigs);
+    for(size_t i=0; i<numConfigs; i++)
+    {
+        if(StringEqualsIgnoreCase(key, boardConfigs[i].key))
+        {
+            return &boardConfigs[i];
+        }
+    }
+    return nullptr;
+}
+
+static
+size_t SkipWhitespace(size_t pos, const char *line, size_t len)
+{
+    while(pos < len && isSpaceOrTab(line[pos])) pos++; //eat leading whitespace
+    // if we hit a comment we skip to the end of the line
+    if (line[pos] == '/' || line[pos] == '#' || line[pos] == ';')
+    {
+        pos = len;
+    }
+    return pos;
+}
+
+static
+bool IsValidChar(char c)
+{
+    c = tolower(c);
+    return isalpha(c) || isdigit(c) || c == '.' || c == '_';
+}
+
+bool BoardConfig::GetConfigKeys(FileStore * const configFile) noexcept
 {
     constexpr size_t maxLineLength = 120;
     char line[maxLineLength];
@@ -1400,70 +1407,63 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
         //debugPrintf("ReadLine returns %d %s\n", readLen, line);
         size_t len = (size_t) readLen;
         size_t pos = 0;
-        while(pos < len && line[pos] != 0 && isSpaceOrTab(line[pos])) pos++; //eat leading whitespace
+        pos = SkipWhitespace(pos, line, len);
 
         if(pos < len){
 
             //check for comments
-            if(line[pos] == '/' || line[pos] == '#')
+            if(line[pos] == '/' || line[pos] == '#' || line[pos] == ';')
             {
                 //Comment - Skipping
             }
             else
             {
                 const char* key = line + pos;
-                while(pos < len && !isSpaceOrTab(line[pos]) && line[pos] != '=' && line[pos] != 0) pos++;
-                line[pos] = 0;// null terminate the string (now contains the "key")
-
-                pos++;
-
-                //eat whitespace and = if needed
-                while(pos < maxLineLength && line[pos] != 0 && (isSpaceOrTab(line[pos]) == true || line[pos] == '=') ) pos++; //skip spaces and =
-
-                //debugPrintf("Key: %s", key);
-
-                if(pos < len && line[pos] == '{')
+                // find the end of the key
+                while(pos < len && IsValidChar(line[pos])) pos++;
+                char* endKey = line + pos;
+                pos = SkipWhitespace(pos, line, len);
+                if (pos < len && line[pos] == '=')
                 {
-                    // { indicates the start of an array
-                    //debugPrintf(" { ");
-                    pos++; //skip the {
+                    // terminate the key
+                    *endKey = 0;
+                    // skip the '='
+                    pos++;
 
-                    //Array of Values:
-                    //TODO:: only Pin arrays are currently implemented
-                    
-                    //const size_t numConfigs = ARRAY_SIZE(boardConfigs);
-                    for(size_t i=0; i<numConfigs; i++)
+                    pos = SkipWhitespace(pos, line, len);
+
+                    //debugPrintf("Key: %s", key);
+
+                    if(pos < len && line[pos] == '{')
                     {
-                        boardConfigEntry_t next = boardConfigEntryArray[i];
-                        //Currently only handles Arrays of Pins
-                        
-                        
-                        if(next.numItems > 1 && (next.type == cvPinType || next.type == cvDriverType) && StringEqualsIgnoreCase(key, next.key))
+                        // { indicates the start of an array
+                        //debugPrintf(" { ");
+                        pos++; //skip the {
+
+                        //Array of Values:
+                        const boardConfigEntry_t* confEntry = FindConfigKey(key);
+                        if(confEntry != nullptr && confEntry->numItems > 1 && (confEntry->type == cvPinType || confEntry->type == cvDriverType))
                         {
                             //matched an entry in boardConfigEntryArray
 
                             //create a temp array to read into. Only copy the array entries into the final destination when we know the array is properly defined
-                            const size_t maxArraySize = next.numItems;
+                            const size_t maxArraySize = confEntry->numItems;
                             
                             //Pin Array Type
                             Pin readArray[maxArraySize];
                             DriverType readArrayDT[maxArraySize];
-                            //eat whitespace
-                            while(pos < maxLineLength && line[pos] != 0 && isSpaceOrTab(line[pos]) == true ) pos++;
 
+                            pos = SkipWhitespace(pos, line, len);
                             bool searching = true;
-
                             size_t arrIdx = 0;
 
                             //search for values in Array
                             while( searching )
                             {
-                                if(pos < maxLineLength)
+                                if(pos < len)
                                 {
-
-                                    while(pos < maxLineLength && (isSpaceOrTab(line[pos]) == true)) pos++; // eat whitespace
-
-                                    if(pos == maxLineLength)
+                                    pos = SkipWhitespace(pos, line, len);
+                                    if(pos >= len)
                                     {
                                         debugPrintf("Got to end of line before end of array, line must be longer than maxLineLength");
                                         searching = false;
@@ -1472,7 +1472,7 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
 
                                     bool closedSuccessfully = false;
                                     //check brace isnt closed
-                                    if(pos < maxLineLength && line[pos] == '}')
+                                    if(pos < len && line[pos] == '}')
                                     {
                                         closedSuccessfully = true;
                                         arrIdx--; // we got the closing brace before getting a value this round, decrement arrIdx
@@ -1492,25 +1492,20 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
                                         //should be at first char of value now
                                         char *valuePtr = line+pos;
 
-                                        //read until end condition - space,comma,}  or null / # ;
-                                        while(pos < maxLineLength && line[pos] != 0 && !isSpaceOrTab(line[pos]) && line[pos] != ',' && line[pos] != '}' && line[pos] != '/' && line[pos] != '#' && line[pos] != ';')
+                                        //read until end condition - space,comma,}
+                                        while(pos < len && IsValidChar(line[pos]))
                                         {
                                             line[pos] = tolower(line[pos]);
                                             pos++;
                                         }
+                                        char *endValue = line+pos;
                                         // Skip trailing whitespace
-                                        if (pos < maxLineLength && isSpaceOrTab(line[pos]))
-                                        {
-                                            // make sure we do not include trailing whitespace in string
-                                            line[pos++] = 0; // null terminate the string
-                                            while (pos < maxLineLength && isSpaceOrTab(line[pos]))
-                                                pos++;
-                                        }
+                                        pos = SkipWhitespace(pos, line, len);
 
                                         // make sure we ended on a valid character
-                                        if(pos >= maxLineLength || (line[pos] != '}' && line[pos] != ','))
+                                        if(pos >= len || (line[pos] != '}' && line[pos] != ','))
                                         {
-                                            debugPrintf("Error: Array ended without Closing Brace?\n");
+                                            debugPrintf("Error: invalid array\n");
                                             searching = false;
                                             break;
                                         }
@@ -1521,14 +1516,14 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
                                             closedSuccessfully = true;
                                         }
 
-                                        line[pos] = 0; // null terminate the string
+                                        *endValue = 0; // null terminate the string
 
                                         //debugPrintf("%s ", valuePtr);
 
                                         //Put into the Temp Array
                                         if(arrIdx >= 0 && arrIdx<maxArraySize)
                                         {
-                                            switch(next.type)
+                                            switch(confEntry->type)
                                             {
                                                 case cvPinType:
                                                     readArray[arrIdx] = LookupPin(valuePtr);
@@ -1552,13 +1547,13 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
                                             //dest array may be larger, dont overrite the default values
                                             for(size_t i=0; i<(arrIdx+1); i++ )
                                             {
-                                                switch(next.type)
+                                                switch(confEntry->type)
                                                 {
                                                     case cvPinType:
-                                                        ((Pin *)(next.variable))[i] = readArray[i];
+                                                        ((Pin *)(confEntry->variable))[i] = readArray[i];
                                                         break;
                                                     case cvDriverType:
-                                                        ((DriverType *)(next.variable))[i] = readArrayDT[i];
+                                                        ((DriverType *)(confEntry->variable))[i] = readArrayDT[i];
                                                         break;
                                                     default:
                                                         break;
@@ -1584,37 +1579,43 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile, const boardConfigE
                                 }
                             }//end while(searching)
                         }//end if matched key
-                    }//end for
-
-                }
-                else
-                {
-                    //single value
-                    if(pos < maxLineLength && line[pos] != 0)
-                    {
-                        //should be at first char of value now
-                        char *valuePtr = line+pos;
-
-                        //read until end condition - space, ;, comment, null,etc
-                        while(pos < maxLineLength && line[pos] != 0 && !isSpaceOrTab(line[pos]) && line[pos] != ';' && line[pos] != '/') pos++;
-
-                        //overrite the end condition with null....
-                        line[pos] = 0; // null terminate the string (the "value")
-                        //debugPrintf(" value is %s\n", valuePtr);
-                        //Find the entry in boardConfigEntryArray using the key
-                        //const size_t numConfigs = ARRAY_SIZE(boardConfigs);
-                        for(size_t i=0; i<numConfigs; i++)
+                        else
                         {
-                            boardConfigEntry_t next = boardConfigEntryArray[i];
+                            debugPrintf("Key not found or wrong type %s\n", key);
+                        }
+                    }
+                    else
+                    {
+                        //single value
+                        if(pos < len)
+                        {
+                            //should be at first char of value now
+                            char *valuePtr = line+pos;
+
+                            //read until end condition - space, ;, comment, null,etc
+                            while(pos < len && IsValidChar(line[pos])) pos++;
+
+                            //overrite the end condition with null....
+                            line[pos] = 0; // null terminate the string (the "value")
+                            //debugPrintf(" value is %s\n", valuePtr);
+                            const boardConfigEntry_t* confEntry = FindConfigKey(key);
                             //Single Value config entries have 1 for numItems
-                            if(next.numItems == 1 && StringEqualsIgnoreCase(key, next.key))
+                            if(confEntry != nullptr && confEntry->numItems == 1)
                             {
                                 //debugPrintf("Setting value\n");
                                 //match
-                                BoardConfig::SetValueFromString(next.type, next.variable, valuePtr);
+                                BoardConfig::SetValueFromString(confEntry->type, confEntry->variable, valuePtr);
+                            }
+                            else
+                            {
+                                debugPrintf("Key not found or wrong type %s\n", key);
                             }
                         }
                     }
+                }
+                else
+                {
+                    debugPrintf("Missing equals %s\n", line);
                 }
             }
         }
