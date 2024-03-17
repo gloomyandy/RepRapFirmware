@@ -46,7 +46,7 @@ public:
     static void Diagnostics(MessageType mtype) noexcept;
     static Pin StringToPin(const char *strvalue) noexcept;
     static Pin LookupPin(char *strvalue) noexcept;
-    static bool LoadBoardConfigFromFile(const char *filePath) noexcept;
+    static bool LoadBoardConfigFromFile(const char *filePath, bool restricted = true) noexcept;
 
 #if HAS_SBC_INTERFACE
     static bool LoadBoardConfigFromSBC() noexcept;

@@ -156,6 +156,13 @@ static const boardConfigEntry_t boardConfigs[]=
     {"8266wifi.serialRxTxPins", &WifiSerialRxTxPins, NumberSerialPins, cvPinType},
     {"8266wifi.spiChannel", &WiFiSpiChannel, 1, cvUint8Type},    
     {"8266wifi.clockReg", &WiFiClockReg, 1, cvUint32Type},
+    {"wifi.espDataReadyPin", &EspDataReadyPin, 1, cvPinType},
+    {"wifi.TfrReadyPin", &SamTfrReadyPin, 1, cvPinType},
+    {"wifi.espResetPin", &EspResetPin, 1, cvPinType},
+    {"wifi.csPin", &SamCsPin, 1, cvPinType},
+    {"wifi.serialRxTxPins", &WifiSerialRxTxPins, NumberSerialPins, cvPinType},
+    {"wifi.spiChannel", &WiFiSpiChannel, 1, cvUint8Type},    
+    {"wifi.clockReg", &WiFiClockReg, 1, cvUint32Type},
 #endif
 
 #if HAS_SBC_INTERFACE
@@ -292,7 +299,7 @@ static bool LoadBoardDefaults() noexcept
 {
     ClearConfig();
     // Load the configuration from the embedded file system
-    if (BoardConfig::LoadBoardConfigFromFile(bootConfigFile))
+    if (BoardConfig::LoadBoardConfigFromFile(bootConfigFile, false))
     {
         debugPrintf("Found embedded config: board %s\n", BoardName);
         // we use the name configured here for the firmware file
@@ -1310,7 +1317,7 @@ void BoardConfig::SetValueFromString(configValueType type, void *variable, char 
     }
 }
 
-bool BoardConfig::LoadBoardConfigFromFile(const char *filePath) noexcept
+bool BoardConfig::LoadBoardConfigFromFile(const char *filePath, bool restricted) noexcept
 {
     FileStore * const configFile = MassStorage::OpenFile(filePath, OpenMode::read, 0);
     if (configFile == nullptr)
@@ -1320,7 +1327,14 @@ bool BoardConfig::LoadBoardConfigFromFile(const char *filePath) noexcept
         return false;
     }
     MessageF(UsbMessage, "Loading config from %s...\n", filePath );
+    char savedBoardName[MaxBoardNameLength];
+    memcpy(savedBoardName, BoardName, MaxBoardNameLength);
     BoardConfig::GetConfigKeys(configFile);
+    if (restricted)
+    {
+        // Don't allow changes to the board name
+        memcpy(BoardName, savedBoardName, MaxBoardNameLength);
+    }
     configFile->Close();
     FlushMessages();
     return true;
