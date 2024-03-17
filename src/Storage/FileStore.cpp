@@ -59,7 +59,7 @@ bool FileStore::Open(const char *_ecv_array filePath, OpenMode mode, uint32_t pr
 {
 	const bool writing = (mode == OpenMode::write || mode == OpenMode::writeWithCrc || mode == OpenMode::append);
 #if HAS_EMBEDDED_FILES || HAS_EMBEDDED_CONFIG
-# if HAS_SBC_INTERFACE
+# if HAS_SBC_INTERFACE && !HAS_EMBEDDED_CONFIG
 	if (!reprap.UsingSbcInterface())
 # endif
 	{
@@ -263,6 +263,13 @@ bool FileStore::Seek(FilePosition pos) noexcept
 
 	case FileUseMode::readOnly:
 	case FileUseMode::readWrite:
+#if HAS_EMBEDDED_CONFIG
+		if (fileIndex >= 0)
+		{
+			offset = min<FilePosition>(pos, EmbeddedFiles::Length(fileIndex));
+			return true;
+		}
+#endif
 #if HAS_SBC_INTERFACE
 		if (reprap.UsingSbcInterface())
 		{
@@ -272,13 +279,6 @@ bool FileStore::Seek(FilePosition pos) noexcept
 				return true;
 			}
 			return false;
-		}
-#endif
-#if HAS_EMBEDDED_CONFIG
-		if (fileIndex >= 0)
-		{
-			offset = min<FilePosition>(pos, EmbeddedFiles::Length(fileIndex));
-			return true;
 		}
 #endif
 #if HAS_MASS_STORAGE
@@ -298,14 +298,14 @@ bool FileStore::Seek(FilePosition pos) noexcept
 
 FilePosition FileStore::Position() const noexcept
 {
-#if HAS_SBC_INTERFACE
-	if (reprap.UsingSbcInterface())
+#if HAS_EMBEDDED_CONFIG
+	if (fileIndex >= 0)
 	{
 		return offset;
 	}
 #endif
-#if HAS_EMBEDDED_CONFIG
-	if (fileIndex >= 0)
+#if HAS_SBC_INTERFACE
+	if (reprap.UsingSbcInterface())
 	{
 		return offset;
 	}
@@ -414,17 +414,6 @@ int FileStore::Read(char *_ecv_array extBuf, size_t nBytes) noexcept
 
 	case FileUseMode::readOnly:
 	case FileUseMode::readWrite:
-#if HAS_SBC_INTERFACE
-		if (reprap.UsingSbcInterface())
-		{
-			int bytesRead = reprap.GetSbcInterface().ReadFile(handle, extBuf, nBytes);
-			if (bytesRead > 0)
-			{
-				offset += bytesRead;
-			}
-			return bytesRead;
-		}
-#endif
 #if HAS_EMBEDDED_CONFIG
 		if (fileIndex >= 0)
 		{
@@ -434,6 +423,17 @@ int FileStore::Read(char *_ecv_array extBuf, size_t nBytes) noexcept
 				offset += ret;
 			}
 			return ret;
+		}
+#endif
+#if HAS_SBC_INTERFACE
+		if (reprap.UsingSbcInterface())
+		{
+			int bytesRead = reprap.GetSbcInterface().ReadFile(handle, extBuf, nBytes);
+			if (bytesRead > 0)
+			{
+				offset += bytesRead;
+			}
+			return bytesRead;
 		}
 #endif
 #if HAS_MASS_STORAGE
@@ -517,6 +517,17 @@ bool FileStore::ForceClose() noexcept
 	}
 #endif
 
+#if HAS_EMBEDDED_CONFIG
+	if (fileIndex >= 0)
+	{
+		usageMode = FileUseMode::free;
+		closeRequested = false;
+		openCount = 0;
+		fileIndex = -1;
+		return true;
+	}
+#endif
+
 #if HAS_SBC_INTERFACE
 	if (reprap.UsingSbcInterface())
 	{
@@ -537,7 +548,7 @@ bool FileStore::ForceClose() noexcept
 	return ok && fr == FR_OK;
 #endif
 
-#if HAS_EMBEDDED_FILES || HAS_EMBEDDED_CONFIG
+#if HAS_EMBEDDED_FILES
 	usageMode = FileUseMode::free;
 	closeRequested = false;
 	openCount = 0;

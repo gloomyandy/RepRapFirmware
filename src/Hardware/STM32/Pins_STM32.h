@@ -120,8 +120,8 @@
 #define SUPPORT_PROBE_POINTS_FILE        1
 #define SUPPORT_KEEPOUT_ZONES            1
 #define HAS_EMBEDDED_CONFIG              1
-#define BOARD_NAME                       (lpcBoardName)
-#define BOARD_SHORT_NAME                 (lpcBoardName)
+#define BOARD_NAME                       (BoardName)
+#define BOARD_SHORT_NAME                 (BoardName)
 #define IAP_FIRMWARE_FILE                (iapFirmwareFile)
 
 
@@ -412,7 +412,7 @@ bool LookupPinName(const char *pn, LogicalPin& lpin, bool& hardwareInverted) noe
 const char *GetPinNames(LogicalPin lp) noexcept;
 
 constexpr size_t MaxBoardNameLength = 32;
-extern char lpcBoardName[MaxBoardNameLength];
+extern char BoardName[MaxBoardNameLength];
 extern char iapFirmwareFile[MaxBoardNameLength*2];
 extern size_t totalSmartDrivers;
 extern size_t num5160SmartDrivers;

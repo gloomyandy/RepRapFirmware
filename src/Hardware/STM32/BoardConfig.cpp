@@ -38,15 +38,6 @@
 #if SUPPORT_TMC22xx || SUPPORT_DMA_NEOPIXEL
 # include "DMABitIO.h"
 #endif
-#if DUMP_DATA
-#undef HAS_SBC_INTERFACE
-#define HAS_SBC_INTERFACE 1
-#endif
-#include "Board.h"
-#include "Boards/BIQU_SKR.h"
-#include "Boards/FLY.h"
-#include "Boards/FYSETC.h"
-#include "Boards/Generic.h"
 #ifdef TEST_CACHE
 extern uint32_t _nocache_ram_start;
 extern uint32_t _nocache_ram_end;
@@ -57,78 +48,34 @@ extern uint32_t _nocache2_ram_end;
 #include <Cache.h>
 #endif
 
-//Known boards with built in stepper configurations and pin table
-// Note the generic entry must be the first entry in the table.
-static constexpr BoardEntry LPC_Boards[] =
-{
-    {{"generic"},      PinTable_Generic,    ARRAY_SIZE(PinTable_Generic),    Generic_Defaults},
-#if STM32H7
-# if STM32H743xx
-    {{"fly_super5"},      PinTable_FLY_SUPER5,    ARRAY_SIZE(PinTable_FLY_SUPER5),    fly_super5_Defaults},
-    {{"fly_super8_pro", "fly_super8h7"},      PinTable_FLY_SUPER8H7,    ARRAY_SIZE(PinTable_FLY_SUPER8H7),    fly_super8h7_Defaults},
-    {{"biquskr_se_bx_2.0"},      PinTable_BIQU_SKR_SE_BX_v2_0,    ARRAY_SIZE(PinTable_BIQU_SKR_SE_BX_v2_0),    biqu_skr_se_bx_v2_0_Defaults},
-    {{"biquskr_3", "biquskr_3_ez"},      PinTable_BTT_SKR_3,    ARRAY_SIZE(PinTable_BTT_SKR_3),    btt_skr_3_Defaults},
-# elif STM32H723xx
-    {{"fly_super5_h723"},      PinTable_FLY_SUPER5,    ARRAY_SIZE(PinTable_FLY_SUPER5),    fly_super5_Defaults},
-    {{"fly_super8_pro_h723"},      PinTable_FLY_SUPER8H7,    ARRAY_SIZE(PinTable_FLY_SUPER8H7),    fly_super8h7_Defaults},
-    {{"fly_openpnp_tool"},      PinTable_FLY_OPENPNP_TOOL,    ARRAY_SIZE(PinTable_FLY_OPENPNP_TOOL),    fly_openpnp_tool_Defaults},
-    {{"biquskr_3_h723", "biquskr_3_ez_h723", "biquskr_3"},      PinTable_BTT_SKR_3,    ARRAY_SIZE(PinTable_BTT_SKR_3),    btt_skr_3_Defaults},
-    {{"biqukraken_h723", "btt_kraken"},      PinTable_BTT_KRAKEN,    ARRAY_SIZE(PinTable_BTT_KRAKEN),    btt_kraken_Defaults},
-    {{"biquoctopuspro_V1_1_h723", "btt_octopuspro_V1_1"},      PinTable_BTT_OCTOPUSPRO_V1_1,    ARRAY_SIZE(PinTable_BTT_OCTOPUSPRO_V1_1),    btt_octopuspro_Defaults},
-    {{"fysetc_spider_king723"}, PinTable_FYSETC_SPIDER_KING407, ARRAY_SIZE(PinTable_FYSETC_SPIDER_KING407), fysetc_spider_king407_Defaults},
-# endif
-#else
-    {{"biquskrpro_1_1"},      PinTable_BIQU_SKR_PRO_v1_1,    ARRAY_SIZE(PinTable_BIQU_SKR_PRO_v1_1),    biquskr_pro_1_1_Defaults},
-    {{"biqugtr_1_0"},      PinTable_BIQU_GTR_v1_0,    ARRAY_SIZE(PinTable_BIQU_GTR_v1_0),    biqu_gtr_1_0_Defaults},
-    {{"fly_e3_pro"},      PinTable_FLY_E3_PRO,    ARRAY_SIZE(PinTable_FLY_E3_PRO),    fly_e3_pro_Defaults},
-    {{"fly_e3_prov3"},      PinTable_FLY_E3_PROV3,    ARRAY_SIZE(PinTable_FLY_E3_PROV3),    fly_e3_prov3_Defaults},
-    {{"fly_f407zg"},      PinTable_FLY_F407ZG,    ARRAY_SIZE(PinTable_FLY_F407ZG),    fly_f407zg_Defaults},
-    {{"fly_e3"},      PinTable_FLY_E3,    ARRAY_SIZE(PinTable_FLY_E3),    fly_e3_Defaults},
-    {{"fly_e3_v2"},      PinTable_FLY_E3_V2,    ARRAY_SIZE(PinTable_FLY_E3_V2),    fly_e3_v2_Defaults},
-    {{"fly_cdyv2", "fly_cdyv3"},      PinTable_FLY_CDYV2,    ARRAY_SIZE(PinTable_FLY_CDYV2),    fly_cdyv2_Defaults},
-    {{"fly_super8"},      PinTable_FLY_SUPER8,    ARRAY_SIZE(PinTable_FLY_SUPER8),    fly_super8_Defaults},
-#if HAS_SBC_INTERFACE    
-    {{"fly_gemini"},      PinTable_FLY_GEMINI,    ARRAY_SIZE(PinTable_FLY_GEMINI),    fly_gemini_Defaults},    
-    {{"fly_geminiv1_1"},      PinTable_FLY_GEMINI_V1_1,    ARRAY_SIZE(PinTable_FLY_GEMINI_V1_1),    fly_gemini_v1_1_Defaults},    
-    {{"fly_geminiv2_0"},      PinTable_FLY_GEMINI_V2_0,    ARRAY_SIZE(PinTable_FLY_GEMINI_V2_0),    fly_gemini_v2_0_Defaults},    
-    {{"fly_geminiv3_0"},      PinTable_FLY_GEMINI_V3_0,    ARRAY_SIZE(PinTable_FLY_GEMINI_V3_0),    fly_gemini_v3_0_Defaults},
-#endif   
-    {{"biquskr_rrf_e3_1_1"},      PinTable_BTT_RRF_E3_v1_1,    ARRAY_SIZE(PinTable_BTT_RRF_E3_v1_1),    btt_rrf_e3_1_1_Defaults},
-    {{"biquskr_2"}, PinTable_BTT_SKR_2, ARRAY_SIZE(PinTable_BTT_SKR_2), btt_skr_2_Defaults},
-    {{"biquoctopus_1_1", "biquoctopus_1_1"}, PinTable_BTT_OCTOPUS, ARRAY_SIZE(PinTable_BTT_OCTOPUS), btt_octopus_Defaults},
-    {{"biquoctopuspro_1_0", "biquoctopuspro_1_0"}, PinTable_BTT_OCTOPUSPRO, ARRAY_SIZE(PinTable_BTT_OCTOPUSPRO), btt_octopuspro_Defaults},
-    {{"biquoctopus_x7", "troodon_v2"}, PinTable_BIQU_OCTOPUS_X7, ARRAY_SIZE(PinTable_BIQU_OCTOPUS_X7), biquoctopus_x7_Defaults},
-    {{"fysetc_spider"}, PinTable_FYSETC_SPIDER, ARRAY_SIZE(PinTable_FYSETC_SPIDER), fysetc_spider_Defaults},
-    {{"fysetc_spider_king407"}, PinTable_FYSETC_SPIDER_KING407, ARRAY_SIZE(PinTable_FYSETC_SPIDER_KING407), fysetc_spider_king407_Defaults},
-#endif
-};
-#if DUMP_DATA
-#undef HAS_SBC_INTERFACE
-#define HAS_SBC_INTERFACE 0
-#endif
-static constexpr size_t NumBoardEntries = ARRAY_SIZE(LPC_Boards);
-static PinEntry *PinTable;
-static size_t NumNamedLPCPins;
-char lpcBoardName[MaxBoardNameLength];
+
+char BoardName[MaxBoardNameLength];
 #if HAS_SBC_INTERFACE
 char iapFirmwareFile[MaxBoardNameLength*2] = SBC_IAP_FIRMWARE_FILE;
 #else
 char iapFirmwareFile[MaxBoardNameLength*2] = WIFI_IAP_FIRMWARE_FILE;
 #endif
-static size_t currentBoardId;
+typedef enum {
+    SD_SPI1_A,
+    SD_SPI1_B,
+    SD_SDIO,
+    SD_SPI3_A,
+    SD_SPI3_B,
+    SD_SPI2_A,
+    SD_UNKNOWN = 0xfe,
+    SD_NONE = 0xff
+} SDConfigs;
+
+SDConfigs sdConfig = SD_UNKNOWN;
 
 static constexpr char boardConfigFile[] = "0:/sys/board.txt";
 static constexpr char bootConfigFile[] = "0:/rrfboot.txt";
-
-//Single entry for Board name
-static const boardConfigEntry_t boardEntryConfig[]=
-{
-    {"board", &lpcBoardName, 1, cvStringType},
-};
+static constexpr char pinsConfigFile[] = "0:/rrfpins.txt";
 
 //All other board configs
 static const boardConfigEntry_t boardConfigs[]=
 {
+    {"board", &BoardName, 1, cvStringType},
     {"leds.diagnostic", &DiagPin, 1, cvPinType},
     {"leds.diagnosticOn", &DiagOnPolarity, 1, cvBoolType},
     {"leds.activity", &ActLedPin, 1, cvPinType},
@@ -139,6 +86,7 @@ static const boardConfigEntry_t boardConfigs[]=
     {"pins.SetLow", PinsSetLow, MaxInitialPins, cvPinType},
 
     //Steppers
+    {"stepper.numDrivers", &totalSmartDrivers, 1, cvUint32Type},
     {"stepper.powerEnablePin", &StepperPowerEnablePin, 1, cvPinType},
     {"stepper.enablePins", ENABLE_PINS, NumDirectDrivers, cvPinType},
     {"stepper.stepPins", STEP_PINS, NumDirectDrivers, cvPinType},
@@ -169,6 +117,7 @@ static const boardConfigEntry_t boardConfigs[]=
     {"atx.initialPowerOn", &ATX_INITIAL_POWER_ON, 1, cvBoolType},
 
     //SDCards
+    {"sdcard.internal.type", &sdConfig, 1, cvUint32Type},
     {"sdCard.internal.spiFrequencyHz", &InternalSDCardFrequency, 1, cvUint32Type},
     {"sdCard.external.csPin", &SdSpiCSPins[1], 1, cvPinType},
     {"sdCard.external.cardDetectPin", &SdCardDetectPins[1], 1, cvPinType},
@@ -246,22 +195,13 @@ static const boardConfigEntry_t boardConfigs[]=
 };
 
 
-// Copy the default src pin array to dst array
-static void SetDefaultPinArray(const Pin *src, Pin *dst, size_t len) noexcept
-{
-    //array is empty from board.txt config, set to defaults
-    for(size_t i=0; i<len; i++)
-    {
-        dst[i] = src[i];
-    }
-}
-
 static void ClearConfig() noexcept
 {
     const size_t numConfigs = ARRAY_SIZE(boardConfigs);
     for(size_t i=0; i<numConfigs; i++)
     {
         boardConfigEntry_t next = boardConfigs[i];
+        debugPrintf("config item %d name %s\n", i, next.key);
         for(size_t p=0; p<(next.numItems); p++)
         {
             switch(next.type)
@@ -288,7 +228,7 @@ static void ClearConfig() noexcept
                     ((uint32_t *)(next.variable))[p] = 0;
                     break;
                 case cvStringType:
-                    strcpy(((char **)(next.variable))[p], "");
+                    strcpy((char *)(next.variable), "");
                     break;
                 default:
                     break;
@@ -310,6 +250,7 @@ static void ClearConfig() noexcept
     DiagOnPolarity = true;
     ActOnPolarity = true;
     SmartDriversSpiChannel = SSPNONE;
+    debugPrintf("clear 1\n");
 #if HAS_WIFI_NETWORKING
     SamCsPin = PB_12;
     WiFiSpiChannel = SSP2;
@@ -322,6 +263,7 @@ static void ClearConfig() noexcept
     SbcCsPinConfig = PB_12;
     SbcSpiChannel = SSP2;
 #endif
+debugPrintf("clear 2\n");
 #if SUPPORT_SPICAN
     CanSpiFrequency = 15000000;
 #endif
@@ -335,7 +277,10 @@ static void ClearConfig() noexcept
 #if SUPPORT_ACCELEROMETERS
     AccelerometerSpiChannel = SSPNONE;
 #endif
+    sdConfig = SD_UNKNOWN;
+    debugPrintf("clear 3\n");
 }
+
 
 static void InitDiagPin()
 {
@@ -347,46 +292,27 @@ static void InitDiagPin()
     }
 }
 
-//Find Board settings from string
-static bool SetBoard(const char* bn) noexcept
+static bool LoadBoardDefaults() noexcept
 {
-    const size_t numBoards = ARRAY_SIZE(LPC_Boards);
-    for(size_t i=0; i<numBoards; i++)
+    debugPrintf("Load board defaults\n");
+    ClearConfig();
+    debugPrintf("after clear\n");
+    // Load the configuration from the embedded file system
+    if (BoardConfig::LoadBoardConfigFromFile(bootConfigFile))
     {
-        for(size_t j=0; j < ARRAY_SIZE(LPC_Boards[0].boardName); j++)
-            if(LPC_Boards[i].boardName[j] && StringEqualsIgnoreCase(bn, LPC_Boards[i].boardName[j]))
-            {
-                SafeStrncpy(lpcBoardName, bn, sizeof(lpcBoardName));
-                PinTable = (PinEntry *)LPC_Boards[i].boardPinTable;
-                NumNamedLPCPins = LPC_Boards[i].numNamedEntries;
-                currentBoardId = i;
-                ClearConfig();
-                //copy default settings
-                for(size_t j = 0; j < ARRAY_SIZE(SPIPins); j++)
-                    SetDefaultPinArray(LPC_Boards[i].defaults.spiPins[j], SPIPins[j], NumSPIPins);
-                SetDefaultPinArray(LPC_Boards[i].defaults.enablePins, ENABLE_PINS, LPC_Boards[i].defaults.numDrivers);
-                SetDefaultPinArray(LPC_Boards[i].defaults.stepPins, STEP_PINS, LPC_Boards[i].defaults.numDrivers);
-                SetDefaultPinArray(LPC_Boards[i].defaults.dirPins, DIRECTION_PINS, LPC_Boards[i].defaults.numDrivers);
-#if HAS_SMART_DRIVERS
-                SetDefaultPinArray(LPC_Boards[i].defaults.uartPins, TMC_PINS, LPC_Boards[i].defaults.numDrivers);
-                totalSmartDrivers = LPC_Boards[i].defaults.numSmartDrivers;
-#endif
-                digipotFactor = LPC_Boards[i].defaults.digipotFactor;
-#if HAS_VOLTAGE_MONITOR
-                PowerMonitorVinDetectPin = LPC_Boards[i].defaults.vinDetectPin;
-#endif
-                StepperPowerEnablePin = LPC_Boards[i].defaults.stepperPowerEnablePin;
+        debugPrintf("Found embedded config: board %s\n", BoardName);
+        // we use the name configured here for the firmware file
 #if HAS_SBC_INTERFACE
-                SbcTfrReadyPinConfig = LPC_Boards[i].defaults.SbcTfrReadyPin;
-                SbcCsPinConfig = LPC_Boards[i].defaults.SbcCsPin;
-                SbcSpiChannel = LPC_Boards[i].defaults.SbcSpiChannel;
+        SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware-%s-sbc.bin", BoardName);
+#else
+        SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware-%s-wifi.bin", BoardName);
 #endif
-                InitDiagPin();
-                return true;
-            }
+        InitDiagPin();
+        return true;
     }
     return false;
 }
+
 
 uint32_t crc32_for_byte(uint32_t r) 
 {
@@ -439,9 +365,6 @@ void InMemoryBoardConfiguration::setConfiguration() noexcept
 {
     if (!isValid()) debugPrintf("Warning: Setting configuration from invalid memory\n");
     uint8_t *pmem = data;
-    memcpy(lpcBoardName, pmem, MaxBoardNameLength);
-    SetBoard(lpcBoardName);
-    pmem += MaxBoardNameLength;
     const size_t numConfigs = ARRAY_SIZE(boardConfigs);
     for(size_t i=0; i<numConfigs; i++)
     {
@@ -455,8 +378,6 @@ void InMemoryBoardConfiguration::setConfiguration() noexcept
 void InMemoryBoardConfiguration::getConfiguration() noexcept
 {
     uint8_t *pmem = data;
-    memcpy(pmem, lpcBoardName, MaxBoardNameLength);
-    pmem += MaxBoardNameLength;
     const size_t numConfigs = ARRAY_SIZE(boardConfigs);
     for(size_t i=0; i<numConfigs; i++)
     {
@@ -528,24 +449,6 @@ BoardConfig::BoardConfig() noexcept
 static void ConfigureGPIOPins() noexcept
 {
     initInterruptPins();
-    // loop through and set and pins that have special requirements from the board settings
-    for (size_t lp = 0; lp < NumNamedLPCPins; ++lp)
-    {
-        switch (PinTable[lp].names[0])
-        {
-            case '+':
-                pinMode(PinTable[lp].pin, OUTPUT_HIGH);
-                break;
-            case '-':
-                pinMode(PinTable[lp].pin, OUTPUT_LOW);
-                break;
-            case '^':
-                pinMode(PinTable[lp].pin, INPUT_PULLUP);
-                break;
-            default:
-                break;
-        }
-    }
     for(size_t i = 0; i < MaxInitialPins; i++)
     {
         pinMode(PinsSetLow[i], OUTPUT_LOW);
@@ -653,7 +556,7 @@ static void CheckDriverPins() noexcept
 #endif
 
 
-static void UnknownHardware(uint32_t sig) noexcept
+static void UnknownHardware() noexcept
 {
     for(;;)
     {
@@ -661,7 +564,7 @@ static void UnknownHardware(uint32_t sig) noexcept
         debugPrintf("This may be because it is a new board or has a new bootloader installed.\n");
         debugPrintf("To register the hardware configuration please contact TeamGloomy via our\n");
         debugPrintf("discord server (https://discord.gg/uS97Qs7) and supply details of\n");
-        debugPrintf("the board and the board signature(0x%x).\n", (unsigned)sig);
+        debugPrintf("the board and the board.\n");
         delay(2000);
     }
 }
@@ -682,7 +585,6 @@ static const char *GetBootloaderString() noexcept
 }
 
 // Determine how to access the SD card
-static uint32_t signature;
 typedef struct {
     SSPChannel device;
     Pin pins[6];
@@ -698,91 +600,6 @@ static constexpr SDCardConfig SDCardConfigs[] = {
     {SSP3, {PC_10, PC_11, PC_12, PA_15, NoPin, NoPin}, {0x602, 0x602, 0x602, 0x1}}, // BTT BX
     {SSP2, {PB_13, PB_14, PB_15, PB_12, NoPin, NoPin}, {0x502, 0x502, 0x502, 0x1}}, // BTT kraken?
 };
-
-static bool CheckPinConfig(uint32_t config) noexcept
-{
-    // check to see if the pins are currently set in the expected state
-    // The bootloader on many boards will leave the pins configured after
-    // accessing the SD card.
-    const SDCardConfig *conf = &SDCardConfigs[config];
-    for(size_t i = 0; i < ARRAY_SIZE(conf->pins); i++)
-        if (conf->pins[i] != NoPin && pin_get_function(conf->pins[i]) != conf->mode[i])
-            return false;
-    return true;
-}
-
-// Attempt to identify the board based upon the hardware we can see.
-// Note that this may not be correct, but it should be sufficient to allow
-// us to either connect to an SBC or mount an SD card from which we can get
-// an actual board configuration.
-static uint32_t IdentifyBoard() noexcept
-{
-    // First we look for a bootfile on the embeded file system
-    BoardConfig::LoadBoardConfigFromFile(bootConfigFile);
-    if (currentBoardId != UNKNOWN_BOARD)
-    {
-        debugPrintf("Found embedded config: board %d %s\n", currentBoardId, LPC_Boards[currentBoardId].boardName[0]);
-        // we use the name configured here for the firmware file
-#if HAS_SBC_INTERFACE
-        SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware-%s-sbc.bin", lpcBoardName);
-#else
-        SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware-%s-wifi.bin", lpcBoardName);
-#endif
-        return currentBoardId;
-    }
-
-    // We use the CRC of part of the bootloader to id the board
-    signature = crc32((char *)0x8000000, 8192);
-    // Try to find a matching board we accept the first match
-    for(uint32_t i = 0; i < NumBoardEntries; i++)
-        for(uint32_t j = 0; j < MaxSignatures; j++)
-            if (LPC_Boards[i].defaults.signatures[j] == signature)
-            {
-                debugPrintf("Sig match 0x%x board %d %s\n", (unsigned) signature, (int)i, LPC_Boards[i].boardName[0]);
-                SetBoard(LPC_Boards[i].boardName[0]);
-                return i;
-            }
-    debugPrintf("Board signature %x not found\n", (unsigned)signature);
-    // Look to see if it is our bootloader, if so we can use the IOMode to get to the SD card
-    const char *bootstr = GetBootloaderString();
-    uint32_t conf = SD_UNKNOWN;
-    if (bootstr != nullptr)
-    {
-        debugPrintf("Found bootloader string \"%s\"\n", bootstr);
-        char *iomodestr = strstr(bootstr, "IOMode:");
-        if (iomodestr != nullptr)
-        {
-            conf = (uint32_t)StrToI32(iomodestr+7);
-            debugPrintf("Got iomode %d\n", (unsigned)conf);
-        }
-    }
-    if (conf == SD_UNKNOWN)
-    {
-        // failed to find matching signature, see if the bootloader has left things configured
-        for(uint32_t i = 0; i < ARRAY_SIZE(SDCardConfigs); i++)
-            if (CheckPinConfig(i))
-            {
-                conf = i;
-                debugPrintf("loader match, iomode %d\n", (int)i);
-            }
-    }
-    // If we now have an SD mode use it to pick a board (we choose the first match)
-    if (conf != SD_UNKNOWN)
-    {
-        for(uint32_t i = 0; i < NumBoardEntries; i++)
-        {
-            if (LPC_Boards[i].defaults.SDConfig == conf)
-            {
-                debugPrintf("iomode match board %d %s\n", (int)i, LPC_Boards[i].boardName[0]);
-                SetBoard(LPC_Boards[i].boardName[0]);
-                return i;
-            }
-        }
-    }
-    // Unable to identify the board
-    SetBoard("generic");
-    return UNKNOWN_BOARD;
-}
 
 static bool TryConfig(uint32_t config, bool mount) noexcept
 {
@@ -818,13 +635,11 @@ static bool TryConfig(uint32_t config, bool mount) noexcept
     return false;
 }    
 
-static SSPChannel InitSDCard(uint32_t boardId, bool mount, bool needed) noexcept
+static SSPChannel InitSDCard(SDConfigs conf, bool mount, bool needed) noexcept
 {
-    int conf = LPC_Boards[boardId].defaults.SDConfig;
-
     if (conf == SD_UNKNOWN)
     {
-        UnknownHardware(signature);
+        UnknownHardware();
     }
     else if (conf == SD_NONE)
     {
@@ -839,7 +654,7 @@ static SSPChannel InitSDCard(uint32_t boardId, bool mount, bool needed) noexcept
             return SDCardConfigs[conf].device;
         }
         if (needed)
-            FatalError("Unable to mount SD card, board signature is 0x%x, boardId %d config %d.\n", signature, (int)boardId, conf);
+            FatalError("Unable to mount SD card, config %d.\n", conf);
         else
         {
             MessageF(UsbMessage, "Unable to mount SD card using config %d\n", conf);
@@ -858,7 +673,7 @@ void BoardConfig::Init() noexcept
 #if !HAS_MASS_STORAGE
 #error "Invalid board configuration HAS_MASS_STORAGE is required"
 #endif
-    signature = crc32((char *)0x8000000, 8192);
+
 #if STARTUP_DELAY
     for(int i = 0; i < STARTUP_DELAY; i++)
     {
@@ -880,15 +695,17 @@ void BoardConfig::Init() noexcept
     Cache::InvalidateAfterDMAReceive(&_nocache_ram_start, 256);
     Cache::InvalidateAfterDMAReceive(&_nocache2_ram_start, 256);
     debugPrintf("Following two should fail\n");
-    Cache::FlushBeforeDMAReceive(lpcBoardName, 256);
-    Cache::InvalidateAfterDMAReceive(lpcBoardName, 256);
+    Cache::FlushBeforeDMAReceive(BoardName, 256);
+    Cache::InvalidateAfterDMAReceive(BoardName, 256);
 #endif
 #endif
-    SetBoard("generic");
-    uint32_t boardId = IdentifyBoard();
+    if (!LoadBoardDefaults())
+    {
+        FatalError("Unable to load board defaults\n");
+    }
 #if HAS_SBC_INTERFACE
     // See if there is an (optional) config file on the SD card
-    sdChannel = InitSDCard(boardId, true, false);
+    sdChannel = InitSDCard(sdConfig, true, false);
     if (sdChannel == SSPNONE)
     {
         // Device does not have an SD card
@@ -896,6 +713,7 @@ void BoardConfig::Init() noexcept
     }
     else if (!BoardConfig::LoadBoardConfigFromFile(boardConfigFile))
     {
+        debugPrintf("no config file\n");
         // No SD card, or no board.txt
         MessageF(UsbMessage, "Warning: unable to load configuration from file\n");
         // Enable loading of config from the SBC
@@ -903,18 +721,22 @@ void BoardConfig::Init() noexcept
     }
     if (SbcLoadConfig)
     {
+        debugPrintf("using SBC\n");
         MessageF(UsbMessage, "Using SBC based configuration files\n");
         // Check for a configuration stored in RAM (supplied by the SBC),
         // if found use it and override any config from the card
         InMemoryBoardConfiguration inMemoryConfig;
         inMemoryConfig.loadFromBackupRAM();
+        debugPrintf("After load\n");
         if (inMemoryConfig.isValid())
         {
+            debugPrintf("Got valid data\n");
             MessageF(UsbMessage, "Using RAM based configuration data\n");
             inMemoryConfig.setConfiguration();
+            debugPrintf("after set config\n");
             // Set SD config if we haven't already
             if (!MassStorage::IsDriveMounted(0))
-                sdChannel = InitSDCard(boardId, false, false);
+                sdChannel = InitSDCard(sdConfig, false, false);
         }
     }
     if (SbcCsPinConfig == NoPin)
@@ -924,7 +746,7 @@ void BoardConfig::Init() noexcept
     }
 #else
     // Try and mount the sd card and read the board.txt file, error if not present
-    sdChannel = InitSDCard(boardId, true, true);
+    sdChannel = InitSDCard(sdConfig, true, true);
     if (!BoardConfig::LoadBoardConfigFromFile(boardConfigFile))
     {
         // failed to load a valid configuration
@@ -1050,111 +872,38 @@ void BoardConfig::Init() noexcept
 #endif
 }
 
-
-static void PrintBoards(MessageType mtype) noexcept
-{
-    const size_t numBoards = ARRAY_SIZE(LPC_Boards);
-    for(size_t i=0; i<numBoards; i++)
-    {
-        for(size_t j=0; j < ARRAY_SIZE(LPC_Boards[0].boardName); j++)
-            if(LPC_Boards[i].boardName[j])
-            {
-                reprap.GetPlatform().MessageF(mtype, "Board %d.%d: %s iomode %d Signatures:", i, j, LPC_Boards[i].boardName[j], LPC_Boards[i].defaults.SDConfig);
-                for (size_t k = 0; k < MaxSignatures; k++)
-                    if (LPC_Boards[i].defaults.signatures[k] != 0)
-                        reprap.GetPlatform().MessageF(mtype, " 0x%x", (unsigned)LPC_Boards[i].defaults.signatures[k]);
-                reprap.GetPlatform().MessageF(mtype, "\n");
-            }
-    }
-}
-
-#if DUMP_DATA
-static void DumpPin(Pin pin)
-{
-    if (pin == NoPin)
-        debugPrintf("NoPin");
-    else
-        debugPrintf("%c.%d", 'A' + (pin >> 4), (pin & 0xF));
-}
-
-static void DumpPins(const Pin *pins, uint32_t cnt)
-{
-    debugPrintf("{");
-    for(uint32_t p = 0; p < cnt; p++)
-    {
-        DumpPin(pins[p]);
-        if (p < cnt-1) debugPrintf(",");
-    }
-    debugPrintf("}\n");
-}
-
-static void DumpBoards() noexcept
-{
-    const size_t numBoards = ARRAY_SIZE(LPC_Boards);
-    for(size_t i=0; i<numBoards; i++)
-    {
-        for(size_t j=0; j < ARRAY_SIZE(LPC_Boards[0].boardName); j++)
-            if(LPC_Boards[i].boardName[j])
-            {
-                debugPrintf("%s\n", LPC_Boards[i].boardName[j]);
-                PinEntry * pt = (PinEntry *)LPC_Boards[i].boardPinTable;
-                uint32_t numPins = LPC_Boards[i].numNamedEntries;
-                debugPrintf("%d\n", numPins);
-                for(uint32_t p = 0; p < numPins; p++)
-                {
-                    char lower[32];
-                    char *lp = lower;
-                    for(const char *l = pt[p].names; *l; l++) *lp++ = tolower(*l);
-                    *lp++ = '\0';
-                    debugPrintf("%c.%d %s\n", 'A' + (pt[p].pin >> 4), (pt[p].pin & 0xF), lower);
-                }
-                debugPrintf("board=%s\n", LPC_Boards[i].boardName[j]);
-                const BoardDefaults *def = &LPC_Boards[i].defaults;
-                debugPrintf("sdcard.internal.type=%d\n", def->SDConfig);
-                for(uint32_t s = 0; s < NumSPIDevices; s++)
-                {
-                    debugPrintf("SPI%d.pins=", s);
-                    DumpPins(def->spiPins[s], NumSPIPins);
-                }
-                debugPrintf("stepper.powerEnablePin=");
-                DumpPin(def->stepperPowerEnablePin);
-                debugPrintf("\nstepper.numDrivers=%d\n", def->numDrivers);
-                debugPrintf("stepper.enablePins=");
-                DumpPins(def->enablePins, def->numDrivers);
-                debugPrintf("stepper.stepPins=");
-                DumpPins(def->stepPins, def->numDrivers);
-                debugPrintf("stepper.directionPins=");
-                DumpPins(def->dirPins, def->numDrivers);
-                debugPrintf("stepper.numSmartDrivers=%d\n", def->numSmartDrivers);
-                debugPrintf("stepper.TmcUartPins=");
-                DumpPins(def->uartPins, def->numSmartDrivers);
-                debugPrintf("power.VInDetectPin=");
-                DumpPin(def->vinDetectPin);
-                debugPrintf("\nsbc.TfrReadyPin=");
-                DumpPin(def->SbcTfrReadyPin);
-                debugPrintf("\nsbc.csPin=");
-                DumpPin(def->SbcCsPin);
-                debugPrintf("\nsbc.spiChannel=%d\n", def->SbcSpiChannel);
-                debugPrintf("XXENDXX\n");
-            }
-    }
-}
-#endif
-
 // Function to look up a pin name pass back the corresponding index into the pin table
 // On this platform, the mapping from pin names to pins is fixed, so this is a simple lookup
 bool LookupPinName(const char*pn, LogicalPin& lpin, bool& hardwareInverted) noexcept
 {
-    if (StringEqualsIgnoreCase(pn, NoPinName))
+    if (StringEqualsIgnoreCase(pn, NoPinName) || StringEqualsIgnoreCase(pn, "NoPin"))
     {
         lpin = NoLogicalPin;
         hardwareInverted = false;
         return true;
     }
-
-    for (size_t lp = 0; lp < NumNamedLPCPins; ++lp)
+    FileStore * const configFile = MassStorage::OpenFile(pinsConfigFile, OpenMode::read, 0);
+    if (configFile == nullptr)
     {
-        const char *q = PinTable[lp].names;
+        FatalError("Pins file not found\n");
+        return false;
+    }
+    debugPrintf("Lookup pin %s\n", pn);
+    constexpr size_t maxLineLength = 120;
+    char line[maxLineLength];
+    while(configFile->ReadLine(line, maxLineLength) >= 0)
+    {
+        // debugPrintf("Got line %s\n", line);
+        // skip pin number
+        char *q = line;
+        while(*q && *q != ' ')
+        {
+            q++;
+        }
+        if (*q == ' ')
+        {
+            *q++ = 0;
+        }
         while (*q != 0)
         {
             // Try the next alias in the list of names for this pin
@@ -1178,8 +927,10 @@ bool LookupPinName(const char*pn, LogicalPin& lpin, bool& hardwareInverted) noex
             if ((*p == 0 || *p == ',') && (*q == 0 || *q == ','))
             {
                 // Found a match
-                lpin = (LogicalPin)PinTable[lp].pin;
+                lpin = BoardConfig::StringToPin(line);
                 hardwareInverted = hwInverted;
+                configFile->Close();
+                debugPrintf("Match pin %s\n", line);
                 return true;
             }
             
@@ -1194,7 +945,8 @@ bool LookupPinName(const char*pn, LogicalPin& lpin, bool& hardwareInverted) noex
             }
         }
     }
-    
+    configFile->Close();
+    debugPrintf("No match\n");
     //pn did not match a label in the lookup table, so now
     //look up by classic port.pin format
     const Pin lpcPin = BoardConfig::StringToPin(pn);
@@ -1209,13 +961,38 @@ bool LookupPinName(const char*pn, LogicalPin& lpin, bool& hardwareInverted) noex
 // Return the string names associated with a pin
 const char *GetPinNames(LogicalPin lp) noexcept
 {
-    for (size_t i = 0; i < NumNamedLPCPins; ++i)
+    static char name[32];
+    FileStore * const configFile = MassStorage::OpenFile(pinsConfigFile, OpenMode::read, 0);
+    if (configFile == nullptr)
     {
-        if ((LogicalPin)(PinTable[i].pin) == lp)
-            return PinTable[i].names;
+        FatalError("Pins file not found\n");
+        return NULL;
     }
+    debugPrintf("Lookup pin %c.%d", 'A' + (lp >> 4), (lp & 0xF));
+    constexpr size_t maxLineLength = 120;
+    char line[maxLineLength];
+    while(configFile->ReadLine(line, maxLineLength) >= 0)
+    {
+        char *q = line;
+        while(*q && *q != ' ')
+        {
+            q++;
+        }
+        if (*q == ' ')
+        {
+            *q++ = 0;
+        }
+        if (BoardConfig::StringToPin(line) == lp)
+        {
+            debugPrintf("Found %s\n", q);
+            configFile->Close();
+            SafeStrncpy(name, q, sizeof(name));
+            return name;
+        }
+    }
+    configFile->Close();
+    debugPrintf("No found\n");
     // not found manufascture a name
-    static char name[5];
     name[0] = 'A' + (lp >> 4);
     name[1] = '.';
     if ((lp & 0xf) > 9)
@@ -1351,31 +1128,18 @@ extern uint32_t _nocache2_ram_end;
 //Information printed by M122 P200
 void BoardConfig::Diagnostics(MessageType mtype) noexcept
 {
-#if DUMP_DATA
-    DumpBoards();
-    return;
-#endif
     MessageF(mtype, "=== Diagnostics ===\n");
 #if HAS_SBC_INTERFACE
 	MessageF(mtype, "%s version %s running on %s (%s mode) at %dMhz\n", FIRMWARE_NAME, VERSION, reprap.GetPlatform().GetElectronicsString(),
 						(reprap.UsingSbcInterface()) ? "SBC" : "standalone", (int)SystemCoreClock/1000000);
 #else
-	MessageF(mtype, "%s (%s) version %s running on %s at %dMhz\n", FIRMWARE_NAME, lpcBoardName, VERSION, reprap.GetPlatform().GetElectronicsString(), (int)SystemCoreClock/1000000);
+	MessageF(mtype, "%s (%s) version %s running on %s at %dMhz\n", FIRMWARE_NAME, BoardName, VERSION, reprap.GetPlatform().GetElectronicsString(), (int)SystemCoreClock/1000000);
 #endif
     const char *Bootloader = GetBootloaderString();
     MessageF(mtype, "Bootloader: %s\n", Bootloader == nullptr ? "Unknown" : Bootloader);
 
 
-    MessageF(mtype, "\n== Supported boards ==\n");
-    PrintBoards(mtype);
-
     MessageF(mtype, "\n== Configurable Board.txt Settings ==\n");
-    //Print the board name
-    boardConfigEntry_t board = boardEntryConfig[0];
-    MessageF(mtype, "%s = ", board.key );
-    BoardConfig::PrintValue(mtype, board.type, board.variable);
-    MessageF(mtype, "  Signature 0x%x\n\n", (unsigned int)signature);
-    
     //Print rest of board configurations
     const size_t numConfigs = ARRAY_SIZE(boardConfigs);
     for(size_t i=0; i<numConfigs; i++)
@@ -1414,11 +1178,15 @@ void BoardConfig::Diagnostics(MessageType mtype) noexcept
 
     // Display all pins
     MessageF(mtype, "\n== Defined Pins ==\n");
-    for (size_t lp = 0; lp < NumNamedLPCPins; ++lp)
+    for (uint8_t p = 0; p < (size_t)NoPin; p++)
     {
-        MessageF(mtype, "%s = ", PinTable[lp].names );
-        BoardConfig::PrintValue(mtype, cvPinType, (void *)&PinTable[lp].pin);
-        MessageF(mtype, "\n");
+        const char *name = GetPinNames((Pin)p);
+        if (name[0] != 0 && islower(name[0]))
+        {
+            MessageF(mtype, "%s = ", name );
+            BoardConfig::PrintValue(mtype, cvPinType, (void *)&p);
+            MessageF(mtype, "\n");
+        }
     }
     
 #if defined(SERIAL_AUX_DEVICE) || defined(SERIAL_AUX2_DEVICE) || HAS_WIFI_NETWORKING
@@ -1561,6 +1329,7 @@ void BoardConfig::SetValueFromString(configValueType type, void *variable, char 
 
 bool BoardConfig::LoadBoardConfigFromFile(const char *filePath) noexcept
 {
+    debugPrintf("load from file\n");
     FileStore * const configFile = MassStorage::OpenFile(filePath, OpenMode::read, 0);
     if (configFile == nullptr)
     {
@@ -1568,21 +1337,12 @@ bool BoardConfig::LoadBoardConfigFromFile(const char *filePath) noexcept
         FlushMessages();
         return false;
     }
+    debugPrintf("After open\n");
     MessageF(UsbMessage, "Loading config from %s...\n", filePath );
-
-    //First find the board entry to load the correct PinTable for looking up Pin by name
-    BoardConfig::GetConfigKeys(configFile, boardEntryConfig, (size_t) ARRAY_SIZE(boardEntryConfig));
-    if(!SetBoard(lpcBoardName)) // load the Correct PinTable for the defined Board (RRF3)
-    {
-        //Failed to find string in known boards array
-        debugPrintf("Warning: Failed to find board name '%s' using generic\n", lpcBoardName);
-        SetBoard("generic");
-    }
-
-    //Load all other config settings now that PinTable is loaded.
-    configFile->Seek(0); //go back to beginning of config file
     BoardConfig::GetConfigKeys(configFile, boardConfigs, (size_t) ARRAY_SIZE(boardConfigs));
+    debugPrintf("after load\n");
     configFile->Close();
+    debugPrintf("after close\n");
     FlushMessages();
     return true;
 }
@@ -1590,21 +1350,27 @@ bool BoardConfig::LoadBoardConfigFromFile(const char *filePath) noexcept
 #if HAS_SBC_INTERFACE
 bool BoardConfig::LoadBoardConfigFromSBC() noexcept
 {
+    debugPrintf("Load sbc config from file\n");
     // Is this feature disabled?
     if (!SbcLoadConfig) return false;
     InMemoryBoardConfiguration oldConfig, newConfig;
     oldConfig.getConfiguration();
+    debugPrintf("about to load\n");
+    LoadBoardDefaults();
     BoardConfig::LoadBoardConfigFromFile(boardConfigFile);
+    debugPrintf("After load\n");
 #if HAS_SMART_DRIVERS
     ConfigureDriveType();
 #endif       
     // SbcLoadConfig may have been reset force it back on
     SbcLoadConfig = true;
     newConfig.getConfiguration();
+    debugPrintf("after get config\n");
     if (oldConfig.isEqual(newConfig))
         MessageF(UsbMessage, "Configurations match\n");
     else
     {
+        debugPrintf("reboot to reload config\n");
         // store new config into memory that will survive a reboot
         newConfig.saveToBackupRAM();
         MessageF(UsbMessage, "Configurations do not match rebooting to load new settings\n");

@@ -922,7 +922,7 @@ void RepRap::Diagnostics(MessageType mtype) noexcept
 		// Parameters to match format string
 		FIRMWARE_NAME,
 #if STM32
-		lpcBoardName,
+		BoardName,
 #endif
 		VERSION, DATE, TIME_SUFFIX, platform->GetElectronicsString()
 #ifdef DUET_NG
