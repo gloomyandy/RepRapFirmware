@@ -13,14 +13,14 @@
 #include <RTOSIface/RTOSIface.h>
 #endif
 
-#if SAM4E || SAM4S || SAME70 || SAME5x || (STM32 && !HAS_SBC_INTERFACE)
+#if SAM4E || SAM4S || SAME70 || SAME5x || STM32H7
 constexpr size_t NumFileWriteBuffers = 2;					// Number of write buffers
 constexpr size_t FileWriteBufLen = 8192;					// Size of each write buffer
 constexpr size_t SbcFileWriteBufLen = 4192;					// Available size of each write buffer in SBC mode
-#elif (STM32 && HAS_SBC_INTERFACE)
-constexpr size_t NumFileWriteBuffers = 1;
+#elif STM32F4
+constexpr size_t NumFileWriteBuffers = 2;
 constexpr size_t FileWriteBufLen = 4096;
-constexpr size_t SbcFileWriteBufLen = 3072;
+constexpr size_t SbcFileWriteBufLen = 4096;
 #else
 # error Unsupported processor
 #endif

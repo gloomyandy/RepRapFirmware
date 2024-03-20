@@ -598,9 +598,14 @@ void RepRap::Init() noexcept
 	platform->MessageF(UsbMessage, "%s\n", VersionText);
 
 #if HAS_SBC_INTERFACE && (!HAS_MASS_STORAGE || STM32)
-	usingSbcInterface = true;
-	sbcInterface->Init();
-	FileWriteBuffer::UsingSbcMode();
+#if STM32 && HAS_MASS_STORAGE
+	if (SbcMode)
+#endif
+	{
+		usingSbcInterface = true;
+		sbcInterface->Init();
+		FileWriteBuffer::UsingSbcMode();
+	}
 #endif
 
 #if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
@@ -641,7 +646,7 @@ void RepRap::Init() noexcept
 			delay(3000);								// Wait a few seconds so users have a chance to see this
 			platform->MessageF(AddWarning(UsbMessage), "%s\n", reply.c_str());
 		}
-# if HAS_SBC_INTERFACE
+# if HAS_SBC_INTERFACE && !STM32
 		sbcInterface->Init();
 # endif
 	}
@@ -794,7 +799,7 @@ void RepRap::Spin() noexcept
 	expansion->Spin();
 #endif
 
-#if HAS_SBC_INTERFACE
+#if HAS_SBC_INTERFACE && !STM32
 	// Keep the SBC task spinning from the main task in standalone mode to respond to a SBC if necessary
 	if (!UsingSbcInterface())
 	{

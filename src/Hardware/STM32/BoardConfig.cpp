@@ -14,6 +14,7 @@
 #include "Version.h"
 #include "BoardConfig.h"
 #include "RepRapFirmware.h"
+#include "SbcInterface.h"
 #include "sd_mmc.h"
 #include "SPI.h"
 #include "HardwareSPI.h"
@@ -50,11 +51,7 @@ extern uint32_t _nocache2_ram_end;
 
 
 char BoardName[MaxBoardNameLength];
-#if HAS_SBC_INTERFACE
-char iapFirmwareFile[MaxBoardNameLength*2] = SBC_IAP_FIRMWARE_FILE;
-#else
-char iapFirmwareFile[MaxBoardNameLength*2] = WIFI_IAP_FIRMWARE_FILE;
-#endif
+char iapFirmwareFile[MaxBoardNameLength*2] = DEFAULT_FIRMWARE_FILE;
 typedef enum {
     SD_SPI1_A,
     SD_SPI1_B,
@@ -168,8 +165,9 @@ static const boardConfigEntry_t boardConfigs[]=
 #if HAS_SBC_INTERFACE
     {"sbc.TfrReadyPin", &SbcTfrReadyPinConfig, 1, cvPinType},
     {"sbc.csPin", &SbcCsPinConfig, 1, cvPinType},
-    {"sbc.spiChannel", &SbcSpiChannel, 1, cvUint8Type},    
-    {"sbc.loadConfig", &SbcLoadConfig, 1, cvBoolType},    
+    {"sbc.spiChannel", &SbcSpiChannel, 1, cvUint8Type},
+    {"sbc.loadConfig", &SbcLoadConfig, 1, cvBoolType},
+    {"sbc.SBCMode", &SbcMode, 1, cvBoolType},
 #endif
 
 #if defined(SERIAL_AUX_DEVICE)
@@ -293,25 +291,6 @@ static void InitDiagPin()
     {
         DiagPin = (Pin)pin;
     }
-}
-
-static bool LoadBoardDefaults() noexcept
-{
-    ClearConfig();
-    // Load the configuration from the embedded file system
-    if (BoardConfig::LoadBoardConfigFromFile(bootConfigFile, false))
-    {
-        debugPrintf("Found embedded config: board %s\n", BoardName);
-        // we use the name configured here for the firmware file
-#if HAS_SBC_INTERFACE
-        SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware-%s-sbc.bin", BoardName);
-#else
-        SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware-%s-wifi.bin", BoardName);
-#endif
-        InitDiagPin();
-        return true;
-    }
-    return false;
 }
 
 
@@ -636,6 +615,22 @@ static bool TryConfig(uint32_t config, bool mount) noexcept
     return false;
 }    
 
+static bool LoadBoardDefaults() noexcept
+{
+    ClearConfig();
+    // Load the configuration from the embedded file system
+    if (BoardConfig::LoadBoardConfigFromFile(bootConfigFile, false))
+    {
+        MessageF(UsbMessage, "Found boot config for board: %s\n", BoardName);
+        // we use the name configured here for the firmware file
+        SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware-%s.bin", BoardName);
+        InitDiagPin();
+        return true;
+    }
+    return false;
+}
+
+
 static SSPChannel InitSDCard(SDConfigs conf, bool mount, bool needed) noexcept
 {
     if (conf == SD_UNKNOWN)
@@ -702,7 +697,15 @@ void BoardConfig::Init() noexcept
 #endif
     if (!LoadBoardDefaults())
     {
-        FatalError("Unable to load board defaults\n");
+        // On test builds we may not have embedded data. We assume the Sd card is SDIO and
+        // look for the config data on the card
+        MessageF(UsbMessage, "Embdded board config not found, please check you have the correct firmware file installed.\nAttempting to fall back to SDIO\n");
+        sdChannel = InitSDCard(SD_SDIO, true, true);
+        if (!LoadBoardDefaults())
+        {
+            FatalError("Unable to load board defaults.\n");
+        }
+        MassStorage::Unmount(0, reply.GetRef());
     }
 #if HAS_SBC_INTERFACE
     // See if there is an (optional) config file on the SD card
@@ -710,14 +713,14 @@ void BoardConfig::Init() noexcept
     if (sdChannel == SSPNONE)
     {
         // Device does not have an SD card
-        SbcLoadConfig = true;
+        SbcMode = SbcLoadConfig = true;
     }
     else if (!BoardConfig::LoadBoardConfigFromFile(boardConfigFile))
     {
         // No SD card, or no board.txt
         MessageF(UsbMessage, "Warning: unable to load configuration from file\n");
         // Enable loading of config from the SBC
-        SbcLoadConfig = true;
+        SbcMode = SbcLoadConfig = true;
     }
     if (SbcLoadConfig)
     {
@@ -735,11 +738,6 @@ void BoardConfig::Init() noexcept
                 sdChannel = InitSDCard(sdConfig, false, false);
         }
     }
-    if (SbcCsPinConfig == NoPin)
-    {
-        FatalError("No SBC configuration\n");
-        return;
-    }
 #else
     // Try and mount the sd card and read the board.txt file, error if not present
     sdChannel = InitSDCard(sdConfig, true, true);
@@ -754,10 +752,14 @@ void BoardConfig::Init() noexcept
         MassStorage::Unmount(0, reply.GetRef());
 
 #if HAS_SBC_INTERFACE
-    if (SbcCsPinConfig == NoPin || SbcTfrReadyPinConfig == NoPin || SbcSpiChannel == SSPNONE)
+    if (SbcMode && (SbcCsPinConfig == NoPin || SbcTfrReadyPinConfig == NoPin || SbcSpiChannel == SSPNONE))
     {
         FatalError("No SBC configuration\n");
         return;
+    }
+    if (!SbcMode)
+    {
+        reprap.GetSbcInterface().FreeMemory();
     }
 #endif
     //Calculate STEP_DRIVER_MASK (used for parallel writes)
@@ -812,30 +814,36 @@ void BoardConfig::Init() noexcept
     MassStorage::Init2();
 #endif
 #if HAS_SBC_INTERFACE
-    pinMode(SbcCsPinConfig, INPUT_PULLUP);
-    SbcTfrReadyPin = SbcTfrReadyPinConfig;
-    SbcCsPin = SbcCsPinConfig;
-#endif
-#if HAS_WIFI_NETWORKING
-    pinMode(SamCsPin, OUTPUT_LOW);
-    pinMode(EspResetPin, OUTPUT_LOW);
-    // Setup WiFi pins for compatibility
-    APIN_ESP_SPI_MOSI = SPIPins[WiFiSpiChannel][2];
-    APIN_ESP_SPI_MISO = SPIPins[WiFiSpiChannel][1];
-    APIN_ESP_SPI_SCK = SPIPins[WiFiSpiChannel][0];
-    
-    if(WifiSerialRxTxPins[0] != NoPin && WifiSerialRxTxPins[1] != NoPin)
+    if (SbcMode)
     {
-        //Setup the Serial Port for ESP Wifi
-        APIN_SerialWiFi_RXD = WifiSerialRxTxPins[0];
-        APIN_SerialWiFi_TXD = WifiSerialRxTxPins[1];
-        
-        if(!serialWiFi.Configure(WifiSerialRxTxPins[0], WifiSerialRxTxPins[1]))
-        {
-            reprap.GetPlatform().MessageF(UsbMessage, "Failed to set WIFI Serial with pins %c.%d and %c.%d.\n", 'A'+(WifiSerialRxTxPins[0] >> 4), (WifiSerialRxTxPins[0] & 0xF), 'A'+(WifiSerialRxTxPins[1] >> 4), (WifiSerialRxTxPins[1] & 0xF) );
-        }
+        pinMode(SbcCsPinConfig, INPUT_PULLUP);
+        SbcTfrReadyPin = SbcTfrReadyPinConfig;
+        SbcCsPin = SbcCsPinConfig;
     }
+    else
 #endif
+    {
+#if HAS_WIFI_NETWORKING
+        pinMode(SamCsPin, OUTPUT_LOW);
+        pinMode(EspResetPin, OUTPUT_LOW);
+        // Setup WiFi pins for compatibility
+        APIN_ESP_SPI_MOSI = SPIPins[WiFiSpiChannel][2];
+        APIN_ESP_SPI_MISO = SPIPins[WiFiSpiChannel][1];
+        APIN_ESP_SPI_SCK = SPIPins[WiFiSpiChannel][0];
+        
+        if(WifiSerialRxTxPins[0] != NoPin && WifiSerialRxTxPins[1] != NoPin)
+        {
+            //Setup the Serial Port for ESP Wifi
+            APIN_SerialWiFi_RXD = WifiSerialRxTxPins[0];
+            APIN_SerialWiFi_TXD = WifiSerialRxTxPins[1];
+            
+            if(!serialWiFi.Configure(WifiSerialRxTxPins[0], WifiSerialRxTxPins[1]))
+            {
+                reprap.GetPlatform().MessageF(UsbMessage, "Failed to set WIFI Serial with pins %c.%d and %c.%d.\n", 'A'+(WifiSerialRxTxPins[0] >> 4), (WifiSerialRxTxPins[0] & 0xF), 'A'+(WifiSerialRxTxPins[1] >> 4), (WifiSerialRxTxPins[1] & 0xF) );
+            }
+        }
+#endif
+    }
 
 #if defined(SERIAL_AUX_DEVICE)
     //Configure Aux Serial
@@ -1353,7 +1361,7 @@ bool BoardConfig::LoadBoardConfigFromSBC() noexcept
     ConfigureDriveType();
 #endif       
     // SbcLoadConfig may have been reset force it back on
-    SbcLoadConfig = true;
+    SbcMode = SbcLoadConfig = true;
     newConfig.getConfiguration();
     if (oldConfig.isEqual(newConfig))
         MessageF(UsbMessage, "Configurations match\n");

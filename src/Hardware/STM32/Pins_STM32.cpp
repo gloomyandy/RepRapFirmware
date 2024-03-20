@@ -97,6 +97,7 @@ Pin SPIPins[NumSPIDevices][NumSPIPins];                 //GPIO pins for hardware
     Pin SbcCsPin;
     SSPChannel SbcSpiChannel;
     bool SbcLoadConfig;
+    bool SbcMode;
 #endif
 
 #if SUPPORT_SPICAN

@@ -75,6 +75,15 @@ SbcInterface::SbcInterface() noexcept : isConnected(false), numDisconnects(0), n
 #endif
 }
 
+#if STM32
+void SbcInterface::FreeMemory() noexcept
+{
+	delete codeBuffer;
+	delete sbcTask;
+	transfer.FreeMemory();
+}
+#endif
+
 void SbcInterface::Init() noexcept
 {
 	if (reprap.UsingSbcInterface())
