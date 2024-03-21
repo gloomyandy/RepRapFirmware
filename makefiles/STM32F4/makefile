@@ -24,7 +24,7 @@ V=@
 
 $(info Building RepRapFirmware for STM32F4 based boards:)
 
-BASE_OUTPUT_NAME=firmware-stm32f4
+BASE_OUTPUT_NAME=base-stm32f4
 
 ## Cross-compilation commands
 CC      = $(GCC_PATH)arm-none-eabi-gcc
