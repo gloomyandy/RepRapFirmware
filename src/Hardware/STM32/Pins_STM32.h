@@ -65,7 +65,7 @@
 #define FIRMWARE_FILE       "0:/firmware.bin"
 
 // Firmware to be loaded onto the ESP board
-#define WIFI_FIRMWARE_FILE  "DuetWiFiServer.bin"
+#define WIFI_FIRMWARE_FILE  (ModuleFiles[NetworkModule.ToBaseType()])
 
 
 constexpr size_t NumFirmwareUpdateModules = 5;        // 3 modules, plus one for manual upload to WiFi module (module 2 is now unused)
@@ -338,7 +338,16 @@ extern Pin AuxSerialRxTxPins[NumberSerialPins];
 #define SERIAL_MAIN_DEVICE  serialUSB  //USB
 
 
-
+#if HAS_WIFI_NETWORKING
+    NamedEnum(NetworkModuleType, uint8_t,
+        unknown,
+        none,
+        esp8266,
+        esp32,
+        esp32eth
+    );
+    extern NetworkModuleType NetworkModule;
+    extern const char* ModuleFiles[];
     extern Pin EspDataReadyPin;
     extern Pin SamTfrReadyPin;
     extern Pin EspResetPin;
@@ -353,6 +362,7 @@ extern Pin AuxSerialRxTxPins[NumberSerialPins];
     extern Pin APIN_ESP_SPI_MOSI;
     extern Pin APIN_ESP_SPI_MISO;
     extern Pin APIN_ESP_SPI_SCK;
+#endif
 
 #if SUPPORT_LED_STRIPS
 extern Pin NeopixelOutPin;

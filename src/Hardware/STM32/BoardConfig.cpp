@@ -69,7 +69,7 @@ static constexpr char boardConfigFile[] = "0:/sys/board.txt";
 static constexpr char bootConfigFile[] = "0:/rrfboot.txt";
 static constexpr char pinsConfigFile[] = "0:/rrfpins.txt";
 
-//All other board configs
+// board configs
 static const boardConfigEntry_t boardConfigs[]=
 {
     {"board", &BoardName, 1, cvStringType},
@@ -160,6 +160,7 @@ static const boardConfigEntry_t boardConfigs[]=
     {"wifi.serialRxTxPins", &WifiSerialRxTxPins, NumberSerialPins, cvPinType},
     {"wifi.spiChannel", &WiFiSpiChannel, 1, cvUint8Type},    
     {"wifi.clockReg", &WiFiClockReg, 1, cvUint32Type},
+    {"wifi.moduleType", &NetworkModule, 1, cvModuleType},
 #endif
 
 #if HAS_SBC_INTERFACE
@@ -216,6 +217,11 @@ static void ClearConfig() noexcept
                 case cvDriverType:
                     ((DriverType *)(next.variable))[p] = DriverType::unknown;
                     break;
+#if HAS_WIFI_NETWORKING
+                case cvModuleType:
+                    ((NetworkModuleType *)(next.variable))[p] = NetworkModuleType::unknown;
+                    break;
+#endif
                 case cvBoolType:
                     ((bool *)(next.variable))[p] = false;
                     break;
@@ -1103,6 +1109,14 @@ void BoardConfig::PrintValue(MessageType mtype, configValueType configType, void
                 MessageF(mtype, "%s", dt.ToString());
             }
             break;
+#if HAS_WIFI_NETWORKING
+        case cvModuleType:
+            {
+                NetworkModuleType mt = *(NetworkModuleType *)(variable);
+                MessageF(mtype, "%s", mt.ToString());
+            }
+            break;
+#endif
         default:{
             
         }
@@ -1320,6 +1334,11 @@ void BoardConfig::SetValueFromString(configValueType type, void *variable, char 
                 }
             }
             break;
+#if HAS_WIFI_NETWORKING
+        case cvModuleType:
+            *(NetworkModuleType *)(variable) = NetworkModuleType(valuePtr);
+            break;
+#endif
         default:
             debugPrintf("Unhandled ValueType %d\n", (int)type);
     }
