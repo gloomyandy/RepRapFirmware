@@ -67,7 +67,12 @@ constexpr ObjectModelArrayTableEntry Move::objectModelArrayTable[] =
 	// 0. Axes
 	{
 		nullptr,					// no lock needed
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return reprap.GetGCodes().GetTotalAxes(); },
+		[] (const ObjectModel *self, const ObjectExplorationContext& context) noexcept -> size_t
+				{
+					const size_t numAxes = reprap.GetGCodes().GetTotalAxes();
+					// The array gets too large to send when we want all fields and there are a lot of axes, so restrict the number of axes returned to 9
+					return (context.TruncateLongArrays()) ? min<size_t>(numAxes, 9) : numAxes;
+				},
 		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(&reprap.GetPlatform(), 3); }
 	},
 	// 1. Extruders
@@ -125,7 +130,7 @@ constexpr ObjectModelTableEntry Move::objectModelTable[] =
 	{ "printingAcceleration",	OBJECT_MODEL_FUNC_NOSELF(InverseConvertAcceleration(reprap.GetGCodes().GetPrimaryMaxPrintingAcceleration()), 1),	ObjectModelEntryFlags::none },
 	{ "queue",					OBJECT_MODEL_FUNC_ARRAY(2),																		ObjectModelEntryFlags::none },
 #if SUPPORT_COORDINATE_ROTATION
-	{ "rotation",				OBJECT_MODEL_FUNC(self, 44),																	ObjectModelEntryFlags::none },
+	{ "rotation",				OBJECT_MODEL_FUNC(self, 9),																		ObjectModelEntryFlags::none },
 #endif
 	{ "shaping",				OBJECT_MODEL_FUNC(&self->axisShaper, 0),														ObjectModelEntryFlags::none },
 	{ "speedFactor",			OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetPrimarySpeedFactor(), 2),						ObjectModelEntryFlags::none },
@@ -183,7 +188,7 @@ constexpr ObjectModelTableEntry Move::objectModelTable[] =
 	{ "tanYZ",					OBJECT_MODEL_FUNC(self->tanYZ(), 4),															ObjectModelEntryFlags::none },
 
 #if SUPPORT_COORDINATE_ROTATION
-	// 8. move.rotation members
+	// 9. move.rotation members
 	{ "angle",					OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetRotationAngle()),								ObjectModelEntryFlags::none },
 	{ "centre",					OBJECT_MODEL_FUNC_ARRAY(3),																		ObjectModelEntryFlags::none },
 #endif
@@ -192,7 +197,7 @@ constexpr ObjectModelTableEntry Move::objectModelTable[] =
 constexpr uint8_t Move::objectModelTableDescriptor[] =
 {
 	9 + SUPPORT_COORDINATE_ROTATION,
-	17 + SUPPORT_WORKPLACE_COORDINATES + SUPPORT_KEEPOUT_ZONES,
+	17 + SUPPORT_COORDINATE_ROTATION + SUPPORT_KEEPOUT_ZONES,
 	2,
 	5 + SUPPORT_LASER,
 	3,

@@ -375,6 +375,7 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 
 #if SUPPORT_ACCELEROMETERS
 	// 9. boards[0].accelerometer members
+	{ "orientation",		OBJECT_MODEL_FUNC_NOSELF((int32_t)Accelerometers::GetLocalAccelerometerOrientation()),						ObjectModelEntryFlags::none },
 	{ "points",				OBJECT_MODEL_FUNC_NOSELF((int32_t)Accelerometers::GetLocalAccelerometerDataPoints()),						ObjectModelEntryFlags::none },
 	{ "runs",				OBJECT_MODEL_FUNC_NOSELF((int32_t)Accelerometers::GetLocalAccelerometerRuns()),								ObjectModelEntryFlags::none },
 #endif
@@ -414,7 +415,7 @@ constexpr uint8_t Platform::objectModelTableDescriptor[] =
 	2,																		// section 7: move.axes[].microstepping
 	2,																		// section 8: move.extruders[].microstepping
 #if SUPPORT_ACCELEROMETERS
-	2,																		// section 9: boards[0].accelerometer
+	3,																		// section 9: boards[0].accelerometer
 #else
 	0,
 #endif

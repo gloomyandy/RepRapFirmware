@@ -507,7 +507,7 @@ ObjectExplorationContext::ObjectExplorationContext(const GCodeBuffer *_ecv_null 
 	  shortForm(false), wantArrayLength(wal), wantExists(false),
 	  includeNonLive(true), includeImportant(false), includeNulls(false),
 	  excludeVerbose(true), excludeObsolete(true),
-	  obsoleteFieldQueried(false)
+	  obsoleteFieldQueried(false), truncateLongArrays(true)
 {
 	while (true)
 	{
@@ -522,7 +522,7 @@ ObjectExplorationContext::ObjectExplorationContext(const GCodeBuffer *_ecv_null 
 			shortForm = true;
 			break;
 		case 'f':
-			includeNonLive = false;
+			includeNonLive = false; truncateLongArrays = false;
 			break;
 		case 'i':
 			includeImportant = true;
@@ -543,6 +543,7 @@ ObjectExplorationContext::ObjectExplorationContext(const GCodeBuffer *_ecv_null 
 			break;
 		case 'a':
 			startElement = 0;
+			truncateLongArrays = false;
 			while (isdigit(*reportFlags))
 			{
 				startElement = (10 * startElement) + (*reportFlags - '0');
@@ -566,7 +567,7 @@ ObjectExplorationContext::ObjectExplorationContext(const GCodeBuffer *_ecv_null 
 	  shortForm(false), wantArrayLength(wal), wantExists(wex),
 	  includeNonLive(true), includeImportant(false), includeNulls(false),
 	  excludeVerbose(false), excludeObsolete(false),
-	  obsoleteFieldQueried(false)
+	  obsoleteFieldQueried(false), truncateLongArrays(false)
 {
 }
 
