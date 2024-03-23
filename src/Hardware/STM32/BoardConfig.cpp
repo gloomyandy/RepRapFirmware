@@ -828,7 +828,7 @@ void BoardConfig::Init() noexcept
     APIN_ESP_SPI_MOSI = SPIPins[WiFiSpiChannel][2];
     APIN_ESP_SPI_MISO = SPIPins[WiFiSpiChannel][1];
     APIN_ESP_SPI_SCK = SPIPins[WiFiSpiChannel][0];
-    
+
     if(WifiSerialRxTxPins[0] != NoPin && WifiSerialRxTxPins[1] != NoPin)
     {
         //Setup the Serial Port for ESP Wifi
@@ -872,8 +872,6 @@ void BoardConfig::Init() noexcept
 #if SUPPORT_TMC22xx || SUPPORT_DMA_NEOPIXEL
     DMABitIOInit();
 #endif
-debugPrintf("Init SbcLoadConfig is %d\n", SbcLoadConfig);
-
 }
 
 // Function to look up a pin name pass back the corresponding index into the pin table
