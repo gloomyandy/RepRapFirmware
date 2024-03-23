@@ -83,7 +83,6 @@ static const boardConfigEntry_t boardConfigs[]=
     {"pins.SetLow", PinsSetLow, MaxInitialPins, cvPinType},
 
     //Steppers
-    {"stepper.numDrivers", &totalSmartDrivers, 1, cvUint32Type},
     {"stepper.powerEnablePin", &StepperPowerEnablePin, 1, cvPinType},
     {"stepper.enablePins", ENABLE_PINS, NumDirectDrivers, cvPinType},
     {"stepper.stepPins", STEP_PINS, NumDirectDrivers, cvPinType},
@@ -723,14 +722,14 @@ void BoardConfig::Init() noexcept
     }
     else if (!BoardConfig::LoadBoardConfigFromFile(boardConfigFile))
     {
-        // No SD card, or no board.txt
-        MessageF(UsbMessage, "Warning: unable to load configuration from file\n");
+        // No board.txt
+        MessageF(UsbMessage, "Warning: unable to load board configuration from file\n");
         // Enable loading of config from the SBC
-        SbcMode = SbcLoadConfig = true;
+        SbcLoadConfig = true;
     }
     if (SbcLoadConfig)
     {
-        MessageF(UsbMessage, "Using SBC based configuration files\n");
+        MessageF(UsbMessage, "Checking for SBC based configuration files\n");
         // Check for a configuration stored in RAM (supplied by the SBC),
         // if found use it and override any config from the card
         InMemoryBoardConfiguration inMemoryConfig;
@@ -747,11 +746,15 @@ void BoardConfig::Init() noexcept
 #else
     // Try and mount the sd card and read the board.txt file, error if not present
     sdChannel = InitSDCard(sdConfig, true, true);
+    if (sdChannel == SSPNONE)
+    {
+        FatalError("Failed to load board configuration\n");
+        return;
+    }
     if (!BoardConfig::LoadBoardConfigFromFile(boardConfigFile))
     {
         // failed to load a valid configuration
-        FatalError("Failed to load board configuration\n");
-        return;
+        MessageF(UsbMessage, "Warning: unable to load board configuration from file\n");
     }
 #endif
     if (MassStorage::IsDriveMounted(0))
@@ -762,10 +765,6 @@ void BoardConfig::Init() noexcept
     {
         FatalError("No SBC configuration\n");
         return;
-    }
-    if (!SbcMode)
-    {
-        reprap.GetSbcInterface().FreeMemory();
     }
 #endif
     //Calculate STEP_DRIVER_MASK (used for parallel writes)
@@ -820,36 +819,29 @@ void BoardConfig::Init() noexcept
     MassStorage::Init2();
 #endif
 #if HAS_SBC_INTERFACE
-    if (SbcMode)
-    {
-        pinMode(SbcCsPinConfig, INPUT_PULLUP);
-        SbcTfrReadyPin = SbcTfrReadyPinConfig;
-        SbcCsPin = SbcCsPinConfig;
-    }
-    else
+    SbcTfrReadyPin = SbcTfrReadyPinConfig;
+    SbcCsPin = SbcCsPinConfig;
 #endif
-    {
+
 #if HAS_WIFI_NETWORKING
-        pinMode(SamCsPin, OUTPUT_LOW);
-        pinMode(EspResetPin, OUTPUT_LOW);
-        // Setup WiFi pins for compatibility
-        APIN_ESP_SPI_MOSI = SPIPins[WiFiSpiChannel][2];
-        APIN_ESP_SPI_MISO = SPIPins[WiFiSpiChannel][1];
-        APIN_ESP_SPI_SCK = SPIPins[WiFiSpiChannel][0];
+    // Setup WiFi pins for compatibility
+    APIN_ESP_SPI_MOSI = SPIPins[WiFiSpiChannel][2];
+    APIN_ESP_SPI_MISO = SPIPins[WiFiSpiChannel][1];
+    APIN_ESP_SPI_SCK = SPIPins[WiFiSpiChannel][0];
+    
+    if(WifiSerialRxTxPins[0] != NoPin && WifiSerialRxTxPins[1] != NoPin)
+    {
+        //Setup the Serial Port for ESP Wifi
+        APIN_SerialWiFi_RXD = WifiSerialRxTxPins[0];
+        APIN_SerialWiFi_TXD = WifiSerialRxTxPins[1];
         
-        if(WifiSerialRxTxPins[0] != NoPin && WifiSerialRxTxPins[1] != NoPin)
+        if(!serialWiFi.Configure(WifiSerialRxTxPins[0], WifiSerialRxTxPins[1]))
         {
-            //Setup the Serial Port for ESP Wifi
-            APIN_SerialWiFi_RXD = WifiSerialRxTxPins[0];
-            APIN_SerialWiFi_TXD = WifiSerialRxTxPins[1];
-            
-            if(!serialWiFi.Configure(WifiSerialRxTxPins[0], WifiSerialRxTxPins[1]))
-            {
-                reprap.GetPlatform().MessageF(UsbMessage, "Failed to set WIFI Serial with pins %c.%d and %c.%d.\n", 'A'+(WifiSerialRxTxPins[0] >> 4), (WifiSerialRxTxPins[0] & 0xF), 'A'+(WifiSerialRxTxPins[1] >> 4), (WifiSerialRxTxPins[1] & 0xF) );
-            }
+            reprap.GetPlatform().MessageF(UsbMessage, "Failed to set WIFI Serial with pins %c.%d and %c.%d.\n", 'A'+(WifiSerialRxTxPins[0] >> 4), (WifiSerialRxTxPins[0] & 0xF), 'A'+(WifiSerialRxTxPins[1] >> 4), (WifiSerialRxTxPins[1] & 0xF) );
         }
-#endif
     }
+#endif
+
 
 #if defined(SERIAL_AUX_DEVICE)
     //Configure Aux Serial
@@ -880,6 +872,8 @@ void BoardConfig::Init() noexcept
 #if SUPPORT_TMC22xx || SUPPORT_DMA_NEOPIXEL
     DMABitIOInit();
 #endif
+debugPrintf("Init SbcLoadConfig is %d\n", SbcLoadConfig);
+
 }
 
 // Function to look up a pin name pass back the corresponding index into the pin table
@@ -1372,14 +1366,18 @@ bool BoardConfig::LoadBoardConfigFromSBC() noexcept
 {
     // Is this feature disabled?
     if (!SbcLoadConfig) return false;
+    // get existing config
+    // Force Sbc mode on
+    SbcMode = true;
     InMemoryBoardConfiguration oldConfig, newConfig;
     oldConfig.getConfiguration();
+    // now ask sbc for new config
     LoadBoardDefaults();
     BoardConfig::LoadBoardConfigFromFile(boardConfigFile);
 #if HAS_SMART_DRIVERS
     ConfigureDriveType();
-#endif       
-    // SbcLoadConfig may have been reset force it back on
+#endif
+    // SbcLoadConfig/SbcMode may have been reset force it back on
     SbcMode = SbcLoadConfig = true;
     newConfig.getConfiguration();
     if (oldConfig.isEqual(newConfig))

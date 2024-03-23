@@ -632,6 +632,9 @@ void RepRap::Init() noexcept
 			if (!RunStartupFile(GCodes::CONFIG_FILE, true) && !RunStartupFile(GCodes::CONFIG_BACKUP_FILE, true))
 			{
 				platform->Message(AddWarning(UsbMessage), "no configuration file found\n");
+#if HAS_SBC_INTERFACE && STM32
+				usingSbcInterface = true;
+#endif
 			}
 		}
 # if HAS_SBC_INTERFACE
@@ -646,7 +649,12 @@ void RepRap::Init() noexcept
 			delay(3000);								// Wait a few seconds so users have a chance to see this
 			platform->MessageF(AddWarning(UsbMessage), "%s\n", reply.c_str());
 		}
-# if HAS_SBC_INTERFACE && !STM32
+# if HAS_SBC_INTERFACE
+# if STM32
+		if (!usingSbcInterface)
+			GetSbcInterface().FreeMemory();
+		else
+#endif
 		sbcInterface->Init();
 # endif
 	}
