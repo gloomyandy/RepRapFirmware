@@ -25,7 +25,6 @@
 # if STM32H743xx
 #  define STM_ELECTRONICS_STRING "STM32H743"
 #  define STM_BOARD_STRING "STM32H743"
-#  define DEFAULT_FIRMWARE_FILE   "firmware-stm32h743.bin"
 #  define IAP_UPDATE_FILE         "stm32h743_iap_SD.bin"
 #  define IAP_UPDATE_FILE_SBC     "stm32h743_iap_SBC.bin"
 #  define IAP_CAN_LOADER_FILE     "stm32h743_iap_CAN.bin"
@@ -35,8 +34,7 @@
   // For now we use the generic stm32h7 name for stm32h743 based systems, this is compatible with released versions
 #  define STM_ELECTRONICS_STRING "STM32H723"
 #  define STM_BOARD_STRING "STM32H723"
-#  define DEFAULT_FIRMWARE_FILE   "firmware-stm32h723.bin"
-#  define IAP_UPDATE_FILE         "stm32h723_iap_SD.bin"
+  define IAP_UPDATE_FILE         "stm32h723_iap_SD.bin"
 #  define IAP_UPDATE_FILE_SBC     "stm32h723_iap_SBC.bin"
 #  define IAP_CAN_LOADER_FILE     "stm32h723_iap_CAN.bin"
 
@@ -54,7 +52,6 @@
 
 # define STM_ELECTRONICS_STRING "STM32F4"
 # define STM_BOARD_STRING "STM32F4"
-# define DEFAULT_FIRMWARE_FILE       "firmware-stm32f4.bin"
 # define IAP_UPDATE_FILE         "stm32f4_iap_SD.bin"
 # define IAP_UPDATE_FILE_SBC     "stm32f4_iap_SBC.bin"
 # define IAP_CAN_LOADER_FILE     "stm32f4_iap_CAN.bin"
@@ -509,5 +506,5 @@ namespace StepPins
         }
     }
 }
-
+extern bool IsSTM32Firmware(const char *firmwareName, const uint32_t len) noexcept;
 #endif

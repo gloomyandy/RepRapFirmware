@@ -50,8 +50,8 @@ extern uint32_t _nocache2_ram_end;
 #endif
 
 
-char BoardName[MaxBoardNameLength];
-char iapFirmwareFile[MaxBoardNameLength*2] = DEFAULT_FIRMWARE_FILE;
+char BoardName[MaxBoardNameLength] = "unknown";
+char iapFirmwareFile[MaxBoardNameLength*2] = "unknown";
 typedef enum {
     SD_SPI1_A,
     SD_SPI1_B,
@@ -628,7 +628,7 @@ static bool LoadBoardDefaults() noexcept
     {
         MessageF(UsbMessage, "Found boot config for board: %s\n", BoardName);
         // we use the name configured here for the firmware file
-        SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware-%s.bin", BoardName);
+        SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware_%s.bin", BoardName);
         InitDiagPin();
         return true;
     }
