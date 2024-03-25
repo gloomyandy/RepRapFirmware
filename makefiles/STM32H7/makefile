@@ -26,9 +26,9 @@ $(info Building RepRapFirmware for STM32H7 based boards:)
 $(info  - Variant: $(VARIANT))
 
 ifeq ($(VARIANT),STM32H723)
-	BASE_OUTPUT_NAME=base-stm32h723
+	BASE_OUTPUT_NAME=base_stm32h723
 else
-	BASE_OUTPUT_NAME=base-stm32h743
+	BASE_OUTPUT_NAME=base_stm32h743
 endif
 
 
