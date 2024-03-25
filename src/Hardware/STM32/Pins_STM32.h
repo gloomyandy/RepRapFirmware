@@ -34,7 +34,7 @@
   // For now we use the generic stm32h7 name for stm32h743 based systems, this is compatible with released versions
 #  define STM_ELECTRONICS_STRING "STM32H723"
 #  define STM_BOARD_STRING "STM32H723"
-  define IAP_UPDATE_FILE         "stm32h723_iap_SD.bin"
+#  define IAP_UPDATE_FILE         "stm32h723_iap_SD.bin"
 #  define IAP_UPDATE_FILE_SBC     "stm32h723_iap_SBC.bin"
 #  define IAP_CAN_LOADER_FILE     "stm32h723_iap_CAN.bin"
 
