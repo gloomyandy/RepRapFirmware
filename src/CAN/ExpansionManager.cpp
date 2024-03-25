@@ -355,7 +355,7 @@ GCodeResult ExpansionManager::UpdateRemoteFirmware(uint32_t boardAddress, GCodeB
 	// allow use of non duet3d firmware
 	if (IsSTM32Firmware(reply.c_str(), strlen(reply.c_str())))
 	{
-		firmwareFilename.copy("firmware-");
+		firmwareFilename.copy("firmware_");
 	}
 	else
 	#endif
