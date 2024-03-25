@@ -152,6 +152,7 @@ static const boardConfigEntry_t boardConfigs[]=
     {"8266wifi.serialRxTxPins", &WifiSerialRxTxPins, NumberSerialPins, cvPinType},
     {"8266wifi.spiChannel", &WiFiSpiChannel, 1, cvUint8Type},    
     {"8266wifi.clockReg", &WiFiClockReg, 1, cvUint32Type},
+    {"8266wifi.moduleType", &NetworkModule, 1, cvModuleType},
     {"wifi.espDataReadyPin", &EspDataReadyPin, 1, cvPinType},
     {"wifi.TfrReadyPin", &SamTfrReadyPin, 1, cvPinType},
     {"wifi.espResetPin", &EspResetPin, 1, cvPinType},
