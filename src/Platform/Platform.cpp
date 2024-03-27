@@ -274,7 +274,7 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 	{ "name",				OBJECT_MODEL_FUNC(self->GetBoardName()),															ObjectModelEntryFlags::none },
 	{ "shortName",			OBJECT_MODEL_FUNC(self->GetBoardShortName()),														ObjectModelEntryFlags::none },
 #elif STM32
-    { "name",               OBJECT_MODEL_FUNC_NOSELF(lpcBoardName),                                                             ObjectModelEntryFlags::none },
+    { "name",               OBJECT_MODEL_FUNC_NOSELF(BoardName),                                                             ObjectModelEntryFlags::none },
     { "shortName",          OBJECT_MODEL_FUNC_NOSELF(BOARD_SHORT_NAME),                                                         ObjectModelEntryFlags::none },
 #else
 	{ "name",				OBJECT_MODEL_FUNC_NOSELF(BOARD_NAME),																ObjectModelEntryFlags::none },

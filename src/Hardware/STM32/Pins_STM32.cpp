@@ -66,6 +66,8 @@ Pin SPIPins[NumSPIDevices][NumSPIPins];                 //GPIO pins for hardware
 
 
 #if HAS_WIFI_NETWORKING
+    NetworkModuleType NetworkModule;
+    const char* ModuleFiles[] = {"", "", "WiFiModule_esp8266.bin", "WiFiModule_esp32.bin", "WiFiModule_esp32eth.bin"};
     Pin EspDataReadyPin;
     Pin SamTfrReadyPin;
     Pin EspResetPin;
@@ -97,6 +99,7 @@ Pin SPIPins[NumSPIDevices][NumSPIPins];                 //GPIO pins for hardware
     Pin SbcCsPin;
     SSPChannel SbcSpiChannel;
     bool SbcLoadConfig;
+    bool SbcMode;
 #endif
 
 #if SUPPORT_SPICAN
@@ -124,3 +127,9 @@ Pin StepperPowerEnablePin;
 SSPChannel AccelerometerSpiChannel;
 #endif
 
+// Check to see if the board shortname is for an STM32 based board or not
+bool IsSTM32Firmware(const char *boardName, const uint32_t len) noexcept
+{
+    const char *endBoard = boardName + len;
+    return (len >= 5 && (!strncmp("stm", boardName, 3) || !strncmp("_f4, ", endBoard - 3, 3) || !strncmp("_h723", endBoard - 5, 5) || !strncmp("_h743", endBoard - 5, 5)));
+}

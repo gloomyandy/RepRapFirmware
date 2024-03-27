@@ -429,9 +429,9 @@ void ExpressionValue::ExtractRequestedPart(const StringRef& rslt) const noexcept
 		case ExpansionDetail::firmwareFileNameUf2:
 #if STM32
 			// allow use of non Duet firmware
-			if (indexOfDivider1 >= 3 && !strncmp("stm", sVal, 3))
+			if (IsSTM32Firmware(sVal, indexOfDivider1))
 			{
-				rslt.cat("firmware-");
+				rslt.cat("firmware_");
 			}
 			else
 #endif

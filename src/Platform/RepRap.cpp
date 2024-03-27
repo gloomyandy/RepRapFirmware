@@ -598,9 +598,14 @@ void RepRap::Init() noexcept
 	platform->MessageF(UsbMessage, "%s\n", VersionText);
 
 #if HAS_SBC_INTERFACE && (!HAS_MASS_STORAGE || STM32)
-	usingSbcInterface = true;
-	sbcInterface->Init();
-	FileWriteBuffer::UsingSbcMode();
+#if STM32 && HAS_MASS_STORAGE
+	if (SbcMode)
+#endif
+	{
+		usingSbcInterface = true;
+		sbcInterface->Init();
+		FileWriteBuffer::UsingSbcMode();
+	}
 #endif
 
 #if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
@@ -627,6 +632,9 @@ void RepRap::Init() noexcept
 			if (!RunStartupFile(GCodes::CONFIG_FILE, true) && !RunStartupFile(GCodes::CONFIG_BACKUP_FILE, true))
 			{
 				platform->Message(AddWarning(UsbMessage), "no configuration file found\n");
+#if HAS_SBC_INTERFACE && STM32
+				usingSbcInterface = true;
+#endif
 			}
 		}
 # if HAS_SBC_INTERFACE
@@ -642,6 +650,11 @@ void RepRap::Init() noexcept
 			platform->MessageF(AddWarning(UsbMessage), "%s\n", reply.c_str());
 		}
 # if HAS_SBC_INTERFACE
+# if STM32
+		if (!usingSbcInterface)
+			GetSbcInterface().FreeMemory();
+		else
+#endif
 		sbcInterface->Init();
 # endif
 	}
@@ -794,7 +807,7 @@ void RepRap::Spin() noexcept
 	expansion->Spin();
 #endif
 
-#if HAS_SBC_INTERFACE
+#if HAS_SBC_INTERFACE && !STM32
 	// Keep the SBC task spinning from the main task in standalone mode to respond to a SBC if necessary
 	if (!UsingSbcInterface())
 	{
@@ -922,7 +935,7 @@ void RepRap::Diagnostics(MessageType mtype) noexcept
 		// Parameters to match format string
 		FIRMWARE_NAME,
 #if STM32
-		lpcBoardName,
+		BoardName,
 #endif
 		VERSION, DATE, TIME_SUFFIX, platform->GetElectronicsString()
 #ifdef DUET_NG
@@ -2567,7 +2580,7 @@ bool RepRap::CheckFirmwareUpdatePrerequisites(const StringRef& reply, const Stri
 #endif
 			)
 	{
-		reply.printf("Firmware binary \"%s\" is not valid for this electronics", FIRMWARE_DIRECTORY IAP_FIRMWARE_FILE);
+		reply.printf("Firmware binary \"%s/%s\" is not valid for this electronics", FIRMWARE_DIRECTORY, IAP_FIRMWARE_FILE);
 		return false;
 	}
 #if !STM32

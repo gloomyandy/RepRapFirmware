@@ -406,7 +406,7 @@ extern "C" void SBC_SPI_HANDLER() noexcept
 
 // Static data. Note, the startup code we use doesn't make any provision for initialising non-cached memory, other than to zero. So don't specify initial value here
 
-#if SAME70 || STM32
+#if SAME70 || STM32H7
 // On the STM32H7 and SAME70 we need to ensure that the following are in memory that is not cached (see above). 
 // On STM32F4 we need to ensure that memory used by the SBC interface is not in the top 32Kb of RAM as this is
 // used for the SBC IAP. Since we have a separate build for SBC on STM configurations we simply force the buffers
@@ -436,7 +436,23 @@ DataTransfer::DataTransfer() noexcept : state(InternalTransferState::ExchangingD
 	txHeader.protocolVersion = SbcProtocolVersion;
 	txHeader.numPackets = 0;
 	txHeader.sequenceNumber = 0;
+#if STM32F4
+	// We need to allocate memory early to ensure it is below the last 32Mb of RAM
+	rxBuffer = (char *)new uint32_t[(SbcTransferBufferSize + 3)/4];
+	txBuffer = (char *)new uint32_t[(SbcTransferBufferSize + 3)/4];
+#endif
 }
+
+#if STM32
+void DataTransfer::FreeMemory() noexcept
+{
+	debugPrintf("SBC data transfer Free memory called\n");
+#if STM32F4
+	delete rxBuffer;
+	delete txBuffer;
+#endif
+}
+#endif
 
 void DataTransfer::Init() noexcept
 {

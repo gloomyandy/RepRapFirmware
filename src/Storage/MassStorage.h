@@ -19,7 +19,7 @@ struct FileInfo
 	bool isDirectory;
 };
 
-#if HAS_EMBEDDED_FILES
+#if HAS_EMBEDDED_FILES || HAS_EMBEDDED_CONFIG
 
 // Functions that we call out to when using an embedded filesystem
 namespace EmbeddedFiles

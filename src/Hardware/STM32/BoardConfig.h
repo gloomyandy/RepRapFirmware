@@ -23,10 +23,11 @@ enum configValueType{
     cvUint32Type,
     cvFloatType,
     cvStringType,
-    cvDriverType
+    cvDriverType,
+    cvModuleType
 };
 
-const uint32_t CVTLengths[] = {sizeof(Pin), sizeof(bool), sizeof(uint8_t), sizeof(uint16_t), sizeof(uint32_t), sizeof(float), MaxBoardNameLength, sizeof(DriverType)};
+const uint32_t CVTLengths[] = {sizeof(Pin), sizeof(bool), sizeof(uint8_t), sizeof(uint16_t), sizeof(uint32_t), sizeof(float), MaxBoardNameLength, sizeof(DriverType), sizeof(NetworkModuleType)};
 
 struct boardConfigEntry_t
 {
@@ -46,7 +47,7 @@ public:
     static void Diagnostics(MessageType mtype) noexcept;
     static Pin StringToPin(const char *strvalue) noexcept;
     static Pin LookupPin(char *strvalue) noexcept;
-    static bool LoadBoardConfigFromFile() noexcept;
+    static bool LoadBoardConfigFromFile(const char *filePath, bool restricted = true) noexcept;
 
 #if HAS_SBC_INTERFACE
     static bool LoadBoardConfigFromSBC() noexcept;
@@ -55,7 +56,7 @@ public:
     
 private:
     BoardConfig()  noexcept;
-    static bool GetConfigKeys(FileStore * const configFile, const boardConfigEntry_t *boardConfigEntryArray, const size_t numConfigs) noexcept;
+    static bool GetConfigKeys(FileStore * const configFile) noexcept;
     static void SetValueFromString(configValueType type, void *variable, char *valuePtr) noexcept;
     static void PrintValue(MessageType mtype, configValueType configType, void *variable) noexcept;
 };

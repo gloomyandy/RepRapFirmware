@@ -164,6 +164,7 @@ void ExpansionManager::UpdateBoardState(CanAddress address, BoardState newState)
 // Process an announcement from an expansion board. Don't free the message buffer that it arrived in
 void ExpansionManager::ProcessAnnouncement(CanMessageBuffer *buf, bool isNewFormat) noexcept
 {
+	debugPrintf("Process announce\n");
 	const CanAddress src = buf->id.Src();
 	if (src <= CanId::MaxCanAddress)
 	{
@@ -352,10 +353,10 @@ GCodeResult ExpansionManager::UpdateRemoteFirmware(uint32_t boardAddress, GCodeB
 
 	String<StringLength50> firmwareFilename;
 	#if STM32
-	// allow use of non Duet firmware
-	if (!strncmp("stm", reply.c_str(), 3))
+	// allow use of non duet3d firmware
+	if (IsSTM32Firmware(reply.c_str(), strlen(reply.c_str())))
 	{
-		firmwareFilename.copy("firmware-");
+		firmwareFilename.copy("firmware_");
 	}
 	else
 	#endif
@@ -365,7 +366,6 @@ GCodeResult ExpansionManager::UpdateRemoteFirmware(uint32_t boardAddress, GCodeB
 	firmwareFilename.cat(reply.c_str());
 	// If we are updating the main firmware binary, set the extension to ".uf2" if the expansion board requested it or (for backwards compatibility) if it is a Duet 3 Mini
 	firmwareFilename.cat(moduleNumber == 0 && ((extra & 0x01) != 0 || strcmp(reply.c_str(), "Mini5plus") == 0) ? ".uf2" : ".bin");
-
 	reply.Clear();
 
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE

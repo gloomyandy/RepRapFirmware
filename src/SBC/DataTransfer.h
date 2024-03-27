@@ -39,6 +39,7 @@ class DataTransfer
 {
 public:
 	DataTransfer() noexcept;
+	void FreeMemory() noexcept;
 	void Init() noexcept;
 	void InitFromTask() noexcept;
 	void Diagnostics(MessageType mtype) noexcept;
@@ -110,7 +111,7 @@ private:
 	unsigned int failedTransfers, checksumErrors;
 
 	// Transfer buffers
-#if SAME70 || STM32
+#if SAME70 || STM32H7
 	// SAME70 has a write-back cache, so these must be in non-cached memory because we DMA to/from them.
 	// See http://ww1.microchip.com/downloads/en/DeviceDoc/Managing-Cache-Coherency-on-Cortex-M7-Based-MCUs-DS90003195A.pdf
 	// This in turn means that we must declare them static, so we can only have one DataTransfer instance

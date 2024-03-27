@@ -58,9 +58,9 @@ pre(buf->id.MsgType() == CanMessageType::firmwareBlockRequest)
 		String<MaxFilenameLength> fname;
 #if STM32
 		// allow use of non Duet firmware
-		if (!strncmp("stm", msg.boardType, 3))
+		if (IsSTM32Firmware(msg.boardType, Strnlen(msg.boardType, msg.GetBoardTypeLength(buf->dataLength))))
 		{
-			fname.copy("firmware-");
+			fname.copy("firmware_");
 		}
 		else
 #endif
@@ -69,7 +69,6 @@ pre(buf->id.MsgType() == CanMessageType::firmwareBlockRequest)
 		}
 		fname.catn(msg.boardType, msg.GetBoardTypeLength(buf->dataLength));
 		fname.cat((msg.uf2Format) ? ".uf2" : ".bin");
-
 		uint32_t fileOffset = msg.fileOffset, fileLength = 0;
 		uint32_t lreq = msg.lengthRequested;
 

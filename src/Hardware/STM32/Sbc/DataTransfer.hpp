@@ -67,6 +67,7 @@ void setup_spi(void *inBuffer, const void *outBuffer, size_t bytesToTransfer)
 // Set up the SPI system
 void InitSpi() noexcept
 {
+    pinMode(SbcCsPin, INPUT_PULLUP);
     spiDevice = (HardwareSPI *) SPI::getSSPDevice(SbcSpiChannel);
     spiDevice->configureDevice(SPI_MODE_SLAVE, 8, (uint8_t)SPI_MODE_0, 100000000);
     status = Ready;

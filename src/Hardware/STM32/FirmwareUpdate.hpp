@@ -67,6 +67,7 @@ int32_t RequestFirmwareBlock(uint32_t fileOffset, uint32_t numBytes, uint8_t *bu
 	msg->fileOffset = fileOffset;
 	msg->lengthRequested = numBytes;
     msg->fileWanted = (uint32_t)FirmwareModule::main;
+    msg->uf2Format = 0;
 	buf->dataLength = msg->GetActualDataLength();
     String<1> dummy;
     uint32_t ret = -5;

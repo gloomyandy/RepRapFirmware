@@ -24,7 +24,7 @@ V=@
 
 $(info Building RepRapFirmware for STM32F4 based boards:)
 
-BASE_OUTPUT_NAME=firmware-stm32f4
+BASE_OUTPUT_NAME=base_stm32f4
 
 ## Cross-compilation commands
 CC      = $(GCC_PATH)arm-none-eabi-gcc
@@ -89,6 +89,10 @@ ifeq ($(NETWORK), WIFI)
         $(info  - Networking: ESP WIFI) 
         FLAGS += -DESP8266WIFI -DMQTT_USE_CUSTOM_SOCKET_HANDLE -DMQTTC_PAL_FILE="Networking/MQTT/mqtt_pal.h"
 		OUTPUT_NAME =$(BASE_OUTPUT_NAME)-wifi
+else ifeq ($(NETWORK), COMBINED)
+        $(info  - Networking: WIFI + SBC) 
+        FLAGS += -DCOMBINEDFW -DMQTT_USE_CUSTOM_SOCKET_HANDLE -DMQTTC_PAL_FILE="Networking/MQTT/mqtt_pal.h"
+		OUTPUT_NAME =$(BASE_OUTPUT_NAME)
 else ifeq ($(NETWORK), SBC)
         $(info  - SBC Interface Enabled)
         FLAGS += -DLPC_SBC

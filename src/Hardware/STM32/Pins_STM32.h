@@ -2,9 +2,11 @@
 #define PINS_STM32_H__
 #include "Core.h"
 #include "sd_mmc.h"
-//#include "RepRapFirmware.h"
 #include "NVMEmulation.h"
 
+#if !defined(COMBINEDFW)
+# error "unsupported network build options"
+#endif
 
 #ifndef UNUSED
 #define UNUSED(x) (void)(x)
@@ -21,34 +23,20 @@
 # define FLASH_DATA_LENGTH (128*1024) //size of the Software Reset Data in Flash
 
 # if STM32H743xx
-#  define STM_ELECTRONICS_STRING "STM32H7"
-#  define STM_BOARD_STRING "STM32H7"
-#  define WIFI_IAP_FIRMWARE_FILE  "firmware-stm32h7-wifi.bin"
-#  define SBC_IAP_FIRMWARE_FILE   "firmware-stm32h7-sbc.bin"
-#  define IAP_UPDATE_FILE         "stm32h7_iap_SD.bin"
-#  define IAP_UPDATE_FILE_SBC     "stm32h7_iap_SBC.bin"
-#  define IAP_CAN_LOADER_FILE     "stm32h7_iap_CAN.bin"
-
-#  define WIFI_BOARD_NAME         "STM32H7 WiFi"
-#  define SBC_BOARD_NAME          "STM32H7 SBC"
-#  define WIFI_BOARD_SHORT_NAME   "stm32h7-wifi"
-#  define SBC_BOARD_SHORT_NAME    "stm32h7-sbc"
+#  define STM_ELECTRONICS_STRING "STM32H743"
+#  define STM_BOARD_STRING "STM32H743"
+#  define IAP_UPDATE_FILE         "stm32h743_iap_SD.bin"
+#  define IAP_UPDATE_FILE_SBC     "stm32h743_iap_SBC.bin"
+#  define IAP_CAN_LOADER_FILE     "stm32h743_iap_CAN.bin"
 
 #  define IAP_IMAGE_START         0x24060000
 # elif STM32H723xx
   // For now we use the generic stm32h7 name for stm32h743 based systems, this is compatible with released versions
 #  define STM_ELECTRONICS_STRING "STM32H723"
 #  define STM_BOARD_STRING "STM32H723"
-#  define WIFI_IAP_FIRMWARE_FILE  "firmware-stm32h723-wifi.bin"
-#  define SBC_IAP_FIRMWARE_FILE   "firmware-stm32h723-sbc.bin"
 #  define IAP_UPDATE_FILE         "stm32h723_iap_SD.bin"
 #  define IAP_UPDATE_FILE_SBC     "stm32h723_iap_SBC.bin"
 #  define IAP_CAN_LOADER_FILE     "stm32h723_iap_CAN.bin"
-
-#  define WIFI_BOARD_NAME         "STM32H723 WiFi"
-#  define SBC_BOARD_NAME          "STM32H723 SBC"
-#  define WIFI_BOARD_SHORT_NAME   "stm32h723-wifi"
-#  define SBC_BOARD_SHORT_NAME    "stm32h723-sbc"
 
 #  define IAP_IMAGE_START         0x24038000
 # else
@@ -64,31 +52,20 @@
 
 # define STM_ELECTRONICS_STRING "STM32F4"
 # define STM_BOARD_STRING "STM32F4"
-# define WIFI_IAP_FIRMWARE_FILE  "firmware-stm32f4-wifi.bin"
-# define SBC_IAP_FIRMWARE_FILE   "firmware-stm32f4-sbc.bin"
 # define IAP_UPDATE_FILE         "stm32f4_iap_SD.bin"
 # define IAP_UPDATE_FILE_SBC     "stm32f4_iap_SBC.bin"
 # define IAP_CAN_LOADER_FILE     "stm32f4_iap_CAN.bin"
 # define IAP_IMAGE_START         0x20018000
-
-# define WIFI_BOARD_NAME         "STM32F4 WiFi"
-# define SBC_BOARD_NAME          "STM32F4 SBC"
-# define WIFI_BOARD_SHORT_NAME   "stm32f4-wifi"
-# define SBC_BOARD_SHORT_NAME    "stm32f4-sbc"
 
 #endif
 // The name of the file used by the board bootloader, boot file is renamed to this
 #define FIRMWARE_FILE       "0:/firmware.bin"
 
 // Firmware to be loaded onto the ESP board
-#define WIFI_FIRMWARE_FILE  "DuetWiFiServer.bin"
+#define WIFI_FIRMWARE_FILE  (ModuleFiles[NetworkModule.ToBaseType()])
 
 
-#if defined(ESP8266WIFI)
-    constexpr size_t NumFirmwareUpdateModules = 5;        // 3 modules, plus one for manual upload to WiFi module (module 2 is now unused)
-#else
-    constexpr size_t NumFirmwareUpdateModules = 5;
-#endif
+constexpr size_t NumFirmwareUpdateModules = 5;        // 3 modules, plus one for manual upload to WiFi module (module 2 is now unused)
 
 // Features definition
 #define SUPPORT_OBJECT_MODEL             1
@@ -119,36 +96,21 @@
 #define SUPPORT_12864_LCD                1
 #define SUPPORT_PROBE_POINTS_FILE        1
 #define SUPPORT_KEEPOUT_ZONES            1
+#define HAS_EMBEDDED_CONFIG              1
+#define BOARD_NAME                       (BoardName)
+#define BOARD_SHORT_NAME                 (BoardName)
+#define IAP_FIRMWARE_FILE                (iapFirmwareFile)
 
-#if defined(ESP8266WIFI)
-    #define HAS_RTOSPLUSTCP_NETWORKING   0
-    #define HAS_WIFI_NETWORKING          1
-    #define HAS_MASS_STORAGE             1
-    #define SUPPORT_TELNET               0
-    #define SUPPORT_MQTT                 1
-    #define SUPPORT_FTP                  1
-    #define SUPPORT_ACCELEROMETERS       1
-    #define HAS_WRITER_TASK              1
-    #define BOARD_NAME                   WIFI_BOARD_NAME
-    #define BOARD_SHORT_NAME             WIFI_BOARD_SHORT_NAME
-    #define IAP_FIRMWARE_FILE            WIFI_IAP_FIRMWARE_FILE
 
-#elif defined(LPC_SBC)
-    #define HAS_RTOSPLUSTCP_NETWORKING   0
-    #define HAS_WIFI_NETWORKING          0
-    #define HAS_MASS_STORAGE             1
-    #define HAS_SBC_INTERFACE            1
-    #define SUPPORT_TELNET               0
-    #define SUPPORT_ACCELEROMETERS       1
-    #define HAS_WRITER_TASK              0
-
-    #define BOARD_NAME                   SBC_BOARD_NAME
-    #define BOARD_SHORT_NAME             SBC_BOARD_SHORT_NAME
-    #define IAP_FIRMWARE_FILE            SBC_IAP_FIRMWARE_FILE
-
-#else
-    #error "Undfined build configuration"
-#endif
+#define HAS_RTOSPLUSTCP_NETWORKING       0
+#define HAS_WIFI_NETWORKING              1
+#define HAS_MASS_STORAGE                 1
+#define SUPPORT_TELNET                   0
+#define HAS_SBC_INTERFACE                1
+#define SUPPORT_MQTT                     1
+#define SUPPORT_FTP                      1
+#define SUPPORT_ACCELEROMETERS           1
+#define HAS_WRITER_TASK                  1
 
 
 // The physical capabilities of the machine
@@ -310,6 +272,7 @@ extern SSPChannel TempSensorSSPChannel;
     extern Pin SbcCsPin;
     extern SSPChannel SbcSpiChannel;
     extern bool SbcLoadConfig;
+    extern bool SbcMode;
 #endif
 
 #if SUPPORT_SPICAN
@@ -372,8 +335,16 @@ extern Pin AuxSerialRxTxPins[NumberSerialPins];
 #define SERIAL_MAIN_DEVICE  serialUSB  //USB
 
 
-
-#if defined(ESP8266WIFI)
+#if HAS_WIFI_NETWORKING
+    NamedEnum(NetworkModuleType, uint8_t,
+        unknown,
+        none,
+        esp8266,
+        esp32,
+        esp32eth
+    );
+    extern NetworkModuleType NetworkModule;
+    extern const char* ModuleFiles[];
     extern Pin EspDataReadyPin;
     extern Pin SamTfrReadyPin;
     extern Pin EspResetPin;
@@ -414,7 +385,8 @@ bool LookupPinName(const char *pn, LogicalPin& lpin, bool& hardwareInverted) noe
 const char *GetPinNames(LogicalPin lp) noexcept;
 
 constexpr size_t MaxBoardNameLength = 32;
-extern char lpcBoardName[MaxBoardNameLength];
+extern char BoardName[MaxBoardNameLength];
+extern char iapFirmwareFile[MaxBoardNameLength*2];
 extern size_t totalSmartDrivers;
 extern size_t num5160SmartDrivers;
 
@@ -534,5 +506,5 @@ namespace StepPins
         }
     }
 }
-
+extern bool IsSTM32Firmware(const char *firmwareName, const uint32_t len) noexcept;
 #endif
