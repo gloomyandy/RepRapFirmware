@@ -7,7 +7,7 @@ REPRAPFIRMWARE_DIR ?= ./RepRapFirmware
 RRFLIBRARIES_DIR ?= ./RRFLibraries
 CORESTM_DIR ?= ./CoreN2G
 CANLIB_DIR ?= CANlib
-
+OUTPUT_NAME ?= base_stm32f4
 BUILD ?= Debug
 
 NETWORK ?= WIFI
@@ -24,8 +24,6 @@ V=@
 
 $(info Building RepRapFirmware for STM32F4 based boards:)
 
-BASE_OUTPUT_NAME=base_stm32f4
-
 ## Cross-compilation commands
 CC      = $(GCC_PATH)arm-none-eabi-gcc
 CXX     = $(GCC_PATH)arm-none-eabi-g++
@@ -38,7 +36,7 @@ SIZE    = $(GCC_PATH)arm-none-eabi-size
 
 MKDIR = mkdir -p
 
-$(info  - MAKE_DIR: $(MAKE_DIR))
+$(info - MAKE_DIR: $(MAKE_DIR))
 include $(MAKE_DIR)/Core.mk
 include $(MAKE_DIR)/FreeRTOS.mk
 include $(MAKE_DIR)/RRFLibraries.mk
@@ -61,7 +59,7 @@ LINKER_SCRIPT_BASE = $(REPRAPFIRMWARE_DIR)/src/Hardware/STM32/variants/STM32F407
 
 #Path to the linker Script
 LINKER_SCRIPT  = $(LINKER_SCRIPT_BASE).ld
-$(info  - Linker Script used: $(LINKER_SCRIPT))
+$(info - Linker Script used: $(LINKER_SCRIPT))
 
 
 #Flags common for Core in c and c++
@@ -86,29 +84,25 @@ FLAGS += $(DEBUG_FLAGS)
 FLAGS += -MMD -MP 
 
 ifeq ($(NETWORK), WIFI)
-        $(info  - Networking: ESP WIFI) 
+        $(info - Networking: ESP WIFI) 
         FLAGS += -DESP8266WIFI -DMQTT_USE_CUSTOM_SOCKET_HANDLE -DMQTTC_PAL_FILE="Networking/MQTT/mqtt_pal.h"
-		OUTPUT_NAME =$(BASE_OUTPUT_NAME)-wifi
 else ifeq ($(NETWORK), COMBINED)
-        $(info  - Networking: WIFI + SBC) 
+        $(info - Networking: WIFI + SBC) 
         FLAGS += -DCOMBINEDFW -DMQTT_USE_CUSTOM_SOCKET_HANDLE -DMQTTC_PAL_FILE="Networking/MQTT/mqtt_pal.h"
-		OUTPUT_NAME =$(BASE_OUTPUT_NAME)
 else ifeq ($(NETWORK), SBC)
-        $(info  - SBC Interface Enabled)
+        $(info - SBC Interface Enabled)
         FLAGS += -DLPC_SBC
-		OUTPUT_NAME =$(BASE_OUTPUT_NAME)-sbc
 else
-        $(info  - Networking: None)
-		OUTPUT_NAME =$(BASE_OUTPUT_NAME)
+        $(info - Networking: None)
 endif
 
 
 ifeq ($(TMC22XX), true)
-        $(info  - Smart Drivers: TMC22XX)
+        $(info - Smart Drivers: TMC22XX)
         FLAGS += -DSUPPORT_TMC22xx
 endif
 ifeq ($(TMC51XX), true)
-        $(info  - Smart Drivers: TMC51XX)
+        $(info - Smart Drivers: TMC51XX)
         FLAGS += -DSUPPORT_TMC51xx
 endif
 $(info - Output name: $(OUTPUT_NAME))
