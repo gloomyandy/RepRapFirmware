@@ -55,12 +55,12 @@ static unsigned int GetDecimalPlaces(uint8_t dataResolution) noexcept
 
 // Local accelerometer handling
 
-#include "LIS3DH.h"
+#include "LISAccelerometer.h"
 
 constexpr size_t AccelerometerTaskStackWords = 400;			// big enough to handle printf and file writes
 static Task<AccelerometerTaskStackWords> *accelerometerTask;
 
-static LIS3DH *accelerometer = nullptr;
+static LISAccelerometer *accelerometer = nullptr;
 
 static uint16_t samplingRate = 0;							// 0 means use the default
 static volatile uint32_t numSamplesRequested;
@@ -320,9 +320,9 @@ GCodeResult Accelerometers::ConfigureAccelerometer(GCodeBuffer& gb, const String
 			reply.copy("Accelerometer SPI channel has not been configured");
 			return GCodeResult::error;
 		}
-		auto temp = new LIS3DH(SharedSpiDevice::GetSharedSpiDevice(AccelerometerSpiChannel), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin());
+		auto temp = new LISAccelerometer(SharedSpiDevice::GetSharedSpiDevice(AccelerometerSpiChannel), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin());
 #else
-		auto temp = new LIS3DH(SharedSpiDevice::GetMainSharedSpiDevice(), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin());
+		auto temp = new LISAccelerometer(SharedSpiDevice::GetMainSharedSpiDevice(), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin());
 #endif
 		if (temp->CheckPresent())
 		{
