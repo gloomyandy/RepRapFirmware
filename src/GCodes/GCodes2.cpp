@@ -76,19 +76,38 @@ bool GCodes::ActOnCode(GCodeBuffer& gb, const StringRef& reply) noexcept
 {
 #if SUPPORT_ASYNC_MOVES
 	// If we are running multiple motion systems in single input stream mode and we have resumed after a pause, then we may need to skip some commands
+	// Also if we did a synchronous pause then we need to sip the pause command
 	{
-		FilePosition offsetToSkipTo;
-		if (   &gb == FileGCode()
-			&& gb.ExecutingAll()
-			&& (offsetToSkipTo = GetMovementState(gb).fileOffsetToSkipTo) != 0
-			&& !(gb.GetCommandLetter() == 'M' && gb.HasCommandNumber() && gb.GetCommandNumber() == 596)
-		   )
+		if (&gb == FileGCode() && gb.ExecutingAll())
 		{
-			if (gb.GetJobFilePosition() < offsetToSkipTo)
+			const FilePosition offsetToSkipTo = GetMovementState(gb).fileOffsetToSkipTo;
+			if (offsetToSkipTo != 0)
 			{
-				return true;
+				const FilePosition jobFilePos = gb.GetJobFilePosition();
+				if (jobFilePos < offsetToSkipTo)
+				{
+					// Skip any command except M596
+					if (!(gb.GetCommandLetter() == 'M' && gb.HasCommandNumber() && gb.GetCommandNumber() == 596))
+					{
+						return true;
+					}
+				}
+				else if (jobFilePos == offsetToSkipTo)
+				{
+					// If we paused on a synchronous pause command, skip it
+					int commandNumber;
+					if (   gb.GetCommandLetter() == 'M'
+						&& ((commandNumber = gb.GetCommandNumber()) == 226 || commandNumber == 600 || commandNumber == 601 || commandNumber == 25)
+					   )
+					{
+						return true;
+					}
+				}
+				else
+				{
+					GetMovementState(gb).fileOffsetToSkipTo = 0;			// clear this to speed up the test next time
+				}
 			}
-			GetMovementState(gb).fileOffsetToSkipTo = 0;			// clear this to speed up the test next time
 		}
 	}
 #endif
@@ -312,13 +331,21 @@ bool GCodes::HandleGcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 		case 17:	// Select XY plane for G2/G3
 		case 18:	// Select XZ plane
 		case 19:	// Select YZ plane
-			if (!LockCurrentMovementSystemAndWaitForStandstill(gb))			// do this in case a G2 or G3 command is in progress
+			// If the plane is changing, wait for motion to stop so that if we get a power failure then the selected plane will match
+			// any not-yet-executed arc moves in the queue and we can resurrect those moves.
+			// However, some generators prefix every G2/G3 command with G17/18/19 so don't wait if the plane is not changing.
 			{
-				return false;
+				const unsigned int newPlane = (unsigned int)code - 17;
+				if (newPlane != gb.LatestMachineState().selectedPlane)
+				{
+					if (!LockCurrentMovementSystemAndWaitForStandstill(gb))
+					{
+						return false;
+					}
+					gb.LatestMachineState().selectedPlane = newPlane;
+					reprap.InputsUpdated();
+				}
 			}
-
-			gb.LatestMachineState().selectedPlane = code - 17;
-			reprap.InputsUpdated();
 			break;
 
 		case 20: // Inches (which century are we living in, here?)
@@ -1227,9 +1254,9 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 			case 26: // Set SD position
 				// This is used between executing M23 to set up the file to print, and M24 to print it
 				// When using multiple motion systems, execute M26 once in the context of each motion system
-				gb.MustSee('S');
-				static_assert(sizeof(FilePosition) == sizeof(uint32_t), "Only 32 bits of file position are read");
 				{
+					static_assert(sizeof(FilePosition) == sizeof(uint32_t), "Only 32 bits of file position are read");
+					gb.MustSee('S');
 					MovementState& ms = GetMovementState(gb);
 					ms.fileOffsetToPrint = (FilePosition)gb.GetUIValue();
 					ms.restartMoveFractionDone = (gb.Seen('P')) ? constrain<float>(gb.GetFValue(), 0.0, 1.0) : 0.0;
@@ -4294,7 +4321,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 				}
 				break;
 
-#if false
+#if 0
 			// This code is not finished yet
 			case 674: // Set Z to center point
 				if (LockMovementAndWaitForStandstill(gb))
