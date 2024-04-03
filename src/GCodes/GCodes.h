@@ -636,7 +636,7 @@ private:
 #if SUPPORT_ASYNC_MOVES
 	GCodeBuffer* File2GCode() const noexcept { return gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::File2)]; }
 	GCodeBuffer* Queue2GCode() const noexcept { return gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Queue2)]; }
-	GCodeBuffer* GetFileGCode(unsigned int msNumber) const noexcept { return (msNumber == 0) ? FileGCode() : File2GCode(); }
+	GCodeBuffer* GetFileGCode(unsigned int msNumber) const noexcept;
 #else
 	GCodeBuffer* GetFileGCode(unsigned int msNumber) const noexcept { return FileGCode(); }
 #endif
@@ -770,6 +770,7 @@ private:
 
 #if SUPPORT_ASYNC_MOVES
 	CollisionAvoider collisionChecker;			// currently we support just one collision avoider
+	MovementSystemNumber pausedMovementSystemNumber;
 #endif
 #if SUPPORT_KEEPOUT_ZONES
 	KeepoutZone keepoutZone;					// currently we support just one keepout zone
