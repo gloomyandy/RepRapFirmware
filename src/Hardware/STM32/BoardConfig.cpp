@@ -51,6 +51,7 @@ extern uint32_t _nocache2_ram_end;
 
 
 char BoardName[MaxBoardNameLength] = "unknown";
+char BoardLongName[MaxBoardNameLength] = "unknown";
 char iapFirmwareFile[MaxBoardNameLength*2] = "unknown";
 typedef enum {
     SD_SPI1_A,
@@ -73,6 +74,7 @@ static constexpr char pinsConfigFile[] = "0:/rrfpins.txt";
 static const boardConfigEntry_t boardConfigs[]=
 {
     {"board", &BoardName, 1, cvStringType},
+    {"board.longName", &BoardLongName, 1, cvStringType},
     {"leds.diagnostic", &DiagPin, 1, cvPinType},
     {"leds.diagnosticOn", &DiagOnPolarity, 1, cvBoolType},
     {"leds.activity", &ActLedPin, 1, cvPinType},
@@ -1629,9 +1631,18 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile) noexcept
                         {
                             //should be at first char of value now
                             char *valuePtr = line+pos;
-
-                            //read until end condition - space, ;, comment, null,etc
-                            while(pos < len && IsValidChar(line[pos])) pos++;
+                            if (*valuePtr == '"')
+                            {
+                                // quoted string
+                                pos++;
+                                valuePtr++;
+                                while (pos < len && line[pos] != '"') pos++;
+                            }
+                            else
+                            {
+                                //read until end condition - space, ;, comment, null,etc
+                                while(pos < len && IsValidChar(line[pos])) pos++;
+                            }
 
                             //overrite the end condition with null....
                             line[pos] = 0; // null terminate the string (the "value")
