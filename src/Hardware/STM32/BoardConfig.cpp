@@ -221,7 +221,7 @@ static void ClearConfig() noexcept
                     break;
 #if HAS_WIFI_NETWORKING
                 case cvModuleType:
-                    ((NetworkModuleType *)(next.variable))[p] = NetworkModuleType::unknown;
+                    ((NetworkModuleType *)(next.variable))[p] = NetworkModuleType::espauto;
                     break;
 #endif
                 case cvBoolType:
@@ -633,6 +633,8 @@ static bool LoadBoardDefaults() noexcept
         // we use the name configured here for the firmware file
         SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware_%s.bin", BoardName);
         InitDiagPin();
+        // for now ignore settings in boot file
+        NetworkModule = NetworkModuleType::espauto;
         return true;
     }
     return false;

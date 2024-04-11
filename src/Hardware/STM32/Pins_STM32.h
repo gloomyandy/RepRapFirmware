@@ -337,7 +337,7 @@ extern Pin AuxSerialRxTxPins[NumberSerialPins];
 
 #if HAS_WIFI_NETWORKING
     NamedEnum(NetworkModuleType, uint8_t,
-        unknown,
+        espauto,
         none,
         esp8266,
         esp32,

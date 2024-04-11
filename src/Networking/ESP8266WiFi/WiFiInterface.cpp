@@ -490,6 +490,10 @@ void WiFiInterface::Activate() noexcept
 		else
 		{
 			platform.Message(UsbMessage, "WiFi is disabled.\n");
+#if STM32
+			// try and detect what sort of hardware we have for uploads etc.
+			if (uploader) uploader->DetectWiFiModuleType();
+#endif
 		}
 	}
 }
@@ -663,6 +667,9 @@ void WiFiInterface::Spin() noexcept
 				{
 					platform.Message(NetworkInfoMessage, "WiFi module disabled - start timed out\n");
 					SetState(NetworkState::disabled);
+#if STM32
+					if (uploader) uploader->DetectWiFiModuleType();
+#endif
 				}
 			}
 		}
@@ -706,6 +713,12 @@ void WiFiInterface::Spin() noexcept
 							}
 						}
 #elif STM32
+						// Set the module type based on the status response
+						if (NetworkModule == NetworkModuleType::espauto)
+						{
+							// esp32 modules do not supply the voltage
+							NetworkModule = (status.Value().vcc == 0 ? NetworkModuleType::esp32 : NetworkModuleType::esp8266);
+						}
 						// Set clock speed based on board.txt setting
 						if (WiFiClockReg != 0)
 						{
@@ -734,6 +747,9 @@ void WiFiInterface::Spin() noexcept
 						// Something went wrong, maybe a bad firmware image was flashed. Disable the WiFi chip again in this case
 						Stop();
 						platform.MessageF(NetworkErrorMessage, "failed to initialise WiFi module: %s\n", TranslateWiFiResponse(rc));
+#if STM32
+						if (uploader) uploader->DetectWiFiModuleType();
+#endif
 					}
 				}
 			}

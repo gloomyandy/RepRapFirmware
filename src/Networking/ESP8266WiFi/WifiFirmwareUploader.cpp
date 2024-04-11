@@ -665,7 +665,7 @@ void WifiFirmwareUploader::Spin() noexcept
 			if (connectAttemptNumber % retriesPerBaudRate == 0)
 			{
 				// First attempt at this baud rate
-				MessageF("Trying to connect at %u baud: ", baud);
+				MessageF("Trying to connect at %u baud\n", baud);
 			}
 			interface.ResetWiFiForUpload(false);
 			uploadPort.begin(baud);
@@ -685,6 +685,16 @@ void WifiFirmwareUploader::Spin() noexcept
 				// Successful connection
 				Identify();
 				MessageF("success, found %s\n", ESP_NAMES[espType]);
+#if STM32
+				if (uploadFile == nullptr)
+				{
+					// we are just trying to identify the module type
+					NetworkModule = (espType == ESP8266 ? NetworkModuleType::esp8266 : NetworkModuleType::esp32);
+					uploadResult = EspUploadResult::success;
+					state = UploadState::done;
+					break;
+				}
+#endif
 				if (espType == ESPType::ESP8266)
 				{
 					state = UploadState::erasing1;
@@ -791,11 +801,24 @@ void WifiFirmwareUploader::Spin() noexcept
 		break;
 
 	case UploadState::done:
-		uploadFile->Close();
 		uploadPort.end();					// disable the port, it has a high interrupt priority
+
 #if STM32
+		if (uploadFile == nullptr)
+		{
+			// we have completed trying to detect the module type. If we failed mark it as not present
+			if (uploadResult != EspUploadResult::success)
+			{
+				NetworkModule = NetworkModuleType::none;
+			}
+
+			interface.ResetWiFi();
+			state = UploadState::idle;
+			break;
+		}
 		DeleteObject(blkBuf32);
 #endif
+		uploadFile->Close();
 		if (uploadResult == EspUploadResult::success)
 		{
 			MessageF("Upload successful\n");
@@ -869,6 +892,27 @@ void WifiFirmwareUploader::SendUpdateFile(const char *file, uint32_t address) no
 	connectAttemptNumber = 0;
 	state = UploadState::resetting;
 }
+
+#if STM32
+// Try to detect the type of WiFi module attached to the board. Should only be called
+// if the module is inactive
+void WifiFirmwareUploader::DetectWiFiModuleType() noexcept
+{
+	// Have we already worked this out?
+	if (NetworkModule != NetworkModuleType::espauto)
+	{
+		// nothing to do
+		return;
+	}
+	delay(100);
+	MessageF("Attempting to detect WiFi module type\n");
+	uploadFile = nullptr;
+	fileSize = 0;
+	interface.Stop();
+	connectAttemptNumber = 0;
+	state = UploadState::resetting;
+}
+#endif
 
 #endif	// HAS_WIFI_NETWORKING
 

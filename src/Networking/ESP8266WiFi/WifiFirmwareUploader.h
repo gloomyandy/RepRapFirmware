@@ -21,7 +21,9 @@ public:
 	bool IsReady() const noexcept;
 	void SendUpdateFile(const char *file, uint32_t address) noexcept;
 	void Spin() noexcept;
-
+#if STM32
+	void DetectWiFiModuleType() noexcept;
+#endif
 	// Offsets in flash memory
 	static const uint32_t FirmwareAddress = 0x00000000;
 
