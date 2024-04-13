@@ -164,7 +164,6 @@ void ExpansionManager::UpdateBoardState(CanAddress address, BoardState newState)
 // Process an announcement from an expansion board. Don't free the message buffer that it arrived in
 void ExpansionManager::ProcessAnnouncement(CanMessageBuffer *buf, bool isNewFormat) noexcept
 {
-	debugPrintf("Process announce\n");
 	const CanAddress src = buf->id.Src();
 	if (src <= CanId::MaxCanAddress)
 	{
