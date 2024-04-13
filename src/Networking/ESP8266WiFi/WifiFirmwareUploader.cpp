@@ -684,10 +684,10 @@ void WifiFirmwareUploader::Spin() noexcept
 			{
 				// Successful connection
 				Identify();
-				MessageF("success, found %s\n", ESP_NAMES[espType]);
 #if STM32
 				if (uploadFile == nullptr)
 				{
+					MessageF("WiFi Module found: %s\n", ESP_NAMES[espType]);
 					// we are just trying to identify the module type
 					NetworkModule = (espType == ESP8266 ? NetworkModuleType::esp8266 : NetworkModuleType::esp32);
 					uploadResult = EspUploadResult::success;
@@ -695,6 +695,7 @@ void WifiFirmwareUploader::Spin() noexcept
 					break;
 				}
 #endif
+				MessageF("success, found %s\n", ESP_NAMES[espType]);
 				if (espType == ESPType::ESP8266)
 				{
 					state = UploadState::erasing1;
@@ -904,8 +905,6 @@ void WifiFirmwareUploader::DetectWiFiModuleType() noexcept
 		// nothing to do
 		return;
 	}
-	delay(100);
-	MessageF("Attempting to detect WiFi module type\n");
 	uploadFile = nullptr;
 	fileSize = 0;
 	interface.Stop();
