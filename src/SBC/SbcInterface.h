@@ -41,7 +41,6 @@ public:
 #if STM32
 	void FreeMemory() noexcept;
 #endif
-	void Spin() noexcept;														// Only called in standalone mode by the main loop
 	[[noreturn]] void TaskLoop() noexcept;
 	void Diagnostics(MessageType mtype) noexcept;
 	bool IsConnected() const noexcept { return isConnected; }

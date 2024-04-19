@@ -649,13 +649,9 @@ void RepRap::Init() noexcept
 			delay(3000);								// Wait a few seconds so users have a chance to see this
 			platform->MessageF(AddWarning(UsbMessage), "%s\n", reply.c_str());
 		}
-# if HAS_SBC_INTERFACE
-# if STM32
+# if HAS_SBC_INTERFACE && STM32
 		if (!usingSbcInterface)
 			GetSbcInterface().FreeMemory();
-		else
-#endif
-		sbcInterface->Init();
 # endif
 	}
 #elif defined(DUET_NG)
@@ -670,6 +666,8 @@ void RepRap::Init() noexcept
 #if HAS_SBC_INTERFACE
 	if (usingSbcInterface)
 	{
+		sbcInterface->Init();
+
 		// Keep spinning until the SBC connects
 		uint32_t start = millis();
 		while (!sbcInterface->IsConnected())
@@ -682,10 +680,8 @@ void RepRap::Init() noexcept
 #if STM32
 			// At this point we may only have very limited hardware configuration loaded so avoid
 			// using the main Spin loop.
-			sbcInterface->Spin();
 			platform->FlushMessages();
 			ticksInSpinState = 0;
-
 #else
 			Spin();
 #endif
@@ -805,16 +801,6 @@ void RepRap::Spin() noexcept
 	ticksInSpinState = 0;
 	spinningModule = Module::Expansion;
 	expansion->Spin();
-#endif
-
-#if HAS_SBC_INTERFACE && !STM32
-	// Keep the SBC task spinning from the main task in standalone mode to respond to a SBC if necessary
-	if (!UsingSbcInterface())
-	{
-		ticksInSpinState = 0;
-		spinningModule = Module::SbcInterface;
-		sbcInterface->Spin();
-	}
 #endif
 
 	ticksInSpinState = 0;
