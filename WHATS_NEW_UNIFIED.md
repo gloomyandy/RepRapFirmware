@@ -1,3 +1,14 @@
+Version 3.5.0-rc.4
+==================
+* Duet3d RC4
+* New configuration system, board pins and default config held in embedded file system
+* Include WiFi and SBC configuration data in board configs
+* Single binary for both SBC and standalone versions
+* Detect type of WiFi module in use and set the WiFi firmware filename based on this
+* Added new boards
+* Improved parsing of board.txt and other config files
+* Fix upgrade of firmware over CAN-FD when mainboard is in expansion mode
+
 Version 3.5.0-rc.3+101
 ======================
 * Duet3d RC3
