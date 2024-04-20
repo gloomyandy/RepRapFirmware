@@ -603,7 +603,6 @@ void RepRap::Init() noexcept
 #endif
 	{
 		usingSbcInterface = true;
-		sbcInterface->Init();
 		FileWriteBuffer::UsingSbcMode();
 	}
 #endif
