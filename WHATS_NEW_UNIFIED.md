@@ -1,3 +1,9 @@
+Version 3.5.1
+=============
+* Duet 3d 3.5.1
+* Updated layout of release files
+* Added SHT36MAXV3 support
+
 Version 3.5.0-rc.4
 ==================
 * Duet3d RC4
