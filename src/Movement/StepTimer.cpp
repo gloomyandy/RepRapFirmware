@@ -558,7 +558,7 @@ extern "C" uint32_t StepTimerGetTimerTicks() noexcept
 # elif SAME70 || SAM4E || SAM4S
 					((STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IER & TC_IER_CPBS) == 0)
 # elif STM32
-					__HAL_TIM_GET_IT_SOURCE(STHandle, TIM_IT_CC1)
+					(__HAL_TIM_GET_IT_SOURCE(STHandle, TIM_IT_CC1) == 0)
 # endif
 						? "disabled" : "enabled");
 # if SAME5x
