@@ -899,6 +899,9 @@ void WifiFirmwareUploader::SendUpdateFile(const char *file, uint32_t address) no
 // if the module is inactive
 void WifiFirmwareUploader::DetectWiFiModuleType() noexcept
 {
+	// Don't attempt if we do not have a serial interface to use
+	if (WifiSerialRxTxPins[0] == NoPin || WifiSerialRxTxPins[1] == NoPin)
+		return;
 	// Have we already worked this out?
 	if (NetworkModule != NetworkModuleType::espauto)
 	{
