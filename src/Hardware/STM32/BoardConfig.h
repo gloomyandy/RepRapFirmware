@@ -42,6 +42,7 @@ class Platform; //fwd decl
 
 class BoardConfig {
 public:
+	static constexpr const char* DEFAULT_CONFIG_FILE = "0:/rrfconfig.g";
     static void Init() noexcept;
 
     static void Diagnostics(MessageType mtype) noexcept;

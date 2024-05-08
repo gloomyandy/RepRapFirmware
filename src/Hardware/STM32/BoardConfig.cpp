@@ -66,9 +66,9 @@ typedef enum {
 
 SDConfigs sdConfig = SD_UNKNOWN;
 
-static constexpr char boardConfigFile[] = "0:/sys/board.txt";
-static constexpr char bootConfigFile[] = "0:/rrfboot.txt";
-static constexpr char pinsConfigFile[] = "0:/rrfpins.txt";
+static constexpr const char* boardConfigFile = "0:/sys/board.txt";
+static constexpr const char* bootConfigFile = "0:/rrfboot.txt";
+static constexpr const char* pinsConfigFile = "0:/rrfpins.txt";
 
 // board configs
 static const boardConfigEntry_t boardConfigs[]=
@@ -115,7 +115,7 @@ static const boardConfigEntry_t boardConfigs[]=
     {"atx.initialPowerOn", &ATX_INITIAL_POWER_ON, 1, cvBoolType},
 
     //SDCards
-    {"sdcard.internal.type", &sdConfig, 1, cvUint32Type},
+    {"sdcard.internal.type", &sdConfig, 1, cvUint8Type},
     {"sdCard.internal.spiFrequencyHz", &InternalSDCardFrequency, 1, cvUint32Type},
     {"sdCard.external.csPin", &SdSpiCSPins[1], 1, cvPinType},
     {"sdCard.external.cardDetectPin", &SdCardDetectPins[1], 1, cvPinType},
@@ -722,8 +722,8 @@ void BoardConfig::Init() noexcept
     sdChannel = InitSDCard(sdConfig, true, false);
     if (sdChannel == SSPNONE)
     {
-        // Device does not have an SD card
-        SbcMode = SbcLoadConfig = true;
+        // Device does not have an SD card so if in sbc mode load config from sbc
+        SbcLoadConfig = true;
     }
     else if (!BoardConfig::LoadBoardConfigFromFile(boardConfigFile))
     {
@@ -1683,4 +1683,5 @@ bool BoardConfig::GetConfigKeys(FileStore * const configFile) noexcept
 void assert_failed(uint8_t *file, uint32_t line)
 {
     debugPrintf("Assert failed file %s line %d\n", file, (int)line);
+    delay(1000);
 }

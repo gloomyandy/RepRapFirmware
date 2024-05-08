@@ -597,20 +597,42 @@ void RepRap::Init() noexcept
 
 	platform->MessageF(UsbMessage, "%s\n", VersionText);
 
-#if HAS_SBC_INTERFACE && (!HAS_MASS_STORAGE || STM32)
-#if STM32 && HAS_MASS_STORAGE
-	if (SbcMode)
-#endif
+#if (STM32 && HAS_SBC_INTERFACE && HAS_MASS_STORAGE)
+	// Modified startup code for STM32 port. Unlike the Duet we do not use the presence of the SD card
+	// to control SBC mode (as we may need the card for board.txt). Instead we check for config.g and
+	// use that to decide on the mode.
+	// Are we forcing sbc mode
+	usingSbcInterface = SbcMode;
+	if (!usingSbcInterface)
 	{
-		usingSbcInterface = true;
-		FileWriteBuffer::UsingSbcMode();
+		// Try to mount the first SD card
+		GCodeResult rslt;
+		String<100> reply;
+		do
+		{
+			MassStorage::Spin();						// Spin() doesn't get called regularly until after this function completes, and we need it to update the card detect status
+			rslt = MassStorage::Mount(0, reply.GetRef(), false, 100);
+		}
+		while (rslt == GCodeResult::notFinished);
+		if (rslt != GCodeResult::ok)
+		{
+			platform->Message(AddWarning(UsbMessage), "unable to mount SD card\n");
+		}
+		// Run the configuration file (which may be in embedded storage)
+		if (!RunStartupFile(GCodes::CONFIG_FILE, true) && !RunStartupFile(GCodes::CONFIG_BACKUP_FILE, true) && !RunStartupFile(BoardConfig::DEFAULT_CONFIG_FILE, true))
+		{
+			platform->Message(AddWarning(UsbMessage), "no configuration file found\n");
+			usingSbcInterface = true;
+		}
 	}
+#else
+#if HAS_SBC_INTERFACE && !HAS_MASS_STORAGE
+	usingSbcInterface = true;
+	sbcInterface->Init();
+	FileWriteBuffer::UsingSbcMode();
 #endif
 
 #if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
-# if HAS_SBC_INTERFACE
-	if (!usingSbcInterface)
-# endif
 	{
 		// Try to mount the first SD card
 		GCodeResult rslt;
@@ -631,9 +653,6 @@ void RepRap::Init() noexcept
 			if (!RunStartupFile(GCodes::CONFIG_FILE, true) && !RunStartupFile(GCodes::CONFIG_BACKUP_FILE, true))
 			{
 				platform->Message(AddWarning(UsbMessage), "no configuration file found\n");
-#if HAS_SBC_INTERFACE && STM32
-				usingSbcInterface = true;
-#endif
 			}
 		}
 # if HAS_SBC_INTERFACE
@@ -648,10 +667,6 @@ void RepRap::Init() noexcept
 			delay(3000);								// Wait a few seconds so users have a chance to see this
 			platform->MessageF(AddWarning(UsbMessage), "%s\n", reply.c_str());
 		}
-# if HAS_SBC_INTERFACE && STM32
-		if (!usingSbcInterface)
-			GetSbcInterface().FreeMemory();
-# endif
 	}
 #elif defined(DUET_NG)
 	// It's the SBC build of Duet 2 firmware. Enable the PanelDue port so that the ATE can test it.
@@ -661,12 +676,31 @@ void RepRap::Init() noexcept
 	platform->SetAuxRaw(0, false);
 	platform->EnableAux(0);
 #endif
+#endif
 
 #if HAS_SBC_INTERFACE
+# if STM32
+	if (usingSbcInterface)
+	{
+		if (SbcCsPinConfig == NoPin || SbcTfrReadyPinConfig == NoPin || SbcSpiChannel == SSPNONE)
+		{
+			platform->FlushMessages();
+			platform->MessageF(UsbMessage, "Disabling SBC mode no hardware interface\n");
+			usingSbcInterface = false;
+		}
+	}
+	if (usingSbcInterface)
+	{
+		FileWriteBuffer::UsingSbcMode();
+	}
+	else
+	{
+		GetSbcInterface().FreeMemory();
+	}
+# endif
 	if (usingSbcInterface)
 	{
 		sbcInterface->Init();
-
 		// Keep spinning until the SBC connects
 		uint32_t start = millis();
 		while (!sbcInterface->IsConnected())
