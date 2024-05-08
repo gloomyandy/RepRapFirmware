@@ -327,7 +327,7 @@ bool TMCSoftUARTTransfer(Pin pin, volatile uint8_t *WritePtr, uint32_t WriteCnt,
 
 void DMABitIOInit() noexcept
 {
-    debugPrintf("BIOInit....\n");
+    //debugPrintf("BIOInit....\n");
     SUMutex.Create("BITIO");
     uint32_t period = SUTimer.getTimerClkFreq()/(SU_BAUD_RATE*SU_OVERSAMPLE);
     //debugPrintf("SU base freq %d setting period %d\n", static_cast<int>(SUTimer.getTimerClkFreq()), static_cast<int>(period));

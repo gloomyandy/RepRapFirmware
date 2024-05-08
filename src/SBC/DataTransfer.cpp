@@ -446,7 +446,6 @@ DataTransfer::DataTransfer() noexcept : state(InternalTransferState::ExchangingD
 #if STM32
 void DataTransfer::FreeMemory() noexcept
 {
-	debugPrintf("SBC data transfer Free memory called\n");
 #if STM32F4
 	delete rxBuffer;
 	delete txBuffer;
