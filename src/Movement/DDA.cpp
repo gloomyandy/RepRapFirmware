@@ -14,6 +14,7 @@
 #include <Endstops/EndstopsManager.h>
 #include "Kinematics/LinearDeltaKinematics.h"
 #include <Tools/Tool.h>
+#include <GCodes/GCodes.h>
 
 #if SUPPORT_CAN_EXPANSION
 # include <CAN/CanMotion.h>
@@ -125,25 +126,22 @@ void PrepParams::SetFromDDA(const DDA& dda) noexcept
 	// Due to rounding error, for an accelerate-decelerate move we may have accelDistance+decelDistance slightly greater than totalDistance.
 	// We need to make sure that accelDistance <= decelStartDistance for subsequent calculations to work.
 	accelDistance = min<float>(dda.beforePrepare.accelDistance, decelStartDistance);
+	const float steadyDistance = decelStartDistance - accelDistance;
+	steadyClocks = (steadyDistance <= 0.0) ? 0.0 : steadyDistance/dda.topSpeed;
 	acceleration = dda.acceleration;
 	deceleration = dda.deceleration;
 	accelClocks = (dda.topSpeed - dda.startSpeed)/dda.acceleration;
 	decelClocks = (dda.topSpeed - dda.endSpeed)/dda.deceleration;
-	topSpeed = dda.topSpeed;
-	modified = false;
 }
 
-// Calculate the steady clocks and set the total clocks in the DDA
-void PrepParams::Finalise() noexcept
+void PrepParams::DebugPrint() const noexcept
 {
-	const float steadyDistance = decelStartDistance - accelDistance;
-	steadyClocks = (steadyDistance <= 0.0) ? 0.0 : steadyDistance/topSpeed;
+	debugPrintf("pp: td=%.3e ad=%.3e dsd=%.3e a=%.3e d=%.3e ac=%.3e sc=%.3e dc=%.3e\n",
+					(double)totalDistance, (double)accelDistance, (double)decelStartDistance, (double)acceleration, (double)deceleration, (double)accelClocks, (double)steadyClocks, (double)decelClocks);
 }
 
 DDA::DDA(DDA* n) noexcept : next(n), prev(nullptr), state(empty)
 {
-	activeDMs = completedDMs = nullptr;
-	segments = nullptr;
 	tool = nullptr;						// needed in case we pause before any moves have been done
 
 	// Set the endpoints to zero, because Move will ask for them.
@@ -162,66 +160,23 @@ DDA::DDA(DDA* n) noexcept : next(n), prev(nullptr), state(empty)
 #endif
 }
 
-void DDA::ReleaseDMs() noexcept
-{
-	// Normally there should be no active DMs, but release any that there may be
-	for (DriveMovement* dm = activeDMs; dm != nullptr; )
-	{
-		DriveMovement* const dnext = dm->nextDM;
-		DriveMovement::Release(dm);
-		dm = dnext;
-	}
-	for (DriveMovement* dm = completedDMs; dm != nullptr; )
-	{
-		DriveMovement* const dnext = dm->nextDM;
-		DriveMovement::Release(dm);
-		dm = dnext;
-	}
-	activeDMs = completedDMs = nullptr;
-	ReleaseSegments();
-}
-
 // Return the number of clocks this DDA still needs to execute.
-// This could be slightly negative, if the move is overdue for completion.
-int32_t DDA::GetTimeLeft() const noexcept
+uint32_t DDA::GetTimeLeft() const noexcept
 pre(state == executing || state == frozen || state == completed)
 {
-	return (state == completed) ? 0
-			: (state == executing) ? (int32_t)(afterPrepare.moveStartTime + clocksNeeded - StepTimer::GetTimerTicks())
-			: (int32_t)clocksNeeded;
-}
-
-// Insert the specified drive into the step list, in step time order.
-// We insert the drive before any existing entries with the same step time for best performance. Now that we generate step pulses
-// for multiple motors simultaneously, there is no need to preserve round-robin order.
-inline void DDA::InsertDM(DriveMovement *dm) noexcept
-{
-	DriveMovement **dmp = &activeDMs;
-	while (*dmp != nullptr && (*dmp)->nextStepTime < dm->nextStepTime)
+	switch (state)
 	{
-		dmp = &((*dmp)->nextDM);
-	}
-	dm->nextDM = *dmp;
-	*dmp = dm;
-}
-
-// Remove this drive from the list of drives with steps due and put it in the completed list
-// Called from the step ISR only.
-void DDA::DeactivateDM(size_t drive) noexcept
-{
-	DriveMovement **dmp = &activeDMs;
-	while (*dmp != nullptr)
-	{
-		DriveMovement * const dm = *dmp;
-		if (dm->drive == drive)
+	case provisional:
+		return clocksNeeded;
+	case committed:
 		{
-			(*dmp) = dm->nextDM;
-			dm->state = DMState::idle;
-			dm->nextDM = completedDMs;
-			completedDMs = dm;
-			break;
+			const int32_t timeExecuting = (int32_t)(StepTimer::GetMovementTimerTicks() - afterPrepare.moveStartTime);
+			return (timeExecuting <= 0) ? clocksNeeded							// move has not started yet
+					: ((uint32_t)timeExecuting > clocksNeeded) ? 0				// move has completed
+						: clocksNeeded - (uint32_t)timeExecuting;				// move is part way through
 		}
-		dmp = &(dm->nextDM);
+	default:
+		return 0;
 	}
 }
 
@@ -252,29 +207,9 @@ void DDA::DebugPrint(const char *tag) const noexcept
 	}
 
 	debugPrintf(" s=%.4e", (double)totalDistance);
-#if 1
-	DebugPrintVector(" vec", directionVector, numAxes);
-	DebugPrintVector(" ext", directionVector + (MaxAxesPlusExtruders - reprap.GetGCodes().GetNumExtruders()), reprap.GetGCodes().GetNumExtruders());
-#else
 	DebugPrintVector(" vec", directionVector, MaxAxesPlusExtruders);
-#endif
 	debugPrintf("\n" "a=%.4e d=%.4e reqv=%.4e startv=%.4e topv=%.4e endv=%.4e cks=%" PRIu32 " fp=%" PRIu32 " fl=%04x\n",
 				(double)acceleration, (double)deceleration, (double)requestedSpeed, (double)startSpeed, (double)topSpeed, (double)endSpeed, clocksNeeded, (uint32_t)filePos, flags.all);
-	MoveSegment::DebugPrintList('S', segments);
-}
-
-// Print the DDA and active DMs
-void DDA::DebugPrintAll(const char *tag) const noexcept
-{
-	DebugPrint(tag);
-	for (DriveMovement* dm = activeDMs; dm != nullptr; dm = dm->nextDM)
-	{
-		dm->DebugPrint();
-	}
-	for (DriveMovement* dm = completedDMs; dm != nullptr; dm = dm->nextDM)
-	{
-		dm->DebugPrint();
-	}
 }
 
 // Set up a real move. Return true if it represents real movement, else false.
@@ -301,10 +236,6 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 		{
 			return false;												// throw away the move if it couldn't be transformed
 		}
-#if SUPPORT_LINEAR_DELTA
-		flags.isDeltaMovement = move.IsDeltaMode()
-							&& (endPoint[X_AXIS] != positionNow[X_AXIS] || endPoint[Y_AXIS] != positionNow[Y_AXIS] || endPoint[Z_AXIS] != positionNow[Z_AXIS]);
-#endif
 	}
 
 	bool linearAxesMoving = false;
@@ -343,9 +274,9 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 			else
 			{
 				// Raw motor move on a visible axis
-				endPoint[drive] = Move::MotorMovementToSteps(drive, nextMove.coords[drive]);
+				endPoint[drive] = move.MotorMovementToSteps(drive, nextMove.coords[drive]);
 				const int32_t delta = endPoint[drive] - positionNow[drive];
-				directionVector[drive] = (float)delta/reprap.GetPlatform().DriveStepsPerUnit(drive);
+				directionVector[drive] = (float)delta/move.DriveStepsPerMm(drive);
 				if (delta != 0)
 				{
 					if (reprap.GetPlatform().IsAxisRotational(drive))
@@ -374,7 +305,7 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 				}
 				if (flags.xyMoving && nextMove.usePressureAdvance)
 				{
-					const float compensationClocks = reprap.GetMove().GetPressureAdvanceClocks(LogicalDriveToExtruder(drive));
+					const float compensationClocks = reprap.GetMove().GetPressureAdvanceClocksForLogicalDrive(drive);
 					if (compensationClocks > 0.0)
 					{
 						// Compensation causes instant velocity changes equal to acceleration * k, so we may need to limit the acceleration
@@ -412,10 +343,10 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 	initialUserC1 = nextMove.initialUserC1;
 
 	flags.checkEndstops = nextMove.checkEndstops;
+	flags.noShaping = nextMove.noShaping;
 	flags.canPauseAfter = nextMove.canPauseAfter;
 	flags.usingStandardFeedrate = nextMove.usingStandardFeedrate;
 	flags.isPrintingMove = flags.xyMoving && forwardExtruding;					// require forward extrusion so that wipe-while-retracting doesn't count
-	flags.isNonPrintingExtruderMove = extrudersMoving && !flags.isPrintingMove;	// flag used by filament monitors - we can ignore Z movement
 	flags.usePressureAdvance = nextMove.usePressureAdvance;
 #if SUPPORT_SCANNING_PROBES
 	flags.scanningProbeMove = nextMove.scanningProbeMove;
@@ -490,7 +421,7 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 		float maxDistance = 0.0;
 		for (size_t axis = 0; axis < numTotalAxes; ++axis)
 		{
-			if (k.GetMotionType(axis) == MotionType::segmentFreeDelta && normalisedDirectionVector[axis] > maxDistance)
+			if (k.GetKinematicsType() == KinematicsType::linearDelta && normalisedDirectionVector[axis] > maxDistance)
 			{
 				maxDistance = normalisedDirectionVector[axis];
 			}
@@ -551,7 +482,7 @@ bool DDA::InitLeadscrewMove(DDARing& ring, float feedrate, const float adjustmen
 	for (size_t driver = 0; driver < MaxDriversPerAxis; ++driver)
 	{
 		directionVector[driver] = adjustments[driver];			// for leadscrew adjustment moves, store the adjustment needed in directionVector
-		const int32_t delta = lrintf(adjustments[driver] * reprap.GetPlatform().DriveStepsPerUnit(Z_AXIS));
+		const int32_t delta = lrintf(adjustments[driver] * reprap.GetMove().DriveStepsPerMm(Z_AXIS));
 		if (delta != 0)
 		{
 			realMove = true;
@@ -618,9 +549,9 @@ bool DDA::InitAsyncMove(DDARing& ring, const AsyncMove& nextMove) noexcept
 		// This doesn't matter for the current application because we don't use either of these fields.
 
 		// If it's a delta then we can only do async tower moves in the Z direction and on any additional linear axes
-		const size_t axisToUse = (reprap.GetMove().GetKinematics().GetMotionType(drive) == MotionType::segmentFreeDelta) ? Z_AXIS : drive;
+		const size_t axisToUse = (reprap.GetMove().GetKinematics().GetKinematicsType() == KinematicsType::linearDelta && drive <= Z_AXIS) ? Z_AXIS : drive;
 		directionVector[drive] = nextMove.movements[axisToUse];
-		const int32_t delta = lrintf(nextMove.movements[axisToUse] * reprap.GetPlatform().DriveStepsPerUnit(drive));
+		const int32_t delta = lrintf(nextMove.movements[axisToUse] * reprap.GetMove().DriveStepsPerMm(drive));
 		endPoint[drive] = prev->endPoint[drive] + delta;
 		endCoordinates[drive] = prev->endCoordinates[drive];
 		if (delta != 0)
@@ -665,109 +596,6 @@ bool DDA::InitAsyncMove(DDARing& ring, const AsyncMove& nextMove) noexcept
 
 // Set up a remote move. Return true if it represents real movement, else false.
 // All values have already been converted to step clocks and the total distance has been normalised to 1.0.
-// This one handles the old format movement message, used by older versions of RRF and the ATE
-bool DDA::InitFromRemote(const CanMessageMovementLinear& msg) noexcept
-{
-	afterPrepare.moveStartTime = StepTimer::ConvertToLocalTime(msg.whenToExecute);
-	clocksNeeded = msg.accelerationClocks + msg.steadyClocks + msg.decelClocks;
-	flags.all = 0;
-	flags.isRemote = true;
-	flags.isPrintingMove = flags.usePressureAdvance = (msg.pressureAdvanceDrives != 0);
-
-	// Normalise the move to unit distance
-	totalDistance = 1.0;
-
-	// Calculate the speeds and accelerations assuming unit movement length
-	topSpeed = 2.0/(2 * msg.steadyClocks + (msg.initialSpeedFraction + 1.0) * msg.accelerationClocks + (msg.finalSpeedFraction + 1.0) * msg.decelClocks);
-	startSpeed = topSpeed * msg.initialSpeedFraction;
-	endSpeed = topSpeed * msg.finalSpeedFraction;
-
-	acceleration = (msg.accelerationClocks == 0) ? 0.0 : (topSpeed * (1.0 - msg.initialSpeedFraction))/msg.accelerationClocks;
-	deceleration = (msg.decelClocks == 0) ? 0.0 : (topSpeed * (1.0 - msg.finalSpeedFraction))/msg.decelClocks;
-
-	// Prepare for movement
-	PrepParams params;											// the default constructor clears params.plan to 'no shaping'
-
-	// Set up the move parameters
-	params.accelDistance = topSpeed * (1.0 + msg.initialSpeedFraction) * msg.accelerationClocks * 0.5;
-	const float decelDistance = topSpeed * (1.0 + msg.finalSpeedFraction) * msg.decelClocks * 0.5;
-	params.decelStartDistance = 1.0 - decelDistance;
-	params.accelClocks = msg.accelerationClocks;
-	params.steadyClocks = msg.steadyClocks;
-	params.decelClocks = msg.decelClocks;
-	params.acceleration = acceleration;
-	params.deceleration = deceleration;
-
-	segments = nullptr;
-	activeDMs = completedDMs = nullptr;
-	afterPrepare.drivesMoving.Clear();
-
-	for (size_t drive = 0; drive < NumDirectDrivers; drive++)
-	{
-		endPoint[drive] = prev->endPoint[drive];				// the steps for this move will be added later
-		const int32_t delta = (drive < msg.numDrivers) ? msg.perDrive[drive].steps : 0;
-		directionVector[drive] = (float)delta;
-		if (delta != 0)
-		{
-			EnsureSegments(params);								// we are going to need segments
-			DriveMovement* const pdm = DriveMovement::Allocate(drive);
-			pdm->totalSteps = labs(delta);						// for now this is the number of net steps, but gets adjusted later if there is a reverse in direction
-			pdm->direction = (delta >= 0);						// for now this is the direction of net movement, but gets adjusted later if it is a delta movement
-			afterPrepare.drivesMoving.SetBit(drive);
-			reprap.GetPlatform().EnableDrivers(drive, false);
-			const bool stepsToDo = ((msg.pressureAdvanceDrives & (1u << drive)) != 0)
-									? pdm->PrepareExtruder(*this, params, (float)delta)
-										: pdm->PrepareCartesianAxis(*this, params);
-			if (stepsToDo)
-			{
-				InsertDM(pdm);
-				const int32_t netSteps = (pdm->reverseStartStep < pdm->totalSteps) ? (2 * pdm->reverseStartStep) - pdm->totalSteps : pdm->totalSteps;
-				if (pdm->direction)
-				{
-					endPoint[drive] += netSteps;
-				}
-				else
-				{
-					endPoint[drive] -= netSteps;
-				}
-
-				// Check for sensible values, print them if they look dubious
-				if (   reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintAllMoves)
-					|| (pdm->totalSteps > 1000000 && reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintBadMoves))
-				   )
-				{
-					DebugPrintAll("remu_err1");
-				}
-			}
-			else
-			{
-				// No steps to do, so release the DM
-				DriveMovement::Release(pdm);
-			}
-		}
-	}
-
-	// 2. Throw it away if there's no real movement.
-	if (activeDMs == nullptr)
-	{
-		// We may have set up the segments, in which case we must recycle them
-		ReleaseSegments();
-		return false;
-	}
-
-	if (   reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintAllMoves)
-		|| params.shapingPlan.debugPrint						// show the prepared DDA if debug enabled for both modules
-	   )
-	{
-		DebugPrintAll("remu");
-	}
-
-	state = frozen;												// must do this last so that the ISR doesn't start executing it before we have finished setting it up
-	return true;
-}
-
-// Set up a remote move. Return true if it represents real movement, else false.
-// All values have already been converted to step clocks and the total distance has been normalised to 1.0.
 // This version handles the new movement message that includes the input shaping plan and passes extruder movement as distance, not steps
 bool DDA::InitFromRemote(const CanMessageMovementLinearShaped& msg) noexcept
 {
@@ -776,11 +604,9 @@ bool DDA::InitFromRemote(const CanMessageMovementLinearShaped& msg) noexcept
 	flags.isRemote = true;
 	flags.isPrintingMove = flags.usePressureAdvance = msg.usePressureAdvance;
 	// TODO For now we treat any non-printing move as a non-printing extruder move. Better to pass a flag for it in the CAN message.
-	flags.isNonPrintingExtruderMove = !flags.isPrintingMove;
 
 	// Prepare for movement
 	PrepParams params;
-	params.shapingPlan.condensedPlan = msg.shapingPlan;
 
 	// Normalise the move to unit distance
 	params.totalDistance = totalDistance = 1.0;
@@ -797,12 +623,13 @@ bool DDA::InitFromRemote(const CanMessageMovementLinearShaped& msg) noexcept
 		clocksNeeded = params.steadyClocks = 1;
 	}
 
-	// Set up the plan
-	segments = nullptr;
-	reprap.GetMove().GetAxisShaper().GetRemoteSegments(*this, params);
+	MovementFlags segFlags;
+	segFlags.Clear();
+	segFlags.nonPrintingMove = !msg.usePressureAdvance;
+	segFlags.noShaping = !msg.useLateInputShaping;
 
-	activeDMs = completedDMs = nullptr;
 	afterPrepare.drivesMoving.Clear();
+	Move& move = reprap.GetMove();
 
 	for (size_t drive = 0; drive < NumDirectDrivers; drive++)
 	{
@@ -818,109 +645,32 @@ bool DDA::InitFromRemote(const CanMessageMovementLinearShaped& msg) noexcept
 			directionVector[drive] = extrusionRequested;
 			if (extrusionRequested != 0.0)
 			{
-				DriveMovement* const pdm = DriveMovement::Allocate(drive);
-				pdm->totalSteps = labs(extrusionRequested);				// for now this is the number of net steps, but gets adjusted later if there is a reverse in direction
-				pdm->direction = (extrusionRequested >= 0.0);			// for now this is the direction of net movement, but gets adjusted later if it is a delta movement
-				afterPrepare.drivesMoving.SetBit(drive);
+				move.AddLinearSegments(*this, drive, msg.whenToExecute, params, extrusionRequested, segFlags);
+				//TODO will Move do the following?
 				reprap.GetPlatform().EnableDrivers(drive, false);
-				const bool stepsToDo = pdm->PrepareExtruder(*this, params, extrusionRequested);
-				if (stepsToDo)
-				{
-					InsertDM(pdm);
-					const int32_t netSteps = (pdm->reverseStartStep < pdm->totalSteps) ? (2 * pdm->reverseStartStep) - pdm->totalSteps : pdm->totalSteps;
-					if (pdm->direction)
-					{
-						endPoint[drive] += netSteps;
-					}
-					else
-					{
-						endPoint[drive] -= netSteps;
-					}
-
-					// Check for sensible values, print them if they look dubious
-					if (pdm->totalSteps > 1000000 && reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintBadMoves))
-					{
-						DebugPrintAll("rems_err1");
-					}
-				}
-				else
-				{
-					// No steps to do, so release the DM
-					DriveMovement::Release(pdm);
-				}
 			}
 		}
 		else
 		{
-			const int32_t delta = msg.perDrive[drive].steps;
-			directionVector[drive] = (float)delta;
+			const float delta = (float)msg.perDrive[drive].steps;
+			directionVector[drive] = delta;
 			if (delta != 0)
 			{
-				DriveMovement* const pdm = DriveMovement::Allocate(drive);
-				pdm->totalSteps = labs(delta);					// for now this is the number of net steps, but gets adjusted later if there is a reverse in direction
-				pdm->direction = (delta >= 0);					// for now this is the direction of net movement, but gets adjusted later if it is a delta movement
+				move.AddLinearSegments(*this, drive, msg.whenToExecute, params, delta, segFlags);
 				afterPrepare.drivesMoving.SetBit(drive);
+				//TODO will Move do the following?
 				reprap.GetPlatform().EnableDrivers(drive, false);
-				const bool stepsToDo = pdm->PrepareCartesianAxis(*this, params);
-				if (stepsToDo)
-				{
-					InsertDM(pdm);
-					const int32_t netSteps = (pdm->reverseStartStep < pdm->totalSteps) ? (2 * pdm->reverseStartStep) - pdm->totalSteps : pdm->totalSteps;
-					if (pdm->direction)
-					{
-						endPoint[drive] += netSteps;
-					}
-					else
-					{
-						endPoint[drive] -= netSteps;
-					}
-
-					// Check for sensible values, print them if they look dubious
-					if (pdm->totalSteps > 1000000 && reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintBadMoves))
-					{
-						DebugPrintAll("rems_err2");
-					}
-				}
-				else
-				{
-					// No steps to do, so release the DM
-					DriveMovement::Release(pdm);
-				}
 			}
 		}
 	}
 
-	// 2. Throw it away if there's no real movement.
-	if (activeDMs == nullptr)
+	if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintAllMoves))
 	{
-		// We may have set up the segments, in which case we must recycle them
-		ReleaseSegments();
-		return false;
+		DebugPrint("rems");
 	}
 
-	if (   reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintAllMoves)
-		|| params.shapingPlan.debugPrint
-	   )
-	{
-		DebugPrintAll("rems");
-	}
-
-	state = frozen;												// must do this last so that the ISR doesn't start executing it before we have finished setting it up
+	state = committed;
 	return true;
-}
-
-void DDA::StopDrivers(uint16_t whichDrives) noexcept
-{
-	if (state == executing)
-	{
-		for (size_t drive = 0; drive < NumDirectDrivers; ++drive)
-		{
-			if (whichDrives & (1u << drive))
-			{
-				StopDrive(drive);
-			}
-		}
-	}
 }
 
 #endif	// SUPPORT_REMOTE_COMMANDS
@@ -1004,7 +754,7 @@ pre(state == provisional)
 				else
 				{
 					// This move is a deceleration-only move but we can't adjust the previous one
-					if (st == frozen || st == executing)
+					if (st == committed)
 					{
 						laDDA->flags.hadLookaheadUnderrun = true;
 					}
@@ -1134,22 +884,7 @@ float DDA::AdvanceBabyStepping(DDARing& ring, size_t axis, float amount) noexcep
 
 		// Even if there is no babystepping to do this move, we may need to adjust the end coordinates
 		cdda->endCoordinates[Z_AXIS] += babySteppingDone;
-#if SUPPORT_LINEAR_DELTA
-		if (cdda->flags.isDeltaMovement)
-		{
-			for (size_t motor = 0; motor < reprap.GetGCodes().GetTotalAxes(); ++motor)
-			{
-				if (reprap.GetMove().GetKinematics().GetMotionType(motor) == MotionType::segmentFreeDelta)
-				{
-					cdda->endPoint[motor] += (int32_t)(babySteppingDone * reprap.GetPlatform().DriveStepsPerUnit(motor));
-				}
-			}
-		}
-		else
-#endif
-		{
-			cdda->endPoint[Z_AXIS] += (int32_t)(babySteppingDone * reprap.GetPlatform().DriveStepsPerUnit(Z_AXIS));
-		}
+		cdda->endPoint[Z_AXIS] += (int32_t)(babySteppingDone * reprap.GetMove().DriveStepsPerMm(Z_AXIS));
 
 		// Now do the next move
 		cdda = cdda->next;
@@ -1292,19 +1027,6 @@ void DDA::MatchSpeeds() noexcept
 	}
 }
 
-// This is called by DDARing::LiveCoordinates to get the endpoints of a move that is being executed
-void DDA::FetchCurrentPositions(int32_t ep[MaxAxesPlusExtruders]) const noexcept
-{
-	memcpyi32(ep, prev->endPoint, MaxAxesPlusExtruders);
-	if (!flags.isLeadscrewAdjustmentMove)			// driver numbers are out of the usual range for leadscrew adjustment moves
-	{
-		for (const DriveMovement* dm = activeDMs; dm != nullptr; dm = dm->nextDM)
-		{
-			ep[dm->drive] += dm->GetNetStepsTaken();
-		}
-	}
-}
-
 // This may be called from an ISR, e.g. via Kinematics::OnHomingSwitchTriggered
 void DDA::SetPositions(const float move[MaxAxesPlusExtruders]) noexcept
 {
@@ -1317,13 +1039,22 @@ void DDA::SetPositions(const float move[MaxAxesPlusExtruders]) noexcept
 	flags.endCoordinatesValid = true;
 }
 
+void DDA::SetAxisPositions(const int32_t *newMotorPositions, AxesBitmap whichDrives) noexcept
+{
+	whichDrives.Iterate([this, newMotorPositions](unsigned int drive, unsigned int)->void
+							{
+								endCoordinates[drive] = newMotorPositions[drive];
+							}
+					   );
+}
+
 // Get a Cartesian end coordinate from this move
 float DDA::GetEndCoordinate(size_t drive, bool disableMotorMapping) noexcept
 pre(disableDeltaMapping || drive < MaxAxes)
 {
 	if (disableMotorMapping)
 	{
-		return Move::MotorStepsToMovement(drive, endPoint[drive]);
+		return reprap.GetMove().MotorStepsToMovement(drive, endPoint[drive]);
 	}
 	else
 	{
@@ -1337,29 +1068,9 @@ pre(disableDeltaMapping || drive < MaxAxes)
 	}
 }
 
-// Set up the segments (without input shaping) if we haven't done so already
-void DDA::EnsureSegments(const PrepParams& params) noexcept
-{
-	if (segments == nullptr)
-	{
-		segments = AxisShaper::GetUnshapedSegments(*this, params);
-	}
-}
-
-void DDA::ReleaseSegments() noexcept
-{
-	for (MoveSegment* seg = segments; seg != nullptr; )
-	{
-		MoveSegment* const nextSeg = seg->GetNext();
-		MoveSegment::Release(seg);
-		seg = nextSeg;
-	}
-	segments = nullptr;
-}
-
-// Prepare this DDA for execution.
+// Dispatch this DDA to the move segment queue for execution.
 // This must not be called with interrupts disabled, because it calls Platform::EnableDrive.
-void DDA::Prepare(SimulationMode simMode) noexcept
+void DDA::Prepare(DDARing& ring, SimulationMode simMode) noexcept
 {
 	flags.wasAccelOnlyMove = IsAccelerationMove();			// save this for the next move to look at
 
@@ -1372,47 +1083,21 @@ void DDA::Prepare(SimulationMode simMode) noexcept
 #endif
 
 	// Prepare for movement
-	segments = nullptr;
-
-	PrepParams params;										// the default constructor clears params.plan to 'no shaping'
-	if (flags.xyMoving)
-	{
-		reprap.GetMove().GetAxisShaper().PlanShaping(*this, params, flags.xyMoving);	// this will set up shapedSegments if we are doing any shaping
-	}
-	else
-	{
-		params.SetFromDDA(*this);
-		params.Finalise();
-		clocksNeeded = params.TotalClocks();
-	}
+	PrepParams params;
+	params.SetFromDDA(*this);
+	clocksNeeded = (uint32_t)params.TotalClocks();
 
 	// Copy the unshaped acceleration and deceleration back to the DDA because ManageLaserPower uses them
-	//TODO change ManageLaserPower to work on the shaped segments instead
 	acceleration = params.acceleration;
 	deceleration = params.deceleration;
 
+	const uint32_t now = StepTimer::GetMovementTimerTicks();
+	afterPrepare.moveStartTime =  (prev->state == committed && (int32_t)(prev->afterPrepare.moveStartTime + prev->clocksNeeded - now) >= 0)
+									? prev->afterPrepare.moveStartTime + prev->clocksNeeded		// this move follows directly after the previous one
+									: now + MoveTiming::AbsoluteMinimumPreparedTime;			// else this move is the first so start it after a short delay
+
 	if (simMode < SimulationMode::normal)
 	{
-#if SUPPORT_LINEAR_DELTA
-		if (flags.isDeltaMovement)
-		{
-			// This code assumes that the previous move in the DDA ring is the previously-executed move, because it fetches the X and Y end coordinates from that move.
-			// Therefore the Move code must not store a new move in that entry until this one has been prepared! (It took me ages to track this down.)
-			// Ideally we would store the initial X and Y coordinates in the DDA, but we need to be economical with memory
-			params.a2plusb2 = fsquare(directionVector[X_AXIS]) + fsquare(directionVector[Y_AXIS]);
-			params.initialX = prev->GetEndCoordinate(X_AXIS, false);
-			params.initialY = prev->GetEndCoordinate(Y_AXIS, false);
-			params.dparams = static_cast<const LinearDeltaKinematics*>(&(reprap.GetMove().GetKinematics()));
-# if SUPPORT_CAN_EXPANSION
-			params.finalX = GetEndCoordinate(X_AXIS, false);
-			params.finalY = GetEndCoordinate(Y_AXIS, false);
-			params.zMovement = GetEndCoordinate(Z_AXIS, false) - prev->GetEndCoordinate(Z_AXIS, false);
-# endif
-		}
-#endif
-
-		activeDMs = completedDMs = nullptr;
-
 #if SUPPORT_CAN_EXPANSION
 		CanMotion::StartMovement();
 #endif
@@ -1425,105 +1110,39 @@ void DDA::Prepare(SimulationMode simMode) noexcept
 
 		float extrusionFraction = 0.0;
 		AxesBitmap additionalAxisMotorsToEnable, axisMotorsEnabled;
-#if SUPPORT_CAN_EXPANSION
 		afterPrepare.drivesMoving.Clear();
-#endif
+		MovementFlags segFlags;
+		segFlags.Clear();
+		segFlags.checkEndstops = flags.checkEndstops;
+		segFlags.noShaping = flags.noShaping || !flags.xyMoving || flags.isLeadscrewAdjustmentMove;
+		segFlags.nonPrintingMove = !flags.isPrintingMove;
+		Move& move = reprap.GetMove();
 		for (size_t drive = 0; drive < MaxAxesPlusExtruders; ++drive)
 		{
 			if (flags.isLeadscrewAdjustmentMove)
 			{
-#if SUPPORT_CAN_EXPANSION
 				afterPrepare.drivesMoving.SetBit(Z_AXIS);
-#endif
 				// For a leadscrew adjustment move, the first N elements of the direction vector are the adjustments to the N Z motors
 				const AxisDriversConfig& config = platform.GetAxisDriversConfig(Z_AXIS);
 				if (drive < config.numDrivers)
 				{
-					const int32_t delta = lrintf(directionVector[drive] * totalDistance * platform.DriveStepsPerUnit(Z_AXIS));
+					const int32_t delta = lrintf(directionVector[drive] * totalDistance * move.DriveStepsPerMm(Z_AXIS));
 					const DriverId driver = config.driverNumbers[drive];
 					if (delta != 0)
 					{
 #if SUPPORT_CAN_EXPANSION
 						if (driver.IsRemote())
 						{
-							CanMotion::AddAxisMovement(params, driver, delta);
+							CanMotion::AddLinearAxisMovement(params, driver, delta);
 						}
 						else
 #endif
 						{
-							EnsureSegments(params);
-							DriveMovement* const pdm = DriveMovement::Allocate(driver.localDriver + MaxAxesPlusExtruders);
-							pdm->direction = (delta >= 0);
-							pdm->totalSteps = labs(delta);
-							if (pdm->PrepareCartesianAxis(*this, params))
-							{
-								// Check for sensible values, print them if they look dubious
-								if (pdm->totalSteps > 1000000 && reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintBadMoves))
-								{
-									DebugPrintAll("pr_err1");
-								}
-								InsertDM(pdm);
-							}
-							else
-							{
-								DriveMovement::Release(pdm);
-							}
+							move.AddLinearSegments(*this, driver.localDriver + MaxAxesPlusExtruders, afterPrepare.moveStartTime, params, (float)delta, segFlags);
 						}
 					}
 				}
 			}
-#if SUPPORT_LINEAR_DELTA
-			else if (flags.isDeltaMovement && reprap.GetMove().GetKinematics().GetMotionType(drive) == MotionType::segmentFreeDelta)
-			{
-				// On a delta we need to move all towers even if some of them have no net movement
-				platform.EnableDrivers(drive, false);
-				EnsureSegments(params);
-
-				const int32_t delta = endPoint[drive] - prev->endPoint[drive];
-# if DDA_DEBUG_STEP_COUNT
-				stepsRequested[drive] += delta;
-# endif
-				if (platform.GetDriversBitmap(drive) != 0						// if any of the drives is local
-# if SUPPORT_CAN_EXPANSION
-						|| flags.checkEndstops									// if checking endstops, create a DM even if there are no local drives involved
-# endif
-				   )
-				{
-					DriveMovement* const pdm = DriveMovement::Allocate(drive);
-					pdm->direction = (delta >= 0);
-					pdm->totalSteps = labs(delta);								// this is net steps for now
-					if (pdm->PrepareDeltaAxis(*this, params))
-					{
-						// Check for sensible values, print them if they look dubious
-						if (pdm->totalSteps > 1000000 && reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintBadMoves))
-						{
-							DebugPrintAll("pr_err2");
-						}
-						InsertDM(pdm);
-					}
-					else
-					{
-						pdm->state = DMState::idle;
-						pdm->nextDM = completedDMs;
-						completedDMs = pdm;
-					}
-				}
-
-# if SUPPORT_CAN_EXPANSION
-				afterPrepare.drivesMoving.SetBit(drive);
-				const AxisDriversConfig& config = platform.GetAxisDriversConfig(drive);
-				for (size_t i = 0; i < config.numDrivers; ++i)
-				{
-					const DriverId driver = config.driverNumbers[i];
-					if (driver.IsRemote())
-					{
-						CanMotion::AddAxisMovement(params, driver, delta);
-					}
-				}
-# endif
-				axisMotorsEnabled.SetBit(drive);
-			}
-#endif	// SUPPORT_LINEAR_DELTA
 			else if (drive < reprap.GetGCodes().GetTotalAxes())
 			{
 				// It's a linear axis
@@ -1534,11 +1153,10 @@ void DDA::Prepare(SimulationMode simMode) noexcept
 					stepsRequested[drive] += delta;
 #endif
 					platform.EnableDrivers(drive, false);
-					EnsureSegments(params);
 					if (flags.continuousRotationShortcut && reprap.GetMove().GetKinematics().IsContinuousRotationAxis(drive))
 					{
 						// This is a continuous rotation axis, so we may have adjusted the move to cross the 180 degrees position
-						const int32_t stepsPerRotation = lrintf(360.0 * platform.DriveStepsPerUnit(drive));
+						const int32_t stepsPerRotation = lrintf(360.0 * move.DriveStepsPerMm(drive));
 						if (delta > stepsPerRotation/2)
 						{
 							delta -= stepsPerRotation;
@@ -1550,45 +1168,35 @@ void DDA::Prepare(SimulationMode simMode) noexcept
 					}
 
 					delta = platform.ApplyBacklashCompensation(drive, delta);
+					if (flags.checkEndstops)
+					{
+						move.SetHomingDda(drive, this);
+					}
 
-					if (   platform.GetDriversBitmap(drive) != 0				// if any of the drives is local
+					if (platform.GetDriversBitmap(drive) != 0					// if any of the drives is local
 #if SUPPORT_CAN_EXPANSION
-						|| flags.checkEndstops									// if checking endstops or a Z probe, create a DM even if there are no local drives involved
+						|| flags.checkEndstops									// if checking endstops or a Z probe, create segments even if there are no local drives involved
 #endif
 					   )
 					{
-						DriveMovement* const pdm = DriveMovement::Allocate(drive);
-						pdm->direction = (delta >= 0);
-						pdm->totalSteps = labs(delta);
-						if (pdm->PrepareCartesianAxis(*this, params))
-						{
-							// Check for sensible values, print them if they look dubious
-							if (pdm->totalSteps > 1000000 && reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintBadMoves))
-							{
-								DebugPrintAll("pr_err3");
-							}
-							InsertDM(pdm);
-						}
-						else
-						{
-							DriveMovement::Release(pdm);
-						}
+						move.AddLinearSegments(*this, drive, afterPrepare.moveStartTime, params, (float)delta, segFlags);
 					}
 
-#if SUPPORT_CAN_EXPANSION
 					afterPrepare.drivesMoving.SetBit(drive);
+
+#if SUPPORT_CAN_EXPANSION
 					const AxisDriversConfig& config = platform.GetAxisDriversConfig(drive);
 					for (size_t i = 0; i < config.numDrivers; ++i)
 					{
 						const DriverId driver = config.driverNumbers[i];
 						if (driver.IsRemote())
 						{
-							CanMotion::AddAxisMovement(params, driver, delta);
+							CanMotion::AddLinearAxisMovement(params, driver, delta);
 						}
 					}
 #endif
 					axisMotorsEnabled.SetBit(drive);
-					additionalAxisMotorsToEnable |= reprap.GetMove().GetKinematics().GetConnectedAxes(drive);
+					additionalAxisMotorsToEnable |= reprap.GetMove().GetKinematics().GetControllingDrives(drive);
 				}
 			}
 			else
@@ -1600,7 +1208,7 @@ void DDA::Prepare(SimulationMode simMode) noexcept
 
 					// Check for cold extrusion/retraction. Do this now because we can't read temperatures from within the step ISR, also this works for CAN-connected extruders.
 					// Don't check if it is a special move (indicated by flags.checkEndstops) because the 'tool' variable isn't valid for those moves
-					if (flags.checkEndstops || Tool::ExtruderMovementAllowed(tool, directionVector[drive] > 0, extruder))
+					if (move.GetSimulationMode() != SimulationMode::off || flags.checkEndstops || Tool::ExtruderMovementAllowed(tool, directionVector[drive] > 0, extruder))
 					{
 						platform.EnableDrivers(drive, false);
 
@@ -1622,32 +1230,25 @@ void DDA::Prepare(SimulationMode simMode) noexcept
 						}
 #endif
 
-#if SUPPORT_CAN_EXPANSION
+						const float delta = totalDistance * directionVector[drive] * move.DriveStepsPerMm(drive);
+
 						afterPrepare.drivesMoving.SetBit(drive);
+						if (flags.checkEndstops)
+						{
+							move.SetHomingDda(drive, this);
+						}
+
+#if SUPPORT_CAN_EXPANSION
 						const DriverId driver = platform.GetExtruderDriver(extruder);
 						if (driver.IsRemote())
 						{
 							// The MovementLinearShaped message requires the extrusion amount in steps to be passed as a float. The remote board adds the PA and handles fractional steps.
-							CanMotion::AddExtruderMovement(params, driver, totalDistance * directionVector[drive] * platform.DriveStepsPerUnit(drive), flags.usePressureAdvance);
+							CanMotion::AddExtruderMovement(params, driver, delta, flags.usePressureAdvance);
 						}
 						else
 #endif
 						{
-							EnsureSegments(params);
-							DriveMovement* const pdm = DriveMovement::Allocate(drive);
-							pdm->direction = (directionVector[drive] >= 0);
-							if (pdm->PrepareExtruder(*this, params, platform.DriveStepsPerUnit(drive) * directionVector[drive]))
-							{
-								// Check for sensible values, debugPrint them if they look dubious
-								//TODO (note: totalSteps is no longer valid for extruders)
-								InsertDM(pdm);
-							}
-							else
-							{
-								pdm->state = DMState::idle;
-								pdm->nextDM = completedDMs;
-								completedDMs = pdm;
-							}
+							move.AddLinearSegments(*this, drive, afterPrepare.moveStartTime, params, delta, segFlags);
 						}
 					}
 				}
@@ -1663,18 +1264,18 @@ void DDA::Prepare(SimulationMode simMode) noexcept
 			platform.EnableDrivers(drive, false);
 		}
 
-		const DDAState st = prev->state;
-		afterPrepare.moveStartTime = (st == DDAState::executing || st == DDAState::frozen)
-						? prev->afterPrepare.moveStartTime + prev->clocksNeeded			// this move will follow the previous one, so calculate the start time assuming no more hiccups
-							: StepTimer::GetTimerTicks() + AbsoluteMinimumPreparedTime;	// else this move is the first so start it after a short delay
+		afterPrepare.averageExtrusionSpeed = (extrusionFraction * totalDistance * (float)StepClockRate)/(float)clocksNeeded;
 
+		state = committed;																// must do this before we call CheckEndstops
 		if (flags.checkEndstops)
 		{
 			// Before we send movement commands to remote drives, if any endstop switches we are monitoring are already set, make sure we don't start the motors concerned.
 			// This is especially important when using CAN-connected motors or endstops, because we rely on receiving "endstop changed" messages.
 			// Moves that check endstops are always run as isolated moves, so there can be no move in progress and the endstops must already be primed.
 			platform.EnableAllSteppingDrivers();
-			(void)CheckEndstops(platform);									// this may modify pending CAN moves, and may set status 'completed'
+			const uint32_t oldPrio = ChangeBasePriority(NvicPriorityStep);				// shut out the step interrupt
+			(void)move.CheckEndstops(platform, false);									// this may modify pending CAN moves
+			RestoreBasePriority(oldPrio);
 		}
 
 #if SUPPORT_CAN_EXPANSION
@@ -1687,11 +1288,9 @@ void DDA::Prepare(SimulationMode simMode) noexcept
 		}
 #endif
 
-		afterPrepare.averageExtrusionSpeed = (extrusionFraction * totalDistance * (float)StepClockRate)/(float)clocksNeeded;
-
-		if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintAllMoves) || params.shapingPlan.debugPrint)		// show the prepared DDA if debug enabled for both modules
+		if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintAllMoves))		// show the prepared DDA if debug enabled
 		{
-			DebugPrintAll("pr");
+			DebugPrint("pr");
 		}
 
 #if DDA_MOVE_DEBUG
@@ -1709,11 +1308,16 @@ void DDA::Prepare(SimulationMode simMode) noexcept
 		savedMovePointer = (savedMovePointer + 1) % NumSavedMoves;
 #endif
 	}
+}
 
-	if (state != completed)
+// Check whether a committed move has finished
+bool DDA::HasExpired() const noexcept
+{
+	if (flags.checkEndstops)
 	{
-		state = frozen;					// must do this last so that the ISR doesn't start executing it before we have finished setting it up
+		return reprap.GetMove().AreDrivesStopped(afterPrepare.drivesMoving);
 	}
+	return (int32_t)(StepTimer::GetMovementTimerTicks() - (afterPrepare.moveStartTime + clocksNeeded)) >= 0;
 }
 
 // Take a unit positive-hyperquadrant vector, and return the factor needed to obtain
@@ -1846,470 +1450,19 @@ float DDA::NormaliseLinearMotion(AxesBitmap linearAxes) noexcept
 	}
 }
 
-// Check the endstops, given that we know that this move checks endstops.
-// Either this move is currently executing (DDARing.currentDDA == this) and the state is 'executing', or we have almost finished preparing it and the state is 'provisional'.
-// In the first case we may be called from the step ISR or from EndstopsManager::OnEndstopOrZProbeStatesChanged
-#if SUPPORT_CAN_EXPANSION
-// Returns true if the caller needs to wake the async sender task because CAN-connected drivers need to be stopped
-bool DDA::CheckEndstops(Platform& platform) noexcept
-#else
-void DDA::CheckEndstops(Platform& platform) noexcept
-#endif
-{
-#if SUPPORT_CAN_EXPANSION
-	bool wakeAsyncSender = false;
-#endif
-	while (true)
-	{
-		const EndstopHitDetails hitDetails = platform.GetEndstops().CheckEndstops();
-		switch (hitDetails.GetAction())
-		{
-		case EndstopHitAction::stopAll:
-			MoveAborted();											// set the state to completed and recalculate the endpoints
-#if SUPPORT_CAN_EXPANSION
-			if (CanMotion::StopAll(*this)) { wakeAsyncSender = true; }
-#endif
-			if (hitDetails.isZProbe)
-			{
-				reprap.GetGCodes().MoveStoppedByZProbe();
-			}
-			else if (hitDetails.setAxisLow)
-			{
-				reprap.GetMove().GetKinematics().OnHomingSwitchTriggered(hitDetails.axis, false, platform.GetDriveStepsPerUnit(), *this);
-				reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
-			}
-			else if (hitDetails.setAxisHigh)
-			{
-				reprap.GetMove().GetKinematics().OnHomingSwitchTriggered(hitDetails.axis, true, platform.GetDriveStepsPerUnit(), *this);
-				reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
-			}
-#if SUPPORT_CAN_EXPANSION
-			return wakeAsyncSender;
-#else
-			return;
-#endif
-
-		case EndstopHitAction::stopAxis:
-			StopDrive(hitDetails.axis);								// we must stop the drive before we mess with its coordinates
-#if SUPPORT_CAN_EXPANSION
-			if (CanMotion::StopAxis(*this, hitDetails.axis)) { wakeAsyncSender = true; }
-#endif
-			if (hitDetails.setAxisLow)
-			{
-				reprap.GetMove().GetKinematics().OnHomingSwitchTriggered(hitDetails.axis, false, platform.GetDriveStepsPerUnit(), *this);
-				reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
-			}
-			else if (hitDetails.setAxisHigh)
-			{
-				reprap.GetMove().GetKinematics().OnHomingSwitchTriggered(hitDetails.axis, true, platform.GetDriveStepsPerUnit(), *this);
-				reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
-			}
-			break;
-
-		case EndstopHitAction::stopDriver:
-#if SUPPORT_CAN_EXPANSION
-			if (hitDetails.driver.IsRemote())
-			{
-				if (CanMotion::StopDriver(*this, hitDetails.axis, hitDetails.driver)) { wakeAsyncSender = true; }
-			}
-			else
-#endif
-			{
-				platform.DisableSteppingDriver(hitDetails.driver.localDriver);
-			}
-			if (hitDetails.setAxisLow)
-			{
-				reprap.GetMove().GetKinematics().OnHomingSwitchTriggered(hitDetails.axis, false, platform.GetDriveStepsPerUnit(), *this);
-				reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
-			}
-			else if (hitDetails.setAxisHigh)
-			{
-				reprap.GetMove().GetKinematics().OnHomingSwitchTriggered(hitDetails.axis, true, platform.GetDriveStepsPerUnit(), *this);
-				reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
-			}
-			break;
-
-		default:
-#if SUPPORT_CAN_EXPANSION
-			return wakeAsyncSender;
-#else
-			return;
-#endif
-		}
-	}
-}
-
-// Start executing this move. Must be called with interrupts disabled or basepri >= set interrupt priority, to avoid a race condition.
-void DDA::Start(Platform& p, uint32_t tim) noexcept
-pre(state == frozen)
-{
-	if ((int32_t)(tim - afterPrepare.moveStartTime ) > 25)
-	{
-		afterPrepare.moveStartTime = tim;			// this move is late starting, so record the actual start time
-	}
-	state = executing;
-
-#if DDA_LOG_PROBE_CHANGES
-	if ((endStopsToCheck & LogProbeChanges) != 0)
-	{
-		numLoggedProbePositions = 0;
-		probeTriggered = false;
-	}
-#endif
-
-	if (activeDMs != nullptr)
-	{
-		if (!flags.checkEndstops)
-		{
-			p.EnableAllSteppingDrivers();							// make sure that all drivers are enabled
-		}
-
-		for (const DriveMovement* pdm = activeDMs; pdm != nullptr; pdm = pdm->nextDM)
-		{
-			p.SetDirection(pdm->drive, pdm->direction);
-		}
-
-#if SUPPORT_REMOTE_COMMANDS
-		if (!flags.isRemote)
-#endif
-		{
-			if (afterPrepare.averageExtrusionSpeed != 0.0)
-			{
-				p.ExtrudeOn();
-				if (tool != nullptr)
-				{
-					// Pass the extrusion speed averaged over the whole move in mm/sec
-					tool->ApplyFeedForward(afterPrepare.averageExtrusionSpeed);
-				}
-			}
-			else
-			{
-				p.ExtrudeOff();
-				if (tool != nullptr)
-				{
-					tool->StopFeedForward();
-				}
-			}
-		}
-	}
-}
-
-#ifdef DUET3_MB6XD
-volatile uint32_t DDA::lastStepHighTime = 0;
-#else
-volatile uint32_t DDA::lastStepLowTime = 0;
-#endif
-volatile uint32_t DDA::lastDirChangeTime = 0;
-
-#if DDA_DEBUG_STEP_COUNT
-int32_t DDA::stepsRequested[NumDirectDrivers];
-int32_t DDA::stepsDone[NumDirectDrivers];
-#endif
-
-#if 0	//debug
-uint32_t lastDelay;
-uint32_t maxDelay;
-uint32_t maxDelayIncrease;
-#endif
-
-// Generate the step pulses of internal drivers used by this DDA
-// Sets the status to 'completed' if the move is complete and the next move should be started
-void DDA::StepDrivers(Platform& p, uint32_t now) noexcept
-{
-	// Check endstop switches and Z probe if asked. This is not speed critical because fast moves do not use endstops or the Z probe.
-	if (flags.checkEndstops)		// if any homing switches or the Z probe is enabled in this move
-	{
-#if SUPPORT_CAN_EXPANSION
-		if (CheckEndstops(p)) { CanInterface::WakeAsyncSender(); }
-#else
-		CheckEndstops(p);			// call out to a separate function because this may help cache usage in the more common and time-critical case where we don't call it
-#endif
-		if (state == completed)		// we may have completed the move due to triggering an endstop switch or Z probe
-		{
-			return;
-		}
-	}
-
-	uint32_t driversStepping = 0;
-	DriveMovement* dm = activeDMs;
-	const uint32_t elapsedTime = (now - afterPrepare.moveStartTime) + StepTimer::MinInterruptInterval;
-#if 0	//DEBUG
-	if (dm != nullptr && elapsedTime >= dm->nextStepTime)
-	{
-		const uint32_t delay = elapsedTime - dm->nextStepTime;
-		if (dm->nextStep != 1)
-		{
-			if (delay > maxDelay) { maxDelay = delay; }
-			if (delay > lastDelay && (delay - lastDelay) > maxDelayIncrease) { maxDelayIncrease = delay - lastDelay; }
-		}
-		lastDelay = delay;
-	}
-#endif	//END DEBUG
-	while (dm != nullptr && elapsedTime >= dm->nextStepTime)		// if the next step is due
-	{
-		driversStepping |= p.GetDriversBitmap(dm->drive);
-#if DDA_DEBUG_STEP_COUNT
-		stepsDone[dm->drive] += (dm->direction) ? 1 : -1;
-#endif
-		dm = dm->nextDM;
-	}
-
-	driversStepping &= p.GetSteppingEnabledDrivers();
-
-#ifdef DUET3_MB6XD
-	if (driversStepping != 0)
-	{
-		// Wait until step low and direction setup time have elapsed
-		const uint32_t locLastStepPulseTime = lastStepHighTime;
-		const uint32_t locLastDirChangeTime = lastDirChangeTime;
-		while (now - locLastStepPulseTime < p.GetSlowDriverStepPeriodClocks() || now - locLastDirChangeTime < p.GetSlowDriverDirSetupClocks())
-		{
-			now = StepTimer::GetTimerTicks();
-		}
-
-		StepPins::StepDriversLow(StepPins::AllDriversBitmap & (~driversStepping));		// disable the step pins of the drivers we don't want to step
-		StepPins::StepDriversHigh(driversStepping);										// set up the drivers that we do want to step
-
-		// Trigger the TC so that it generates a step pulse
-		STEP_GATE_TC->TC_CHANNEL[STEP_GATE_TC_CHAN].TC_CCR = TC_CCR_SWTRG;
-		lastStepHighTime = StepTimer::GetTimerTicks();
-	}
-
-	// Calculate the next step times. We must do this even if no local drivers are stepping in case endstops or Z probes are active.
-	for (DriveMovement *dm2 = activeDMs; dm2 != dm; dm2 = dm2->nextDM)
-	{
-		(void)dm2->CalcNextStepTime(*this);							// calculate next step times
-	}
-#else
-# if SUPPORT_SLOW_DRIVERS											// if supporting slow drivers
-	if ((driversStepping & p.GetSlowDriversBitmap()) != 0)			// if using some slow drivers
-	{
-		// Wait until step low and direction setup time have elapsed
-		uint32_t lastStepPulseTime = lastStepLowTime;
-		while (now - lastStepPulseTime < p.GetSlowDriverStepLowClocks() || now - lastDirChangeTime < p.GetSlowDriverDirSetupClocks())
-		{
-			now = StepTimer::GetTimerTicks();
-		}
-
-		StepPins::StepDriversHigh(driversStepping);					// step drivers high
-		lastStepPulseTime = StepTimer::GetTimerTicks();
-
-		for (DriveMovement *dm2 = activeDMs; dm2 != dm; dm2 = dm2->nextDM)
-		{
-			(void)dm2->CalcNextStepTime(*this);						// calculate next step times
-		}
-
-		while (StepTimer::GetTimerTicks() - lastStepPulseTime < p.GetSlowDriverStepHighClocks()) {}
-		StepPins::StepDriversLow(driversStepping);					// step drivers low
-		lastStepLowTime = StepTimer::GetTimerTicks();
-	}
-	else
-# endif
-	{
-		StepPins::StepDriversHigh(driversStepping);					// step drivers high
-# if SAME70 || STM32H7
-		__DSB();													// without this the step pulse can be far too short
-# endif
-		for (DriveMovement *dm2 = activeDMs; dm2 != dm; dm2 = dm2->nextDM)
-		{
-			(void)dm2->CalcNextStepTime(*this);						// calculate next step times
-		}
-
-		StepPins::StepDriversLow(driversStepping);					// step drivers low
-	}
-#endif
-
-	// Remove those drives from the list, update the direction pins where necessary, and re-insert them so as to keep the list in step-time order.
-	DriveMovement *dmToInsert = activeDMs;							// head of the chain we need to re-insert
-	activeDMs = dm;													// remove the chain from the list
-	while (dmToInsert != dm)										// note that both of these may be nullptr
-	{
-		DriveMovement * const nextToInsert = dmToInsert->nextDM;
-		if (dmToInsert->state >= DMState::firstMotionState)
-		{
-			if (dmToInsert->directionChanged)
-			{
-				dmToInsert->directionChanged = false;
-				p.SetDirection(dmToInsert->drive, dmToInsert->direction);
-			}
-			InsertDM(dmToInsert);
-		}
-		else
-		{
-			dmToInsert->nextDM = completedDMs;
-			completedDMs = dmToInsert;
-		}
-		dmToInsert = nextToInsert;
-	}
-
-	// If there are no more steps to do and the time for the move has nearly expired, flag the move as complete
-	if (activeDMs == nullptr)
-	{
-		// We set a move as current up to MovementStartDelayClocks (about 10ms) before it is due to start.
-		// We need to make sure it has really started, or we can get arithmetic wrap round in the case that there are no local drivers stepping.
-		const uint32_t timeRunning = StepTimer::GetTimerTicks() - afterPrepare.moveStartTime;
-		if (   timeRunning + WakeupTime >= clocksNeeded				// if it looks like the move has almost finished
-			&& timeRunning < 0 - AbsoluteMinimumPreparedTime		// and it really has started
-			)
-		{
-			state = completed;
-		}
-	}
-}
-
-// Simulate stepping the drivers, for debugging.
-// This is basically a copy of DDA::StepDrivers except that instead of being called from the timer ISR and generating steps,
-// it is called from the Move task and outputs info on the step timings. It ignores endstops.
-void DDA::SimulateSteppingDrivers(Platform& p) noexcept
-{
-	static uint32_t lastStepTime;
-	static bool checkTiming = false;
-	static uint8_t lastDrive = 0;
-
-	DriveMovement* dm = activeDMs;
-	if (dm != nullptr)
-	{
-		const uint32_t dueTime = dm->nextStepTime;
-		while (dm != nullptr && dueTime >= dm->nextStepTime)			// if the next step is due
-		{
-			const int32_t timeDiff = (int32_t)(dm->nextStepTime - lastStepTime);
-			const bool badTiming = checkTiming && dm->drive == lastDrive && (timeDiff < 10 || timeDiff > 100000000);
-			debugPrintf("%10" PRIu32 " D%u %c%s", dm->nextStepTime, dm->drive, (dm->direction) ? 'F' : 'B', (badTiming) ? " *\n" : "\n");
-			lastDrive = dm->drive;
-			dm = dm->nextDM;
-		}
-		lastStepTime = dueTime;
-		checkTiming = true;
-
-		for (DriveMovement *dm2 = activeDMs; dm2 != dm; dm2 = dm2->nextDM)
-		{
-			(void)dm2->CalcNextStepTime(*this);							// calculate next step times
-		}
-
-		// Remove those drives from the list, update the direction pins where necessary, and re-insert them so as to keep the list in step-time order.
-		DriveMovement *dmToInsert = activeDMs;							// head of the chain we need to re-insert
-		activeDMs = dm;													// remove the chain from the list
-		while (dmToInsert != dm)										// note that both of these may be nullptr
-		{
-			DriveMovement * const nextToInsert = dmToInsert->nextDM;
-			if (dmToInsert->state >= DMState::firstMotionState)
-			{
-				dmToInsert->directionChanged = false;
-				InsertDM(dmToInsert);
-			}
-			else
-			{
-				dmToInsert->nextDM = completedDMs;
-				completedDMs = dmToInsert;
-			}
-			dmToInsert = nextToInsert;
-		}
-	}
-
-	// If there are no more steps to do, flag the move as complete
-	if (activeDMs == nullptr)
-	{
-		checkTiming = false;		// don't check the timing of the first step in the next move
-		state = completed;
-	}
-}
-
-// Stop a drive and re-calculate the corresponding endpoint.
-// For extruder drivers, we need to be able to calculate how much of the extrusion was completed after calling this.
-void DDA::StopDrive(size_t drive) noexcept
-{
-	DriveMovement* const pdm = FindActiveDM(drive);
-	if (pdm != nullptr)
-	{
-		if (drive < reprap.GetGCodes().GetTotalAxes())
-		{
-			endPoint[drive] = prev->endPoint[drive] + pdm->GetNetStepsTaken();
-			flags.endCoordinatesValid = false;			// the XYZ position is no longer valid
-		}
-		DeactivateDM(drive);
-
-#if !SUPPORT_CAN_EXPANSION
-		if (activeDMs == nullptr)
-		{
-			state = completed;
-		}
-#endif
-	}
-#if SUPPORT_CAN_EXPANSION
-	afterPrepare.drivesMoving.ClearBit(drive);
-	if (afterPrepare.drivesMoving.IsEmpty())
-	{
-		state = completed;
-	}
-#endif
-}
-
-// This is called when we abort a move because we have hit an endstop.
-// It stops all drives and adjusts the end points of the current move to account for how far through the move we got.
-// The caller must call MoveCompleted at some point after calling this.
-void DDA::MoveAborted() noexcept
-{
-	if (state == executing)
-	{
-		for (size_t drive = 0; drive < MaxAxesPlusExtruders; ++drive)
-		{
-			StopDrive(drive);
-		}
-	}
-	state = completed;
-}
-
 // Return the proportion of the extrusion in the complete multi-segment move that has already been done.
 // The move was either not started or was aborted.
-float DDA::GetProportionDone(bool moveWasAborted) const noexcept
+float DDA::GetProportionDone() const noexcept
 {
 	// Get the proportion of extrusion already done at the start of this segment
-	float proportionDoneSoFar = (filePos != noFilePosition && filePos == prev->filePos)
+	return (filePos != noFilePosition && filePos == prev->filePos)
 									? prev->proportionDone
 										: 0.0;
-	if (moveWasAborted)
-	{
-		// The move was aborted, so subtract how much was done
-		if (proportionDone > proportionDoneSoFar)
-		{
-			int32_t stepsTaken = 0;
-			float extrusionRequested = 0;
-			for (size_t extruder = 0; extruder < reprap.GetGCodes().GetNumExtruders(); ++extruder)
-			{
-				const size_t logicalDrive = ExtruderToLogicalDrive(extruder);
-				const DriveMovement* const pdm = FindDM(logicalDrive);
-				if (pdm != nullptr)								// if this extruder is active
-				{
-					stepsTaken += pdm->GetNetStepsTaken();
-					extrusionRequested += totalDistance * directionVector[logicalDrive];
-				}
-			}
-			if (extrusionRequested > 0.0)										// if the move has net extrusion
-			{
-				proportionDoneSoFar += ((proportionDone - proportionDoneSoFar) * stepsTaken) / extrusionRequested;
-			}
-		}
-	}
-	return proportionDoneSoFar;
-}
-
-bool DDA::HasStepError() const noexcept
-{
-	for (const DriveMovement* dm = completedDMs; dm != nullptr; )
-	{
-		if (dm->state >= DMState::stepError1 && dm->state < DMState::firstMotionState)
-		{
-			return true;
-		}
-		dm = dm->nextDM;
-	}
-	return false;
 }
 
 // Free up this DDA, returning true if the lookahead underrun flag was set
 bool DDA::Free() noexcept
 {
-	ReleaseDMs();
 	state = empty;
 	return flags.hadLookaheadUnderrun;
 }
@@ -2327,56 +1480,6 @@ void DDA::LimitSpeedAndAcceleration(float maxSpeed, float maxAcceleration) noexc
 	if (deceleration > maxAcceleration)
 	{
 		deceleration = maxAcceleration;
-	}
-}
-
-// Update the movement accumulators to account for the move that has just finished.
-// Only drives that correspond to extruders need to be updated, but it doesn't matter if we update them all.
-// This is called with interrupts disabled.
-void DDA::UpdateMovementAccumulators(volatile int32_t *accumulators) const noexcept
-{
-	// To identify all the extruder movement, we can either loop through extruder numbers and search both DM lists for a DM for that drive,
-	// or we can iterate through both DM lists, checking whether the drive it is for is an extruder.
-	// It's probably quicker to iterate through DMs.
-	//
-	// Loop through DMs, checking whether each associated drive is an extruder and updating the movement accumulator if so.
-	// We could omit the check that the drive is an accumulator so that we update all accumulators, but we would still need to check for leadscrew adjustment moves.
-	const unsigned int firstExtruderDrive =
-#if SUPPORT_REMOTE_COMMANDS
-		(CanInterface::InExpansionMode())
-			? 0 :
-#endif
-				ExtruderToLogicalDrive(reprap.GetGCodes().GetNumExtruders() - 1);
-	const unsigned int lastExtruderDrive =
-#if SUPPORT_REMOTE_COMMANDS
-		(CanInterface::InExpansionMode())
-			? NumDirectDrivers - 1 :
-#endif
-				MaxAxesPlusExtruders - 1;
-	if (firstExtruderDrive <= lastExtruderDrive)
-	{
-		for (const DriveMovement* dm = activeDMs; dm != nullptr; )
-		{
-			const uint8_t drv = dm->drive;
-			if (   drv >= firstExtruderDrive						// check that it's an extruder (to save the call to GetStepsTaken)
-				&& drv <= lastExtruderDrive							// check that it's not a direct leadscrew move
-			   )
-			{
-				accumulators[drv] += dm->GetNetStepsTaken();
-			}
-			dm = dm->nextDM;
-		}
-		for (const DriveMovement* dm = completedDMs; dm != nullptr; )
-		{
-			const uint8_t drv = dm->drive;
-			if (   drv >= firstExtruderDrive						// check that it's an extruder (to save the call to GetStepsTaken)
-				&& drv <= lastExtruderDrive							// check that it's not a direct leadscrew move
-			   )
-			{
-				accumulators[drv] += dm->GetNetStepsTaken();
-			}
-			dm = dm->nextDM;
-		}
 	}
 }
 
@@ -2402,7 +1505,7 @@ uint32_t DDA::ManageLaserPower() const noexcept
 		return 0;
 	}
 
-	const uint32_t clocksMoving = StepTimer::GetTimerTicks() - afterPrepare.moveStartTime;
+	const uint32_t clocksMoving = StepTimer::GetMovementTimerTicks() - afterPrepare.moveStartTime;
 	if (clocksMoving >= clocksNeeded)			// this also covers the case of now < startTime
 	{
 		// Something has gone wrong with the timing. Set zero laser power, but try again soon.

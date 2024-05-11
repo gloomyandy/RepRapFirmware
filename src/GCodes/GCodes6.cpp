@@ -72,7 +72,7 @@ GCodeResult GCodes::ExecuteG30(GCodeBuffer& gb, const StringRef& reply) THROWS(G
 				reprap.GetMove().SetZBedProbePoint((size_t)g30ProbePointIndex, z, false, false);
 				if (g30SValue >= -1)
 				{
-					return GetGCodeResultFromError(reprap.GetMove().FinishedBedProbing(ms.GetMsNumber(), g30SValue, reply));
+					return GetGCodeResultFromError(reprap.GetMove().FinishedBedProbing(g30SValue, reply));
 				}
 			}
 			else
@@ -113,7 +113,7 @@ GCodeResult GCodes::ExecuteG30(GCodeBuffer& gb, const StringRef& reply) THROWS(G
 ReadLockedPointer<ZProbe> GCodes::SetZProbeNumber(GCodeBuffer& gb, char probeLetter) THROWS(GCodeException)
 {
 	const uint32_t probeNumber = (gb.Seen(probeLetter)) ? gb.GetLimitedUIValue(probeLetter, MaxZProbes) : 0;
-	auto zp = reprap.GetPlatform().GetEndstops().GetZProbe(probeNumber);
+	auto zp = platform.GetEndstops().GetZProbe(probeNumber);
 	if (zp.IsNull())
 	{
 		gb.ThrowGCodeException("Z probe %u not found", probeNumber);
@@ -889,10 +889,11 @@ GCodeResult GCodes::HandleM558Point1or2(GCodeBuffer& gb, const StringRef &reply,
 			zp->PrepareForUse(false);										// needed to set actual trigger height allowing for temperature compensation
 
 			// Set the scanning range to a whole number of microsteps and calculate the microsteps per point
-			const unsigned int microstepsPerHalfScan = (unsigned int)(requestedScanningRange * platform.DriveStepsPerUnit(Z_AXIS));
+			const float zStepsPerMm = reprap.GetMove().DriveStepsPerMm(Z_AXIS);
+			const unsigned int microstepsPerHalfScan = (unsigned int)(requestedScanningRange * zStepsPerMm);
 			constexpr unsigned int MaxCalibrationPointsPerHalfScan = (MaxScanningProbeCalibrationPoints - 1)/2;
 			const unsigned int microstepsPerPoint = max<unsigned int>((microstepsPerHalfScan + MaxCalibrationPointsPerHalfScan - 1)/MaxCalibrationPointsPerHalfScan, 1);
-			heightChangePerPoint = microstepsPerPoint/platform.DriveStepsPerUnit(Z_AXIS);
+			heightChangePerPoint = microstepsPerPoint/zStepsPerMm;
 			const size_t pointsPerHalfScan = microstepsPerHalfScan/microstepsPerPoint;
 			calibrationStartingHeight = zp->GetActualTriggerHeight() + pointsPerHalfScan * heightChangePerPoint;
 			numPointsToCollect = 2 * pointsPerHalfScan + 1;

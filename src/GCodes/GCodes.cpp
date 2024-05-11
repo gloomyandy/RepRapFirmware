@@ -1762,7 +1762,7 @@ bool GCodes::LockMovementSystemAndWaitForStandstill(GCodeBuffer& gb, MovementSys
 		//TODO when SbcInterface stops calling this from its own task, get rid of this, it isn't correct any more anyway
 		ms.updateUserPositionGb = &gb;
 	}
-	ms.forceLiveCoordinatesUpdate = true;				// make sure that immediately after e.g. M400 the machine position is fetched correctly (issue 921)
+	reprap.GetMove().ForceLiveCoordinatesUpdate();				// make sure that immediately after e.g. M400 the machine position is fetched correctly (issue 921)
 	return true;
 }
 
@@ -2259,9 +2259,13 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 				ms.reduceAcceleration = reduceAcceleration;
 			}
 			ms.checkEndstops = true;
+			ms.noShaping = true;
 			break;
 
 		case 2:
+			ms.noShaping = true;
+			break;
+
 		default:
 			break;
 		}
@@ -3355,17 +3359,15 @@ void GCodes::HandleM114(GCodeBuffer& gb, const StringRef& s) const noexcept
 	// Now the extruder coordinates
 	for (size_t i = 0; i < numExtruders; i++)
 	{
-		s.catf("E%u:%.1f ", i, (double)ms.LiveCoordinate(ExtruderToLogicalDrive(i)));
+		s.catf("E%u:%.1f ", i, (double)reprap.GetMove().LiveMachineCoordinate(ExtruderToLogicalDrive(i)));
 	}
 
 	// Print the axis stepper motor positions as Marlin does, as an aid to debugging.
 	// Don't bother with the extruder endpoints, they are zero after any non-extruding move.
 	s.cat("Count");
-	int32_t positions[MaxAxesPlusExtruders];
-	reprap.GetMove().GetLivePositions(positions, gb.GetActiveQueueNumber());
 	for (size_t i = 0; i < numVisibleAxes; ++i)
 	{
-		s.catf(" %" PRIi32, positions[i]);
+		s.catf(" %" PRIi32, reprap.GetMove().GetLiveMotorPosition(i));
 	}
 
 	// Add the machine coordinates because they may be different from the user coordinates under some conditions
@@ -3875,13 +3877,13 @@ void GCodes::DisableDrives() noexcept
 
 bool GCodes::ChangeMicrostepping(size_t axisOrExtruder, unsigned int microsteps, bool interp, const StringRef& reply) const noexcept
 {
-	bool dummy;
-	const unsigned int oldSteps = platform.GetMicrostepping(axisOrExtruder, dummy);
-	const bool success = platform.SetMicrostepping(axisOrExtruder, microsteps, interp, reply);
+	Move& move = reprap.GetMove();
+	const unsigned int oldSteps = move.GetMicrostepping(axisOrExtruder);
+	const bool success = move.SetMicrostepping(axisOrExtruder, microsteps, interp, reply);
 	if (success)
 	{
 		// We changed the microstepping, so adjust the steps/mm to compensate
-		platform.SetDriveStepsPerUnit(axisOrExtruder, platform.DriveStepsPerUnit(axisOrExtruder), oldSteps);
+		move.SetDriveStepsPerMm(axisOrExtruder, move.DriveStepsPerMm(axisOrExtruder), oldSteps);
 	}
 	return success;
 }

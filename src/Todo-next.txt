@@ -1,0 +1,38 @@
+Next steps for new movement system+IS
+=====================================
+
+[done a different way] Set Move.checkEndstops when executing movement that checks endstops or a Z probe
+[done] DM must init and maintain (existing) flag isExtruder
+[done] Init DM.segFlags when starting a new segment, clear it when we run out of segments
+[done, testing] Handle retiring commited moves properly
+[done] If a move checks endstops and the endstop is already triggered during Prepare, it remains busy for the length of the homing move, even though it doesn't move.
+[done] We get the same delay when an endstop stops movement.
+[done] Take account of raw motor moves when deciding whether to use IS. Maybe move useIS into MovementFlags?
+
+Can we keep a single machine position, based on current motor positions, not one per MS?
+
+Eventually, store end position in segments. End positions specified by user must be exact numbers of motor steps. Segment boundaries may be fractional steps.
+
+Fix ExtruderPrintingSince, need to update variable extruderPrintingSince when we start a printing extruder move after not doing one - in NewSegmnent?
+
+Use cumulativeHiccupTime and notify hiccups to expansion boards
+
+Allow for expansion boards introducing hiccups
+
+Set up params.useInputShaping, needed for CAN
+
+At the end of Prepare, don't send the move over CAN if it won't happen because endstops are already triggered - previously it checked for state=completed
+Also, check whether/how in CanMotion we handle individual drives not moving because their endstops have triggered - that may be enough to handle the above.
+
+Keep DM.currentMotorPosition up to date, currently DWC displays Machine Position as all zeros
+
+Segment moves to keep them shorter than 2^31 step clocks
+
+Bugs:
+- Pauses after G1 H2 moves, especially if expansion boards are involved
+- [done]"Tool was not driven because its temperatres were not high enough" in simulation mode
+- [done] In simulation mode at least, stops processing X driver segments, then runs out of memory
+- [done] In M122 report, completed moves shows as 0 at least when simulating
+- [done] Test print doesn't heat bed or extruder but heating works manually from DWC
+- [no fault] Spurious filament monitor errors - this was on a tool board
+- Avoid zero-length/zero-duration moves

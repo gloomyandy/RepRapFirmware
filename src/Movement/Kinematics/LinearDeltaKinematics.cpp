@@ -11,7 +11,9 @@
 
 #include <Movement/Move.h>
 #include <Platform/RepRap.h>
+#include <Platform/Platform.h>
 #include <Storage/FileStore.h>
+#include <GCodes/GCodes.h>
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <Math/Deviation.h>
 
@@ -62,7 +64,7 @@ DEFINE_GET_OBJECT_MODEL_TABLE_WITH_PARENT(LinearDeltaKinematics, RoundBedKinemat
 
 #endif
 
-LinearDeltaKinematics::LinearDeltaKinematics() noexcept : RoundBedKinematics(KinematicsType::linearDelta, SegmentationType(false, false, false)), numTowers(UsualNumTowers)
+LinearDeltaKinematics::LinearDeltaKinematics() noexcept : RoundBedKinematics(KinematicsType::linearDelta, SegmentationType(true, false, true)), numTowers(UsualNumTowers)
 {
 	Init();
 }
@@ -425,7 +427,7 @@ void LinearDeltaKinematics::GetAssumedInitialPosition(size_t numAxes, float posi
 }
 
 // Auto calibrate from a set of probe points returning true if it failed
-bool LinearDeltaKinematics::DoAutoCalibration(MovementSystemNumber msNumber, size_t numFactors, const RandomProbePointSet& probePoints, const StringRef& reply) noexcept
+bool LinearDeltaKinematics::DoAutoCalibration(size_t numFactors, const RandomProbePointSet& probePoints, const StringRef& reply) noexcept
 {
 	constexpr size_t NumDeltaFactors = 9;		// maximum number of delta machine factors we can adjust
 
@@ -570,7 +572,7 @@ bool LinearDeltaKinematics::DoAutoCalibration(MovementSystemNumber msNumber, siz
 			}
 
 			// Adjust the motor endpoints to allow for the change to endstop adjustments
-			reprap.GetMove().AdjustMotorPositions(msNumber, heightAdjust, UsualNumTowers);
+			reprap.GetMove().AdjustMotorPositions(heightAdjust, UsualNumTowers);
 		}
 
 		// Calculate the expected probe heights using the new parameters
@@ -635,12 +637,6 @@ bool LinearDeltaKinematics::DoAutoCalibration(MovementSystemNumber msNumber, siz
 
     doneAutoCalibration = true;
     return false;
-}
-
-// Return the type of motion computation needed by an axis
-MotionType LinearDeltaKinematics::GetMotionType(size_t axis) const noexcept
-{
-	return (axis < numTowers) ? MotionType::segmentFreeDelta : MotionType::linear;
 }
 
 // Compute the derivative of height with respect to a parameter at the specified motor endpoints.
@@ -1019,13 +1015,6 @@ AxesBitmap LinearDeltaKinematics::GetHomingFileName(AxesBitmap toBeHomed, AxesBi
 	return Kinematics::GetHomingFileName(toBeHomed, alreadyHomed, numVisibleAxes, filename);
 }
 
-// This function is called from the step ISR when an endstop switch is triggered during homing.
-// Return true if the entire homing move should be terminated, false if only the motor associated with the endstop switch should be stopped.
-bool LinearDeltaKinematics::QueryTerminateHomingMove(size_t axis) const noexcept
-{
-	return false;
-}
-
 // This function is called from the step ISR when an endstop switch is triggered during homing after stopping just one motor or all motors.
 // Take the action needed to define the current position, normally by calling dda.SetDriveCoordinate().
 void LinearDeltaKinematics::OnHomingSwitchTriggered(size_t axis, bool highEnd, const float stepsPerMm[], DDA& dda) const noexcept
@@ -1043,14 +1032,6 @@ void LinearDeltaKinematics::OnHomingSwitchTriggered(size_t axis, bool highEnd, c
 		const float hitPoint = (highEnd) ? reprap.GetPlatform().AxisMaximum(axis) : reprap.GetPlatform().AxisMinimum(axis);
 		dda.SetDriveCoordinate(lrintf(hitPoint * stepsPerMm[axis]), axis);
 	}
-}
-
-// Return a bitmap of axes that move linearly in response to the correct combination of linear motor movements.
-// This is called to determine whether we can babystep the specified axis independently of regular motion.
-// The DDA class has special support for delta printers, so we can baystep the Z axis.
-AxesBitmap LinearDeltaKinematics::GetLinearAxes() const noexcept
-{
-	return AxesBitmap::MakeFromBits(Z_AXIS);
 }
 
 #endif	// SUPPORT_LINEAR_DELTA

@@ -365,7 +365,7 @@ public:
 	// Movement
 	void EmergencyStop() noexcept;
 	size_t GetNumActualDirectDrivers() const noexcept;
-	void SetDirection(size_t axisOrExtruder, bool direction) noexcept;
+	void SetDriverDirection(size_t axisOrExtruder, bool direction) noexcept;
 	void SetDirectionValue(size_t driver, bool dVal) noexcept;
 	bool GetDirectionValue(size_t driver) const noexcept;
 	void SetDriverAbsoluteDirection(size_t driver, bool dVal) noexcept;
@@ -384,9 +384,8 @@ public:
 	int GetMotorCurrent(size_t axisOrExtruder, int code) const noexcept;
 	void SetIdleCurrentFactor(float f) noexcept;
 	float GetIdleCurrentFactor() const noexcept { return idleCurrentFactor; }
-	bool SetDriverMicrostepping(size_t driver, unsigned int microsteps, int mode) noexcept;
-	bool SetMicrostepping(size_t axisOrExtruder, int microsteps, bool mode, const StringRef& reply) noexcept;
-	unsigned int GetMicrostepping(size_t axisOrExtruder, bool& interpolation) const noexcept;
+	bool SetDriverMicrostepping(size_t driver, unsigned int microsteps, bool interpolate) noexcept;
+	bool SetDriversMicrostepping(size_t axisOrExtruder, int microsteps, bool interpolate, const StringRef& reply) noexcept;
 	void SetDriverStepTiming(size_t driver, const float microseconds[4]) noexcept;
 	bool GetDriverStepTiming(size_t driver, float microseconds[4]) const noexcept;
 
@@ -394,10 +393,6 @@ public:
 	void GetActualDriverTimings(float timings[4]) noexcept;
 #endif
 
-	float DriveStepsPerUnit(size_t axisOrExtruder) const noexcept;
-	const float *_ecv_array GetDriveStepsPerUnit() const noexcept
-		{ return driveStepsPerUnit; }
-	void SetDriveStepsPerUnit(size_t axisOrExtruder, float value, uint32_t requestedMicrostepping) noexcept;
 	float NormalAcceleration(size_t axisOrExtruder) const noexcept;
 	float Acceleration(size_t axisOrExtruder, bool reduced) const noexcept;
 	void SetAcceleration(size_t axisOrExtruder, float value, bool reduced) noexcept;
@@ -585,7 +580,7 @@ public:
 #if SUPPORT_CAN_EXPANSION
 	void HandleRemoteGpInChange(CanAddress src, uint8_t handleMajor, uint8_t handleMinor, bool state) noexcept;
 	GCodeResult UpdateRemoteStepsPerMmAndMicrostepping(AxesBitmap axesAndExtruders, const StringRef& reply) noexcept;
-	GCodeResult UpdateRemoteInputShaping(unsigned int numExtraImpulses, const float coefficients[], const float durations[], const StringRef& reply) const noexcept;
+	GCodeResult UpdateRemoteInputShaping(unsigned int numImpulses, const float coefficients[], const float delays[], const StringRef& reply) const noexcept;
 #endif
 
 #if SUPPORT_REMOTE_COMMANDS
@@ -730,13 +725,11 @@ private:
 	float motorCurrents[MaxAxesPlusExtruders];				// the normal motor current for each stepper driver
 	float motorCurrentFraction[MaxAxesPlusExtruders];		// the percentages of normal motor current that each driver is set to
 	float standstillCurrentPercent[MaxAxesPlusExtruders];	// the percentages of normal motor current that each driver uses when in standstill
-	uint16_t microstepping[MaxAxesPlusExtruders];			// the microstepping used for each axis or extruder, top bit is set if interpolation enabled
 
 	volatile DriverStatus driverState[MaxAxesPlusExtruders];
 	float maxFeedrates[MaxAxesPlusExtruders];				// max feed rates in mm per step clock
 	float normalAccelerations[MaxAxesPlusExtruders];		// max accelerations in mm per step clock squared for normal moves
 	float reducedAccelerations[MaxAxesPlusExtruders];		// max accelerations in mm per step clock squared for probing and stall detection moves
-	float driveStepsPerUnit[MaxAxesPlusExtruders];
 	float instantDvs[MaxAxesPlusExtruders];					// max jerk in mm per step clock
 	uint32_t driveDriverBits[MaxAxesPlusExtruders + NumDirectDrivers];
 															// the bitmap of local driver port bits for each axis or extruder, followed by the bitmaps for the individual Z motors
@@ -962,11 +955,6 @@ inline const char *_ecv_array Platform::GetMacroDir() noexcept
 //*****************************************************************************************************************
 
 // Drive the RepRap machine - Movement
-
-inline float Platform::DriveStepsPerUnit(size_t drive) const noexcept
-{
-	return driveStepsPerUnit[drive];
-}
 
 inline float Platform::NormalAcceleration(size_t drive) const noexcept
 {

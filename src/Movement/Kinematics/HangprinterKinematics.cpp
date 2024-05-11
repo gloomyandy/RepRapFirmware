@@ -145,7 +145,8 @@ void HangprinterKinematics::Recalc() noexcept
 
 	//// Line buildup compensation
 	float stepsPerUnitTimesRTmp[HANGPRINTER_MAX_ANCHORS] = { 0.0 };
-	Platform& platform = reprap.GetPlatform(); // No const because we want to set drive steper per unit
+	const Platform& platform = reprap.GetPlatform();
+	Move& move = reprap.GetMove();								 // No const because we want to set drive steps per unit
 	for (size_t i = 0; i < numAnchors; ++i)
 	{
 		const uint8_t driver = platform.GetAxisDriversConfig(i).driverNumbers[0].localDriver; // Only supports single driver
@@ -154,7 +155,7 @@ void HangprinterKinematics::Recalc() noexcept
 			(
 				(float)(mechanicalAdvantage[i])
 				* fullStepsPerMotorRev[i]
-				* platform.GetMicrostepping(driver, dummy)
+				* move.GetMicrostepping(driver, dummy)
 				* spoolGearTeeth[i]
 			)
 			/ (2.0 * Pi * motorGearTeeth[i]);
@@ -164,7 +165,7 @@ void HangprinterKinematics::Recalc() noexcept
 		spoolRadiiSq[i] = spoolRadii[i] * spoolRadii[i];
 
 		// Calculate the steps per unit that is correct at the origin
-		platform.SetDriveStepsPerUnit(i, stepsPerUnitTimesRTmp[i] / spoolRadii[i], 0);
+		move.SetDriveStepsPerMm(i, stepsPerUnitTimesRTmp[i] / spoolRadii[i], 0);
 	}
 
 	//// Flex compensation
@@ -571,13 +572,6 @@ AxesBitmap HangprinterKinematics::GetHomingFileName(AxesBitmap toBeHomed, AxesBi
 	return AxesBitmap();
 }
 
-// This function is called from the step ISR when an endstop switch is triggered during homing.
-// Return true if the entire homing move should be terminated, false if only the motor associated with the endstop switch should be stopped.
-bool HangprinterKinematics::QueryTerminateHomingMove(size_t axis) const noexcept
-{
-	return false;
-}
-
 // This function is called from the step ISR when an endstop switch is triggered during homing after stopping just one motor or all motors.
 // Take the action needed to define the current position, normally by calling dda.SetDriveCoordinate() and return false.
 void HangprinterKinematics::OnHomingSwitchTriggered(size_t axis, bool highEnd, const float stepsPerMm[], DDA& dda) const noexcept
@@ -750,8 +744,8 @@ void HangprinterKinematics::ForwardTransform(float const distances[HANGPRINTER_M
 				ForwardTransformQuadrilateralPyramid(distances, machinePos);
 				return;
 			}
-			// Intentional fall-through to next case
-			// if no forward transform
+			// Intentional fall-through to next case if no forward transform
+			//no break
 		case HangprinterAnchorMode::None:
 		case HangprinterAnchorMode::AllOnTop:
 		default:
@@ -1297,6 +1291,7 @@ void HangprinterKinematics::StaticForces(float const machinePos[3], float F[HANG
 			}
 			// Intentional fall-through to next case
 			// if no line flex compensation
+			// no break
 		case HangprinterAnchorMode::None:
 		case HangprinterAnchorMode::AllOnTop:
 		default:

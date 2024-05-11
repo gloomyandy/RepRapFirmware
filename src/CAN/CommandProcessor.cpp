@@ -16,10 +16,11 @@
 #include <Platform/Event.h>
 #include <Heating/Heat.h>
 #include "ExpansionManager.h"
-# include <ClosedLoop/ClosedLoop.h>
+#include <ClosedLoop/ClosedLoop.h>
+#include <Movement/Move.h>
+#include <FilamentMonitors/FilamentMonitor.h>
 
 #ifndef DUET3_ATE
-# include <Movement/Move.h>
 # include <InputMonitors/InputMonitor.h>
 # include <Version.h>
 
@@ -290,7 +291,7 @@ static void HandleInputStateChanged(const CanMessageInputChangedNew& msg, CanAdd
 
 	if (endstopStatesChanged)
 	{
-		p.GetEndstops().OnEndstopOrZProbeStatesChanged();
+		reprap.GetMove().OnEndstopOrZProbeStatesChanged();
 	}
 }
 
@@ -372,7 +373,7 @@ static GCodeResult EutGetInfo(const CanMessageReturnInfo& msg, const StringRef& 
 #if HAS_SMART_DRIVERS
 					","
 #endif
-					, driver, (double)reprap.GetPlatform().DriveStepsPerUnit(driver));
+					, driver, (double)reprap.GetMove().DriveStepsPerMm(driver));
 #if HAS_SMART_DRIVERS
 				SmartDrivers::AppendDriverStatus(driver, reply);
 #endif
@@ -478,18 +479,13 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				reprap.ScheduleReset();
 				return;							// no reply needed
 
-			case CanMessageType::movementLinear:
-				//TODO check seq
-				reprap.GetMove().AddMoveFromRemote(buf->msg.moveLinear);
-				return;							// no reply needed
-
 			case CanMessageType::movementLinearShaped:
 				//TODO check seq
 				reprap.GetMove().AddMoveFromRemote(buf->msg.moveLinearShaped);
 				return;							// no reply needed
 
 			case CanMessageType::stopMovement:
-				reprap.GetMove().StopDrivers(buf->msg.stopMovement.whichDrives);
+				reprap.GetMove().StopDriversFromRemote(buf->msg.stopMovement.whichDrives);
 				return;							// no reply needed
 
 			case CanMessageType::revertPosition:

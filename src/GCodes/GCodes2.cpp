@@ -587,9 +587,14 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 
 	// In simulation mode we don't execute most M-commands
 	if (   IsSimulating()
-		&& (code < 20 || code > 37)
-		&& code != 0 && code != 1 && code != 82 && code != 83 && code != 105 && code != 109 && code != 111 && code != 112 && code != 122
-		&& code != 200 && code != 204 && code != 207 && code != 408 && code != 409 && code != 486 && code != 999)
+		&& (code < 20 || code > 37)													// allow file operations while simulating
+		&& code != 0 && code != 1 && code != 82 && code != 83
+		&& code != 105 && code != 109 && code != 111 && code != 112 && code != 122
+		&& code != 200 && code != 204 && code != 205 && code != 207
+		&& code != 408 && code != 409 && code != 486
+		&& code != 572 && code != 593												// allow changes to PA and IS while simulating
+		&& code != 997 && code != 999												// allow reset and firmware update while simulating
+	   )
 	{
 		HandleReply(gb, GCodeResult::ok, "");
 		return true;			// we don't simulate most M codes
@@ -1554,6 +1559,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #if SUPPORT_CAN_EXPANSION
 					AxesBitmap axesToUpdate;
 #endif
+					Move& move = reprap.GetMove();
 					for (size_t axis = 0; axis < numTotalAxes; axis++)
 					{
 						if (gb.Seen(axisLetters[axis]))
@@ -1562,7 +1568,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							{
 								return false;
 							}
-							platform.SetDriveStepsPerUnit(axis, gb.GetPositiveFValue(), ustepMultiplier);
+							move.SetDriveStepsPerMm(axis, gb.GetPositiveFValue(), ustepMultiplier);
 #if SUPPORT_CAN_EXPANSION
 							axesToUpdate.SetBit(axis);
 #endif
@@ -1593,7 +1599,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #if SUPPORT_CAN_EXPANSION
 							axesToUpdate.SetBit(drive);
 #endif
-							platform.SetDriveStepsPerUnit(drive, eVals[e], ustepMultiplier);
+							move.SetDriveStepsPerMm(drive, eVals[e], ustepMultiplier);
 						}
 					}
 
@@ -1619,13 +1625,13 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						reply.copy("Steps/mm: ");
 						for (size_t axis = 0; axis < numTotalAxes; ++axis)
 						{
-							reply.catf("%c: %.3f, ", axisLetters[axis], (double)platform.DriveStepsPerUnit(axis));
+							reply.catf("%c: %.3f, ", axisLetters[axis], (double)move.DriveStepsPerMm(axis));
 						}
 						reply.catf("E:");
 						char sep = ' ';
 						for (size_t extruder = 0; extruder < numExtruders; extruder++)
 						{
-							reply.catf("%c%.3f", sep, (double)platform.DriveStepsPerUnit(ExtruderToLogicalDrive(extruder)));
+							reply.catf("%c%.3f", sep, (double)move.DriveStepsPerMm(ExtruderToLogicalDrive(extruder)));
 							sep = ':';
 						}
 					}
@@ -2980,6 +2986,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						}
 					}
 
+					Move& move = reprap.GetMove();
 					if (seen)
 					{
 #if SUPPORT_CAN_EXPANSION
@@ -2992,14 +2999,14 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						for (size_t axis = 0; axis < numTotalAxes; ++axis)
 						{
 							bool actualInterp;
-							const unsigned int microsteps = platform.GetMicrostepping(axis, actualInterp);
+							const unsigned int microsteps = move.GetMicrostepping(axis, actualInterp);
 							reply.catf("%c:%u%s, ", axisLetters[axis], microsteps, (actualInterp) ? "(on)" : "");
 						}
 						reply.cat("E");
 						for (size_t extruder = 0; extruder < numExtruders; extruder++)
 						{
 							bool actualInterp;
-							const unsigned int microsteps = platform.GetMicrostepping(ExtruderToLogicalDrive(extruder), actualInterp);
+							const unsigned int microsteps = move.GetMicrostepping(ExtruderToLogicalDrive(extruder), actualInterp);
 							reply.catf(":%u%s", microsteps, (actualInterp) ? "(on)" : "");
 						}
 					}

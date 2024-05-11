@@ -16,6 +16,7 @@
 #include <Storage/MassStorage.h>
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <Movement/DDA.h>
+#include <Movement/Move.h>
 
 #include <limits>
 
@@ -890,13 +891,6 @@ AxesBitmap FiveBarScaraKinematics::GetHomingFileName(AxesBitmap toBeHomed, AxesB
 	return ret;
 }
 
-// This function is called from the step ISR when an endstop switch is triggered during homing.
-// Return true if the entire homing move should be terminated, false if only the motor associated with the endstop switch should be stopped.
-bool FiveBarScaraKinematics::QueryTerminateHomingMove(size_t axis) const noexcept
-{
-	return false;
-}
-
 // This function is called from the step ISR when an endstop switch is triggered during homing after stopping just one motor or all motors.
 // Take the action needed to define the current position, normally by calling dda.SetDriveCoordinate() and return false.
 void FiveBarScaraKinematics::OnHomingSwitchTriggered(size_t axis, bool highEnd, const float stepsPerMm[], DDA& dda) const noexcept
@@ -938,7 +932,7 @@ AxesBitmap FiveBarScaraKinematics::GetLinearAxes() const noexcept
 	return AxesBitmap::MakeFromBits(Z_AXIS);
 }
 
-AxesBitmap FiveBarScaraKinematics::GetConnectedAxes(size_t axis) const noexcept
+AxesBitmap FiveBarScaraKinematics::GetControllingDrives(size_t axis) const noexcept
 {
 	return (axis == X_AXIS || axis == Y_AXIS)
 			? XyAxes

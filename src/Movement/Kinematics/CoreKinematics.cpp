@@ -11,6 +11,7 @@
 #include <GCodes/GCodes.h>
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <Movement/DDA.h>
+#include <Movement/Move.h>
 
 #if SUPPORT_OBJECT_MODEL
 
@@ -116,7 +117,7 @@ void CoreKinematics::Recalc() noexcept
 	{
 		firstMotor[i] = firstAxis[i] = MaxAxes;
 		lastMotor[i] = lastAxis[i] = 0;
-		connectedAxes[i].Clear();
+		controllingDrivers[i].Clear();
 	}
 
 	for (size_t axis = 0; axis < MaxAxes; ++axis)
@@ -133,7 +134,7 @@ void CoreKinematics::Recalc() noexcept
 				{
 					lastAxis[motor] = axis;
 				}
-				connectedAxes[axis].SetBit(motor);
+				controllingDrivers[axis].SetBit(motor);
 			}
 
 			if (forwardMatrix(motor, axis) != 0.0)							// if this motor affects this axes
@@ -146,7 +147,7 @@ void CoreKinematics::Recalc() noexcept
 				{
 					lastMotor[axis] = motor;
 				}
-				connectedAxes[axis].SetBit(motor);
+				controllingDrivers[axis].SetBit(motor);
 			}
 		}
 	}
@@ -176,7 +177,7 @@ void CoreKinematics::Recalc() noexcept
 // Return true if the axis doesn't have a single dedicated motor
 inline bool CoreKinematics::HasSharedMotor(size_t axis) const noexcept
 {
-	return connectedAxes[axis] != AxesBitmap::MakeFromBits(axis);
+	return controllingDrivers[axis] != AxesBitmap::MakeFromBits(axis);
 }
 
 CoreKinematics::CoreKinematics(KinematicsType k) noexcept : ZLeadscrewKinematics(k), modified(false)
@@ -382,13 +383,6 @@ void CoreKinematics::MotorStepsToCartesian(const int32_t motorPos[], const float
 	}
 }
 
-// This function is called from the step ISR when an endstop switch is triggered during homing.
-// Return true if the entire homing move should be terminated, false if only the motor associated with the endstop switch should be stopped.
-bool CoreKinematics::QueryTerminateHomingMove(size_t axis) const noexcept
-{
-	return HasSharedMotor(axis);
-}
-
 // This function is called from the step ISR when an endstop switch is triggered during homing after stopping just one motor or all motors.
 // Take the action needed to define the current position, normally by calling dda.SetDriveCoordinate().
 void CoreKinematics::OnHomingSwitchTriggered(size_t axis, bool highEnd, const float stepsPerMm[], DDA& dda) const noexcept
@@ -453,9 +447,9 @@ void CoreKinematics::LimitSpeedAndAcceleration(DDA& dda, const float* normalised
 
 // Return a bitmap of the motors that are involved in homing a particular axis or tower. Used for implementing stall detection endstops.
 // Usually it is just the corresponding motor (hence this default implementation), but CoreXY and similar kinematics move multiple motors to home an individual axis.
-AxesBitmap CoreKinematics::GetConnectedAxes(size_t axis) const noexcept
+AxesBitmap CoreKinematics::GetControllingDrives(size_t axis) const noexcept
 {
-	return connectedAxes[axis];
+	return controllingDrivers[axis];
 }
 
 // Return a bitmap of axes that move linearly in response to the correct combination of linear motor movements.

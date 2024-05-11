@@ -12,6 +12,7 @@
 #include <Movement/Move.h>
 #include <Platform/RepRap.h>
 #include <Storage/FileStore.h>
+#include <Platform/Platform.h>
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <Math/Deviation.h>
 
@@ -284,7 +285,7 @@ floatc_t RotaryDeltaKinematics::ComputeDerivative(unsigned int deriv, float ha, 
 
 // Perform auto calibration. Caller already owns the movement lock.
 // Return true if an error occurred.
-bool RotaryDeltaKinematics::DoAutoCalibration(MovementSystemNumber msNumber, size_t numFactors, const RandomProbePointSet& probePoints, const StringRef& reply) noexcept
+bool RotaryDeltaKinematics::DoAutoCalibration(size_t numFactors, const RandomProbePointSet& probePoints, const StringRef& reply) noexcept
 {
 	constexpr size_t NumDeltaFactors = 7;		// maximum number of rotary delta machine factors we can adjust
 
@@ -422,7 +423,7 @@ bool RotaryDeltaKinematics::DoAutoCalibration(MovementSystemNumber msNumber, siz
 			{
 				heightAdjust[drive] = solution[drive];
 			}
-			reprap.GetMove().AdjustMotorPositions(msNumber, heightAdjust, DELTA_AXES);
+			reprap.GetMove().AdjustMotorPositions(heightAdjust, DELTA_AXES);
 		}
 
 		// Calculate the expected probe heights using the new parameters
@@ -662,13 +663,6 @@ AxesBitmap RotaryDeltaKinematics::GetHomingFileName(AxesBitmap toBeHomed, AxesBi
 	}
 
 	return Kinematics::GetHomingFileName(toBeHomed, alreadyHomed, numVisibleAxes, filename);
-}
-
-// This function is called from the step ISR when an endstop switch is triggered during homing.
-// Return true if the entire homing move should be terminated, false if only the motor associated with the endstop switch should be stopped.
-bool RotaryDeltaKinematics::QueryTerminateHomingMove(size_t axis) const noexcept
-{
-	return false;
 }
 
 // This function is called from the step ISR when an endstop switch is triggered during homing after stopping just one motor or all motors.

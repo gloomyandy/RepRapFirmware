@@ -37,6 +37,7 @@
 #include "MoveDebugFlags.h"
 #include "StepTimer.h"
 #include <Platform/Platform.h>
+#include <GCodes/GCodes.h>
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <Tools/Tool.h>
 #include <Endstops/ZProbe.h>
@@ -225,6 +226,7 @@ Move::Move() noexcept
 	  heightController(nullptr),
 #endif
 	  jerkPolicy(0),
+	  stepErrorState(StepErrorState::noError),
 	  numCalibratedFactors(0)
 {
 	// Kinematics must be set up here because GCodes::Init asks the kinematics for the assumed initial position
@@ -233,7 +235,6 @@ Move::Move() noexcept
 #if SUPPORT_ASYNC_MOVES
 	rings[1].Init1(AuxDdaRingLength);
 #endif
-	DriveMovement::InitialAllocate(InitialNumDms);
 }
 
 void Move::Init() noexcept
@@ -260,7 +261,33 @@ void Move::Init() noexcept
 
 	simulationMode = SimulationMode::off;
 	longestGcodeWaitInterval = 0;
+	numHiccups = 0;
+	lastReportedMovementDelay = 0;
 	bedLevellingMoveAvailable = false;
+	activeDMs = nullptr;
+	for (volatile int32_t& acc : movementAccumulators)
+	{
+		acc = 0;
+	}
+	for (int32_t& pos : motorPositionsAfterScheduledMoves)
+	{
+		pos = 0;
+	}
+	for (uint16_t& ms : microstepping)
+	{
+		ms = 16 | 0x8000;
+	}
+	for (size_t drv = 0; drv < MaxAxesPlusExtruders + NumDirectDrivers; ++drv)
+	{
+		dms[drv].Init(drv);
+		if (drv < MaxAxesPlusExtruders)
+		{
+			const float stepsPerMm = (drv >= MaxAxes) ? DefaultEDriveStepsPerUnit
+										: (drv == Z_AXIS) ? DefaultZDriveStepsPerUnit
+											: DefaultAxisDriveStepsPerUnit;
+			SetDriveStepsPerMm(drv, stepsPerMm, 0);				//TODO what about steps/mm for the direct driver numbers?
+		}
+	}
 
 	moveTask.Create(MoveStart, "Move", this, TaskPriority::MovePriority);
 }
@@ -268,6 +295,7 @@ void Move::Init() noexcept
 void Move::Exit() noexcept
 {
 	StepTimer::DisableTimerInterrupt();
+	timer.CancelCallback();
 	rings[0].Exit();
 #if SUPPORT_ASYNC_MOVES
 	rings[1].Exit();
@@ -279,21 +307,76 @@ void Move::Exit() noexcept
 	moveTask.TerminateAndUnlink();
 }
 
+void Move::GenerateMovementErrorDebug() noexcept
+{
+	if (reprap.Debug(Module::Move))
+	{
+		const DDA *cdda = rings[0].GetCurrentDDA();
+		if (cdda == nullptr)
+		{
+			debugPrintf("No current DDA\n");
+		}
+		else
+		{
+			cdda->DebugPrint("Current DDA");
+		}
+
+		debugPrintf("Failing DM:\n");
+		for (const DriveMovement& dm : dms)
+		{
+			if (dm.HasError())
+			{
+				dm.DebugPrint();
+			}
+		}
+	}
+}
+
+// Set the microstepping for local drivers, returning true if successful. All drivers for the same axis must use the same microstepping.
+// Caller must deal with remote drivers.
+bool Move::SetMicrostepping(size_t axisOrExtruder, int microsteps, bool interp, const StringRef& reply) noexcept
+{
+	//TODO check that it is a valid microstep setting
+	microstepping[axisOrExtruder] = (interp) ? microsteps | 0x8000 : microsteps;
+	reprap.MoveUpdated();
+	return reprap.GetPlatform().SetDriversMicrostepping(axisOrExtruder, microsteps, interp, reply);
+}
+
+// Get the microstepping for an axis or extruder
+unsigned int Move::GetMicrostepping(size_t axisOrExtruder, bool& interpolation) const noexcept
+{
+	interpolation = (microstepping[axisOrExtruder] & 0x8000) != 0;
+	return microstepping[axisOrExtruder] & 0x7FFF;
+}
+
+// Set the drive steps per mm. Called when processing M92.
+void Move::SetDriveStepsPerMm(size_t axisOrExtruder, float value, uint32_t requestedMicrostepping) noexcept
+{
+	if (requestedMicrostepping != 0)
+	{
+		const uint32_t currentMicrostepping = microstepping[axisOrExtruder] & 0x7FFF;
+		if (currentMicrostepping != requestedMicrostepping)
+		{
+			value = value * (float)currentMicrostepping / (float)requestedMicrostepping;
+		}
+	}
+
+	value = max<float>(value, 1.0);							// don't allow zero or negative
+	driveStepsPerMm[axisOrExtruder] = value;
+	reprap.MoveUpdated();
+}
+
 [[noreturn]] void Move::MoveLoop() noexcept
 {
+
+	timer.SetCallback(Move::TimerCallback, CallbackParameter(this));
 	for (;;)
 	{
-		if (reprap.IsStopped())
+		if (reprap.IsStopped() || stepErrorState != StepErrorState::noError)
 		{
 			// Emergency stop has been commanded, so terminate this task to prevent new moves being prepared and executed
 			moveTask.TerminateAndUnlink();
 		}
-
-		// Recycle the DDAs for completed moves, checking for DDA errors to print if Move debug is enabled
-		rings[0].RecycleDDAs();
-#if SUPPORT_ASYNC_MOVES
-		rings[1].RecycleDDAs();
-#endif
 
 		bool moveRead = false;
 
@@ -417,6 +500,14 @@ void Move::Exit() noexcept
 		}
 #endif
 
+		if (simulationMode == SimulationMode::debug && reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::SimulateSteppingDrivers))
+		{
+			while (activeDMs != nullptr)
+			{
+				SimulateSteppingDrivers(reprap.GetPlatform());
+			}
+		}
+
 		// Reduce motor current to standby if the rings have been idle for long enough
 		if (   rings[0].IsIdle()
 #if SUPPORT_ASYNC_MOVES
@@ -529,6 +620,12 @@ bool Move::LowPowerOrStallPause(unsigned int queueNumber, RestorePoint& rp) noex
 	return rings[queueNumber].LowPowerOrStallPause(rp);
 }
 
+// Stop generating steps
+void Move::CancelStepping() noexcept
+{
+	StepTimer::DisableTimerInterrupt();
+}
+
 #endif
 
 void Move::Diagnostics(MessageType mtype) noexcept
@@ -541,25 +638,24 @@ void Move::Diagnostics(MessageType mtype) noexcept
 #endif
 	scratchString.copy(GetCompensationTypeString());
 
+	const uint32_t currentMovementDelay = StepTimer::GetMovementDelay();
+	const float delayToReport = (currentMovementDelay - lastReportedMovementDelay) * (1000.0/(float)StepTimer::GetTickRate());
+	lastReportedMovementDelay = currentMovementDelay;
+
 	Platform& p = reprap.GetPlatform();
 	p.MessageF(mtype,
-				"=== Move ===\nDMs created %u, segments created %u, maxWait %" PRIu32 "ms, bed compensation in use: %s, height map offset %.3f"
-#if 1	//debug
-				", max steps late %" PRIi32 ", min interval %" PRIi32 ", bad calcs %u"
-#endif
+				"=== Move ===\nSegments created %u, maxWait %" PRIu32 "ms, bed compensation in use: %s, height map offset %.3f, hiccups %u, hiccup time %.2fms, max steps late %" PRIi32
 #if 1	//debug
 				", ebfmin %.2f, ebfmax %.2f"
 #endif
 				"\n",
-						DriveMovement::NumCreated(), MoveSegment::NumCreated(), longestGcodeWaitInterval, scratchString.c_str(), (double)zShift,
-#if 1	//debug
-						DriveMovement::GetAndClearMaxStepsLate(), DriveMovement::GetAndClearMinStepInterval(), DriveMovement::GetAndClearBadSegmentCalcs()
-#endif
+						MoveSegment::NumCreated(), longestGcodeWaitInterval, scratchString.c_str(), (double)zShift, numHiccups, (double)delayToReport, DriveMovement::GetAndClearMaxStepsLate()
 #if 1
 						, (double)minExtrusionPending, (double)maxExtrusionPending
 #endif
 		);
 	longestGcodeWaitInterval = 0;
+	numHiccups = 0;
 #if 1	//debug
 	minExtrusionPending = maxExtrusionPending = 0.0;
 #endif
@@ -568,8 +664,8 @@ void Move::Diagnostics(MessageType mtype) noexcept
 	scratchString.copy("Steps requested/done:");
 	for (size_t driver = 0; driver < NumDirectDrivers; ++driver)
 	{
-		scratchString.catf(" %" PRIi32 "/%" PRIi32, DDA::stepsRequested[driver], DDA::stepsDone[driver]);
-		DDA::stepsRequested[driver] = DDA::stepsDone[driver] = 0;
+		scratchString.catf(" %" PRIu32 "/%" PRIu32, stepsRequested[driver], stepsDone[driver]);
+		stepsRequested[driver] = stepsDone[driver] = 0;
 	}
 	scratchString.cat('\n');
 	p.Message(mtype, scratchString.c_str());
@@ -579,10 +675,10 @@ void Move::Diagnostics(MessageType mtype) noexcept
 	// Temporary code to print Z probe trigger positions
 	p.Message(mtype, "Probe change coordinates:");
 	char ch = ' ';
-	for (size_t i = 0; i < DDA::numLoggedProbePositions; ++i)
+	for (size_t i = 0; i < numLoggedProbePositions; ++i)
 	{
 		float xyzPos[XYZ_AXES];
-		MotorStepsToCartesian(DDA::loggedProbePositions + (XYZ_AXES * i), XYZ_AXES, XYZ_AXES, xyzPos);
+		MotorStepsToCartesian(loggedProbePositions + (XYZ_AXES * i), XYZ_AXES, XYZ_AXES, xyzPos);
 		p.MessageF(mtype, "%c%.2f,%.2f", ch, xyzPos[X_AXIS], xyzPos[Y_AXIS]);
 		ch = ',';
 	}
@@ -608,6 +704,18 @@ void Move::Diagnostics(MessageType mtype) noexcept
 	}
 }
 
+// Clear the movement pending value for an extruder
+void Move::ClearExtruderMovementPending(size_t extruder) noexcept
+{
+	dms[ExtruderToLogicalDrive(extruder)].ClearMovementPending();
+}
+
+// Return when we started doing normal moves after the most recent extruder-only move, in millisecond ticks
+uint32_t Move::ExtruderPrintingSince(size_t logicalDrive) const noexcept
+{
+	return dms[logicalDrive].extruderPrintingSince;
+}
+
 // Set the current position to be this
 void Move::SetNewPosition(const float positionNow[MaxAxesPlusExtruders], MovementSystemNumber msNumber, bool doBedCompensation) noexcept
 {
@@ -618,16 +726,16 @@ void Move::SetNewPosition(const float positionNow[MaxAxesPlusExtruders], Movemen
 }
 
 // Convert distance to steps for a particular drive
-int32_t Move::MotorMovementToSteps(size_t drive, float coord) noexcept
+int32_t Move::MotorMovementToSteps(size_t drive, float coord) const noexcept
 {
-	return lrintf(coord * reprap.GetPlatform().DriveStepsPerUnit(drive));
+	return lrintf(coord * driveStepsPerMm[drive]);
 }
 
 // Convert motor coordinates to machine coordinates. Used after homing and after individual motor moves.
 // This is computationally expensive on a delta or SCARA machine, so only call it when necessary, and never from the step ISR.
 void Move::MotorStepsToCartesian(const int32_t motorPos[], size_t numVisibleAxes, size_t numTotalAxes, float machinePos[]) const noexcept
 {
-	kinematics->MotorStepsToCartesian(motorPos, reprap.GetPlatform().GetDriveStepsPerUnit(), numVisibleAxes, numTotalAxes, machinePos);
+	kinematics->MotorStepsToCartesian(motorPos, driveStepsPerMm, numVisibleAxes, numTotalAxes, machinePos);
 	if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintTransforms))
 	{
 		debugPrintf("Forward transformed %" PRIi32 " %" PRIi32 " %" PRIi32 " to %.2f %.2f %.2f\n",
@@ -638,9 +746,10 @@ void Move::MotorStepsToCartesian(const int32_t motorPos[], size_t numVisibleAxes
 // Convert Cartesian coordinates to motor steps, axes only, returning true if successful.
 // Used to perform movement and G92 commands.
 // This may be called from an ISR, e.g. via Kinematics::OnHomingSwitchTriggered, DDA::SetPositions and Move::EndPointToMachine
+// If isCoordinated is false then multi-mode kinematics such as SCARA are allowed to switch mode if necessary to make the specified machine position reachable
 bool Move::CartesianToMotorSteps(const float machinePos[MaxAxes], int32_t motorPos[MaxAxes], bool isCoordinated) const noexcept
 {
-	const bool b = kinematics->CartesianToMotorSteps(machinePos, reprap.GetPlatform().GetDriveStepsPerUnit(),
+	const bool b = kinematics->CartesianToMotorSteps(machinePos, driveStepsPerMm,
 														reprap.GetGCodes().GetVisibleAxes(), reprap.GetGCodes().GetTotalAxes(), motorPos, isCoordinated);
 	if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintTransforms))
 	{
@@ -926,7 +1035,7 @@ void Move::SetXYCompensation(bool xyCompensation)
 // Calibrate or set the bed equation after probing, returning true if an error occurred
 // sParam is the value of the S parameter in the G30 command that provoked this call.
 // Caller already owns the GCode movement lock.
-bool Move::FinishedBedProbing(MovementSystemNumber msNumber, int sParam, const StringRef& reply) noexcept
+bool Move::FinishedBedProbing(int sParam, const StringRef& reply) noexcept
 {
 	bool error = false;
 	const size_t numPoints = probePoints.NumberOfProbePoints();
@@ -960,7 +1069,7 @@ bool Move::FinishedBedProbing(MovementSystemNumber msNumber, int sParam, const S
 		}
 		else if (kinematics->SupportsAutoCalibration())
 		{
-			error = kinematics->DoAutoCalibration(msNumber, sParam, probePoints, reply);
+			error = kinematics->DoAutoCalibration(sParam, probePoints, reply);
 		}
 		else
 		{
@@ -975,9 +1084,9 @@ bool Move::FinishedBedProbing(MovementSystemNumber msNumber, int sParam, const S
 	return error;
 }
 
-/*static*/ float Move::MotorStepsToMovement(size_t drive, int32_t endpoint) noexcept
+float Move::MotorStepsToMovement(size_t drive, int32_t endpoint) const noexcept
 {
-	return ((float)(endpoint))/reprap.GetPlatform().DriveStepsPerUnit(drive);
+	return ((float)(endpoint))/driveStepsPerMm[drive];
 }
 
 // Return the transformed machine coordinates
@@ -1121,7 +1230,7 @@ GCodeResult Move::ConfigurePressureAdvance(GCodeBuffer& gb, const StringRef& rep
 					rslt = GCodeResult::error;
 					break;
 				}
-				extruderShapers[extruder].SetKseconds(advance);
+				GetExtruderShaperForExtruder(extruder).SetKseconds(advance);
 #if SUPPORT_CAN_EXPANSION
 				const DriverId did = platform.GetExtruderDriver(extruder);
 				if (did.IsRemote())
@@ -1144,7 +1253,7 @@ GCodeResult Move::ConfigurePressureAdvance(GCodeBuffer& gb, const StringRef& rep
 #if SUPPORT_CAN_EXPANSION
 				ct->IterateExtruders([this, advance, &canDriversToUpdate](unsigned int extruder)
 										{
-											extruderShapers[extruder].SetKseconds(advance);
+											GetExtruderShaperForExtruder(extruder).SetKseconds(advance);
 											const DriverId did = reprap.GetPlatform().GetExtruderDriver(extruder);
 											if (did.IsRemote())
 											{
@@ -1155,7 +1264,7 @@ GCodeResult Move::ConfigurePressureAdvance(GCodeBuffer& gb, const StringRef& rep
 #else
 				ct->IterateExtruders([this, advance](unsigned int extruder)
 										{
-											extruderShapers[extruder].SetKseconds(advance);
+											GetExtruderShaperForExtruder(extruder).SetKseconds(advance);
 										}
 									);
 #endif
@@ -1175,7 +1284,7 @@ GCodeResult Move::ConfigurePressureAdvance(GCodeBuffer& gb, const StringRef& rep
 	char c = ':';
 	for (size_t i = 0; i < reprap.GetGCodes().GetNumExtruders(); ++i)
 	{
-		reply.catf("%c %.3f", c, (double)extruderShapers[i].GetKseconds());
+		reply.catf("%c %.3f", c, (double)GetExtruderShaperForExtruder(i).GetKseconds());
 		c = ',';
 	}
 	return GCodeResult::ok;
@@ -1202,7 +1311,7 @@ GCodeResult Move::EutSetRemotePressureAdvance(const CanMessageMultipleDrivesRequ
 							}
 							else
 							{
-								extruderShapers[driver].SetKseconds(msg.values[count]);
+								dms[driver].extruderShaper.SetKseconds(msg.values[count]);
 							}
 						}
 				   );
@@ -1211,17 +1320,20 @@ GCodeResult Move::EutSetRemotePressureAdvance(const CanMessageMultipleDrivesRequ
 
 void Move::RevertPosition(const CanMessageRevertPosition& msg) noexcept
 {
-	// Construct a MovementLinear message to revert the position. The move must be shorter than clocksAllowed.
+	// Construct a MovementLinearShaped message to revert the position. The move must be shorter than clocksAllowed.
 	// When writing this, clocksAllowed was equivalent to 40ms.
 	// We allow 10ms delay time to allow the motor to stop and reverse direction, 10ms acceleration time, 5ms steady time and 10ms deceleration time.
-	CanMessageMovementLinear msg2;
+	CanMessageMovementLinearShaped msg2;
 	msg2.accelerationClocks = msg2.decelClocks = msg.clocksAllowed/4;
 	msg2.steadyClocks = msg.clocksAllowed/8;
 	msg2.whenToExecute = StepTimer::GetMasterTime() + msg.clocksAllowed/4;
 	msg2.numDrivers = NumDirectDrivers;
-	msg2.pressureAdvanceDrives = 0;
+	msg2.extruderDrives = 0;
 	msg2.seq = 0;
-	msg2.initialSpeedFraction = msg2.finalSpeedFraction = 0.0;
+
+	// We start and finish at zero speed, so we move (3/8)*clocksAllowed*topSpeed distance. Since we normalise moves to unit distance, this is equal to one.
+	// So topSpeed is 8/(3 * clocksAllowed) and acceleration is (8/(3 * clocksAllowed))/(clocksAllowed/4) = 32/(3 * clocksAllowed^2).
+	msg2.acceleration = msg2.deceleration = 32.0/(3.0 * msg.clocksAllowed * msg.clocksAllowed);
 
 	size_t index = 0;
 	bool needSteps = false;
@@ -1252,11 +1364,57 @@ void Move::RevertPosition(const CanMessageRevertPosition& msg) noexcept
 #endif
 
 // Return the current machine axis and extruder coordinates. They are needed only to service status requests from DWC, PanelDue, M114.
-// This is quite expensive, so it should only be called from class MovemebntState, which caches the results.
-void Move::GetLiveCoordinates(unsigned int msNumber, const Tool *tool, float coordsOut[MaxAxesPlusExtruders]) noexcept
+// Return the current machine axis and extruder coordinates. They are needed only to service status requests from DWC, PanelDue, M114.
+// Transforming the machine motor coordinates to Cartesian coordinates is quite expensive, and a status request or object model request will call this for each axis.
+// So we cache the latest coordinates and only update them if it is some time since we last did, or if we have just waited for movement to stop.
+// Interrupts are assumed enabled on entry
+// Note, this no longer applies inverse mesh bed compensation or axis skew compensation to the returned machine coordinates, so they are the compensated coordinates!
+float Move::LiveMachineCoordinate(unsigned int axisOrExtruder) const noexcept
 {
-	rings[msNumber].LiveCoordinates(coordsOut);
-	InverseAxisAndBedTransform(coordsOut, tool);
+	if (forceLiveCoordinatesUpdate || (millis() - latestLiveCoordinatesFetchedAt > 200 && !liveCoordinatesValid))
+	{
+		UpdateLiveMachineCoordinates();
+		forceLiveCoordinatesUpdate = false;
+		latestLiveCoordinatesFetchedAt = millis();
+	}
+	return latestLiveCoordinates[axisOrExtruder];
+}
+
+// Force an update of the live machine coordinates
+void Move::UpdateLiveMachineCoordinates() const noexcept
+{
+	const size_t numVisibleAxes = reprap.GetGCodes().GetVisibleAxes();		// do this before we disable interrupts
+	const size_t numTotalAxes = reprap.GetGCodes().GetTotalAxes();			// do this before we disable interrupts
+
+	// Get the positions of each motor
+	int32_t currentMotorPositions[MaxAxesPlusExtruders];
+	bool motionPending = false;
+	motionAdded = false;
+	for (size_t i = 0; i < MaxAxesPlusExtruders; ++i)
+	{
+		currentMotorPositions[i] = dms[i].GetCurrentMotorPosition();
+		if (dms[i].MotionPending())
+		{
+			motionPending = true;
+		}
+	}
+
+	MotorStepsToCartesian(currentMotorPositions, numVisibleAxes, numTotalAxes, latestLiveCoordinates);		// this is slow, so do it with interrupts enabled
+
+	// Add extrusion so far in the current move to the accumulated extrusion
+	for (size_t i = MaxAxesPlusExtruders - reprap.GetGCodes().GetNumExtruders(); i < MaxAxesPlusExtruders; ++i)
+	{
+		latestLiveCoordinates[i] = currentMotorPositions[i] / driveStepsPerMm[i];
+	}
+
+	// Optimisation: if no movement, save the positions for next time
+	{
+		AtomicCriticalSectionLocker lock;
+		if (!motionPending && !motionAdded)
+		{
+			liveCoordinatesValid = true;
+		}
+	}
 }
 
 void Move::SetLatestCalibrationDeviation(const Deviation& d, uint8_t numFactors) noexcept
@@ -1363,7 +1521,7 @@ void Move::LaserTaskRun() noexcept
 # if SUPPORT_IOBITS
 			// Manage the IOBits
 			uint32_t ticks;
-			while ((ticks = reprap.GetPortControl().UpdatePorts()) != 0)
+			while ((ticks = rings[0].ManageIOBits()) != 0)
 			{
 				(void)TaskBase::TakeIndexed(NotifyIndices::Laser, ticks);
 			}
@@ -1372,30 +1530,741 @@ void Move::LaserTaskRun() noexcept
 	}
 }
 
-#if SUPPORT_ASYNC_MOVES
-
 // Get the accumulated extruder motor steps taken by an extruder since the last call. Used by the filament monitoring code.
 // Returns the number of motor steps moved since the last call, and sets isPrinting true unless we are currently executing an extruding but non-printing move
 // This is called from the filament monitor ISR and from FilamentMonitor::Spin
 int32_t Move::GetAccumulatedExtrusion(size_t logicalDrive, bool& isPrinting) noexcept
 {
-	for (size_t ringNumber = 0; ringNumber < NumMovementSystems; ++ringNumber)
+	AtomicCriticalSectionLocker lock;							// we don't want a move to complete and the ISR update the movement accumulators while we are doing this
+	const int32_t ret = movementAccumulators[logicalDrive];
+	const int32_t adjustment = dms[logicalDrive].GetNetStepsTaken();
+	movementAccumulators[logicalDrive] = -adjustment;
+	isPrinting = dms[logicalDrive].IsPrintingExtruderMovement();
+	return ret + adjustment;
+}
+
+// Add some linear segments to be executed by a driver, taking account of possible input shaping. This is used by linear axes and by extruders.
+// We never add a segment that starts earlier than any existing segments, but we may add segments when there are none already.
+void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t startTime, const PrepParams& params, float steps, MovementFlags moveFlags) noexcept
+{
+	if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::Segments))
 	{
-		if (
-#if SUPPORT_REMOTE_COMMANDS
-			CanInterface::InExpansionMode() ||
-#endif
-			reprap.GetGCodes().GetMovementState(ringNumber).GetAxesAndExtrudersOwned().IsBitSet(logicalDrive)
-		   )
+		debugPrintf("AddLin: st=%" PRIu32 " steps=%.1f\n", startTime, (double)steps);
+		dda.DebugPrint("addlin");
+		params.DebugPrint();
+	}
+
+	DriveMovement* const dmp = &dms[logicalDrive];
+	const float stepsPerMm = steps/dda.totalDistance;
+
+	// The algorithm for merging segments into existing segments currently assumes that there are no gaps between the existing segments.
+	// To ensure this, we must add all of the acceleration, steady speed, and deceleration parts of a move for one impulse before proceeding to the next impulse
+
+	const uint32_t steadyStartTime = startTime + (uint32_t)params.accelClocks;
+	const uint32_t decelStartTime = steadyStartTime + (uint32_t)params.steadyClocks;
+	const float steadyDistance = params.decelStartDistance - params.accelDistance;
+	const float decelDistance = dda.totalDistance - params.decelStartDistance;
+
+	if (moveFlags.noShaping)
+	{
+		if (params.accelClocks > 0.0)
 		{
-			return rings[ringNumber].GetAccumulatedMovement(logicalDrive, isPrinting);
+			dmp->AddSegment(startTime, (uint32_t)params.accelClocks,
+								params.accelDistance * stepsPerMm, dda.startSpeed * stepsPerMm, dda.acceleration * stepsPerMm, moveFlags);
+		}
+		if (params.steadyClocks > 0.0)
+		{
+			dmp->AddSegment(steadyStartTime, (uint32_t)params.steadyClocks,
+											steadyDistance * stepsPerMm, dda.topSpeed * stepsPerMm, 0.0, moveFlags);
+		}
+		if (params.decelClocks != 0)
+		{
+			dmp->AddSegment(decelStartTime, (uint32_t)params.decelClocks,
+											decelDistance * stepsPerMm, dda.topSpeed * stepsPerMm, -(dda.deceleration * stepsPerMm), moveFlags);
+		}
+	}
+	else
+	{
+		for (size_t index = 0; index < axisShaper.GetNumImpulses(); ++index)
+		{
+			const float factor = axisShaper.GetImpulseSize(index) * stepsPerMm;
+			if (params.accelClocks > 0.0)
+			{
+				dmp->AddSegment(startTime + axisShaper.GetImpulseDelay(index), (uint32_t)params.accelClocks,
+									params.accelDistance * factor, dda.startSpeed * factor, dda.acceleration * factor, moveFlags);
+			}
+			if (params.steadyClocks > 0.0)
+			{
+				dmp->AddSegment(steadyStartTime + axisShaper.GetImpulseDelay(index), (uint32_t)params.steadyClocks,
+												steadyDistance * factor, dda.topSpeed * factor, 0.0, moveFlags);
+			}
+			if (params.decelClocks != 0)
+			{
+				dmp->AddSegment(decelStartTime + axisShaper.GetImpulseDelay(index), (uint32_t)params.decelClocks,
+												decelDistance * factor, dda.topSpeed * factor, -(dda.deceleration * factor), moveFlags);
+			}
 		}
 	}
 
-	// We didn't find a movement system that owns the extruder
-	isPrinting = false;
-	return 0;
+	// If there were no segments attached to this DM initially, we need to schedule the interrupt for the new segment at the start of the list.
+	// Don't do this until we have added all the segments for this move, because the first segment we added may have been modified and/or split when we added further segments to implement input shaping
+	const uint32_t oldPrio = ChangeBasePriority(NvicPriorityStep);					// shut out the step interrupt
+	if (dmp->state == DMState::idle)
+	{
+		if (dmp->ScheduleFirstSegment())
+		{
+			if (simulationMode == SimulationMode::off)
+			{
+				SetDirection(reprap.GetPlatform(), dmp->drive, dmp->direction);
+			}
+			dmp->directionChanged = false;
+			InsertDM(dmp);
+			if (activeDMs == dmp && simulationMode == SimulationMode::off)			// if this is now the first DM in the active list
+			{
+				if (ScheduleNextStepInterrupt())
+				{
+					Interrupt();
+				}
+			}
+		}
+	}
+	RestoreBasePriority(oldPrio);
 }
+
+// Store the DDA that is executing a homing move involving this drive. Called from DDA::Prepare.
+void Move::SetHomingDda(size_t drive, DDA *dda) noexcept
+{
+	dms[drive].homingDda = dda;
+}
+
+// Return true if none of the drives passed has any movement pending
+bool Move::AreDrivesStopped(AxesBitmap drives) const noexcept
+{
+	return drives.IterateWhile([this](unsigned int drive, unsigned int index)->bool
+								{
+									return dms[drive].segments == nullptr;
+								}
+							  );
+}
+
+// ISR for the step interrupt
+void Move::Interrupt() noexcept
+{
+	if (activeDMs != nullptr)
+	{
+		Platform& p = reprap.GetPlatform();
+		uint32_t now = StepTimer::GetMovementTimerTicks();
+		const uint32_t isrStartTime = now;
+		for (;;)
+		{
+			// Generate steps for the current move segments
+			StepDrivers(p, now);								// check endstops if necessary and step the drivers
+
+			if (activeDMs == nullptr || stepErrorState != StepErrorState::noError )
+			{
+				WakeMoveTaskFromISR();							// we may have just completed a special move, so wake up the Move task so that it can notice that
+				break;
+			}
+
+			// Schedule a callback at the time when the next step is due, and quit unless it is due immediately
+			if (!ScheduleNextStepInterrupt())
+			{
+				break;
+			}
+
+			// The next step is due immediately. Check whether we have been in this ISR for too long already and need to take a break
+			now = StepTimer::GetMovementTimerTicks();
+			const int32_t clocksTaken = (int32_t)(now - isrStartTime);
+			if (clocksTaken >= (int32_t)MoveTiming::MaxStepInterruptTime)
+			{
+				// Force a break by updating the move start time.
+				++numHiccups;
+#if SUPPORT_CAN_EXPANSION
+				uint32_t hiccupTimeInserted = 0;
+#endif
+				for (uint32_t hiccupTime = MoveTiming::HiccupTime; ; hiccupTime += MoveTiming::HiccupIncrement)
+				{
+#if SUPPORT_CAN_EXPANSION
+					hiccupTimeInserted += hiccupTime;
+#endif
+					StepTimer::IncreaseMovementDelay(hiccupTime);
+
+					// Reschedule the next step interrupt. This time it should succeed if the hiccup time was long enough.
+					if (!ScheduleNextStepInterrupt())
+					{
+#if SUPPORT_CAN_EXPANSION
+# if SUPPORT_REMOTE_COMMANDS
+						if (CanInterface::InExpansionMode())
+						{
+							//TODO tell the main board we are behind schedule
+						}
+						else
+# endif
+						{
+							CanMotion::InsertHiccup(hiccupTimeInserted);		// notify expansion boards of the increased delay
+						}
+#endif
+						return;
+					}
+					// We probably had an interrupt that delayed us further. Recalculate the hiccup length, also we increase the hiccup time on each iteration.
+					now = StepTimer::GetMovementTimerTicks();
+				}
+			}
+		}
+	}
+}
+
+// Move timer callback function
+/*static*/ void Move::TimerCallback(CallbackParameter p) noexcept
+{
+	static_cast<Move*>(p.vp)->Interrupt();
+}
+
+// Remove this drive from the list of drives with steps due and put it in the completed list
+// Called from the step ISR only.
+void Move::DeactivateDM(DriveMovement *dmToRemove) noexcept
+{
+	DriveMovement **dmp = &activeDMs;
+	while (*dmp != nullptr)
+	{
+		DriveMovement * const dm = *dmp;
+		if (dm == dmToRemove)
+		{
+			(*dmp) = dm->nextDM;
+			dm->state = DMState::idle;
+			break;
+		}
+		dmp = &(dm->nextDM);
+	}
+}
+
+// Stop all movement because of a step error. May be called from an ISR.
+void Move::LogStepError() noexcept
+{
+	stepErrorState = StepErrorState::haveError;
+}
+
+// Check the endstops, given that we know that this move checks endstops.
+// If executingMove is set then the move is already being executed; otherwise we are preparing to commit the move.
+#if SUPPORT_CAN_EXPANSION
+// Returns true if the caller needs to wake the async sender task because CAN-connected drivers need to be stopped
+bool Move::CheckEndstops(Platform& platform, bool executingMove) noexcept
+#else
+void Move::CheckEndstops(Platform& platform, bool executingMove) noexcept
+#endif
+{
+#if SUPPORT_CAN_EXPANSION
+	bool wakeAsyncSender = false;
+#endif
+	while (true)
+	{
+		const EndstopHitDetails hitDetails = platform.GetEndstops().CheckEndstops();
+
+		switch (hitDetails.GetAction())
+		{
+		case EndstopHitAction::stopAll:
+#if SUPPORT_CAN_EXPANSION
+			if (StopAllDrivers(executingMove)) { wakeAsyncSender = true; }
+#else
+			StopAllDrivers(executingMove);
+#endif
+			if (hitDetails.isZProbe)
+			{
+				reprap.GetGCodes().MoveStoppedByZProbe();
+			}
+			else
+			{
+				// Get the DDA associated with the axis that has triggered
+				DDA *homingDda = dms[hitDetails.axis].homingDda;
+				if (homingDda != nullptr && homingDda->GetState() == DDA::committed && homingDda->IsCheckingEndstops())
+				{
+					if (hitDetails.setAxisLow)
+					{
+						kinematics->OnHomingSwitchTriggered(hitDetails.axis, false, driveStepsPerMm, *homingDda);
+						reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
+					}
+					else if (hitDetails.setAxisHigh)
+					{
+						kinematics->OnHomingSwitchTriggered(hitDetails.axis, true, driveStepsPerMm, *homingDda);
+						reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
+					}
+				}
+			}
+#if SUPPORT_CAN_EXPANSION
+			return wakeAsyncSender;
+#else
+			return;
+#endif
+
+		case EndstopHitAction::stopAxis:
+			// We must stop the drive before we mess with its coordinates
+#if SUPPORT_CAN_EXPANSION
+			if (StopAxisOrExtruder(executingMove, hitDetails.axis)) { wakeAsyncSender = true; }
+#else
+			StopAxisOrExtruder(executingMove, hitDetails.axis);
+#endif
+			{
+				// Get the DDA associated with the axis that has triggered
+				DDA *homingDda = dms[hitDetails.axis].homingDda;
+				if (homingDda != nullptr && homingDda->GetState() == DDA::committed && homingDda->IsCheckingEndstops())
+				{
+					if (hitDetails.setAxisLow)
+					{
+						kinematics->OnHomingSwitchTriggered(hitDetails.axis, false, driveStepsPerMm, *homingDda);
+						reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
+					}
+					else if (hitDetails.setAxisHigh)
+					{
+						reprap.GetMove().GetKinematics().OnHomingSwitchTriggered(hitDetails.axis, true, driveStepsPerMm, *homingDda);
+						reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
+					}
+				}
+			}
+			break;
+
+		case EndstopHitAction::stopDriver:
+#if SUPPORT_CAN_EXPANSION
+			if (hitDetails.driver.IsRemote())
+			{
+				if (executingMove)
+				{
+					int32_t netStepsTaken;
+					const bool wasMoving = dms[hitDetails.axis].StopDriver(netStepsTaken);
+					if (wasMoving && CanMotion::StopDriverWhenExecuting(hitDetails.driver, netStepsTaken)) { wakeAsyncSender = true; }
+				}
+				else
+				{
+					CanMotion::StopDriverWhenProvisional(hitDetails.driver);
+				}
+			}
+			else
+#endif
+			{
+				platform.DisableSteppingDriver(hitDetails.driver.localDriver);
+			}
+
+			{
+				// Get the DDA associated with the axis that has triggered
+				DDA *homingDda = dms[hitDetails.axis].homingDda;
+				if (homingDda != nullptr && homingDda->GetState() == DDA::committed && homingDda->IsCheckingEndstops())
+				{
+					if (hitDetails.setAxisLow)
+					{
+						kinematics->OnHomingSwitchTriggered(hitDetails.axis, false, driveStepsPerMm, *homingDda);
+						reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
+					}
+					else if (hitDetails.setAxisHigh)
+					{
+						kinematics->OnHomingSwitchTriggered(hitDetails.axis, true, driveStepsPerMm, *homingDda);
+						reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
+					}
+				}
+			}
+			break;
+
+		default:
+#if SUPPORT_CAN_EXPANSION
+			return wakeAsyncSender;
+#else
+			return;
+#endif
+		}
+	}
+}
+
+// Generate the step pulses of internal drivers used by this DDA
+void Move::StepDrivers(Platform& p, uint32_t now) noexcept
+{
+	uint32_t driversStepping = 0;
+	MovementFlags flags;
+	flags.Clear();
+	DriveMovement* dm = activeDMs;
+	while (dm != nullptr && (int32_t)(now - dm->nextStepTime) >= 0)			// if the next step is due
+	{
+		driversStepping |= p.GetDriversBitmap(dm->drive);
+		flags |= dm->segmentFlags;
+		dm = dm->nextDM;
+	}
+
+	if (flags.checkEndstops)
+	{
+#if SUPPORT_CAN_EXPANSION
+		if (CheckEndstops(p, true)) { CanInterface::WakeAsyncSender(); }
+#else
+		CheckEndstops(p, true);												// call out to a separate function because this may help cache locality in the more common and time-critical case where we don't call it
+#endif
+
+		// Calling CheckEndstops may have removed DMs from the active list, also it takes time; so re-check which drives need steps
+		driversStepping = 0;
+		now = StepTimer::GetMovementTimerTicks();
+		dm = activeDMs;
+		while (dm != nullptr && (int32_t)(now - dm->nextStepTime) >= 0)		// if the next step is due
+		{
+			driversStepping |= p.GetDriversBitmap(dm->drive);
+			dm = dm->nextDM;
+		}
+	}
+
+	driversStepping &= p.GetSteppingEnabledDrivers();
+
+#ifdef DUET3_MB6XD
+	if (driversStepping != 0)
+	{
+		// Wait until step low and direction setup time have elapsed
+		const uint32_t locLastStepPulseTime = lastStepHighTime;
+		const uint32_t locLastDirChangeTime = lastDirChangeTime;
+		while (now - locLastStepPulseTime < p.GetSlowDriverStepPeriodClocks() || now - locLastDirChangeTime < p.GetSlowDriverDirSetupClocks())
+		{
+			now = StepTimer::GetTimerTicks();
+		}
+
+		StepPins::StepDriversLow(StepPins::AllDriversBitmap & (~driversStepping));		// disable the step pins of the drivers we don't want to step
+		StepPins::StepDriversHigh(driversStepping);										// set up the drivers that we do want to step
+
+		// Trigger the TC so that it generates a step pulse
+		STEP_GATE_TC->TC_CHANNEL[STEP_GATE_TC_CHAN].TC_CCR = TC_CCR_SWTRG;
+		lastStepHighTime = StepTimer::GetTimerTicks();
+	}
+
+	// Calculate the next step times. We must do this even if no local drivers are stepping in case endstops or Z probes are active.
+	for (DriveMovement *dm2 = activeDMs; dm2 != dm; dm2 = dm2->nextDM)
+	{
+		(void)dm2->CalcNextStepTime();								// calculate next step times
+	}
+#else
+# if SUPPORT_SLOW_DRIVERS											// if supporting slow drivers
+	if ((driversStepping & p.GetSlowDriversBitmap()) != 0)			// if using some slow drivers
+	{
+		// Wait until step low and direction setup time have elapsed
+		uint32_t lastStepPulseTime = lastStepLowTime;
+		uint32_t rawNow;
+		do
+		{
+			rawNow = StepTimer::GetTimerTicks();
+		} while (rawNow - lastStepPulseTime < p.GetSlowDriverStepLowClocks() || rawNow - lastDirChangeTime < p.GetSlowDriverDirSetupClocks());
+
+		StepPins::StepDriversHigh(driversStepping);					// step drivers high
+		lastStepPulseTime = StepTimer::GetTimerTicks();
+
+		for (DriveMovement *dm2 = activeDMs; dm2 != dm; dm2 = dm2->nextDM)
+		{
+			(void)dm2->CalcNextStepTime();							// calculate next step times
+		}
+
+		while (StepTimer::GetTimerTicks() - lastStepPulseTime < p.GetSlowDriverStepHighClocks()) {}
+		StepPins::StepDriversLow(driversStepping);					// step drivers low
+		lastStepLowTime = StepTimer::GetTimerTicks();
+	}
+	else
+# endif
+	{
+		StepPins::StepDriversHigh(driversStepping);					// step drivers high
+# if SAME70 || STM32H7
+		__DSB();													// without this the step pulse can be far too short
+# endif
+		for (DriveMovement *dm2 = activeDMs; dm2 != dm; dm2 = dm2->nextDM)
+		{
+			(void)dm2->CalcNextStepTime();							// calculate next step times
+		}
+
+		StepPins::StepDriversLow(driversStepping);					// step drivers low
+	}
+#endif
+
+	// Remove those drives from the list, update the direction pins where necessary, and re-insert them so as to keep the list in step-time order.
+	DriveMovement *dmToInsert = activeDMs;							// head of the chain we need to re-insert
+	activeDMs = dm;													// remove the chain from the list
+	while (dmToInsert != dm)										// note that both of these may be nullptr
+	{
+		DriveMovement * const nextToInsert = dmToInsert->nextDM;
+		if (dmToInsert->state >= DMState::firstMotionState)
+		{
+			if (dmToInsert->directionChanged)
+			{
+				dmToInsert->directionChanged = false;
+				SetDirection(p, dmToInsert->drive, dmToInsert->direction);
+			}
+			InsertDM(dmToInsert);
+		}
+		dmToInsert = nextToInsert;
+	}
+}
+
+void Move::SetDirection(Platform& p, size_t axisOrExtruder, bool direction) noexcept
+{
+#ifdef DUET3_MB6XD
+	while (StepTimer::GetTimerTicks() - lastStepHighTime < p.GetSlowDriverDirHoldClocksFromLeadingEdge()) { }
+#else
+	const bool isSlowDriver = (p.GetDriversBitmap(axisOrExtruder) & p.GetSlowDriversBitmap()) != 0;
+	if (isSlowDriver)
+	{
+		while (StepTimer::GetTimerTicks() - lastStepLowTime < p.GetSlowDriverDirHoldClocksFromTrailingEdge()) { }
+	}
+#endif
+
+	p.SetDriverDirection(axisOrExtruder, direction);
+
+#ifndef DUET3_MB6XD
+	if (isSlowDriver)
+#endif
+	{
+		lastDirChangeTime = StepTimer::GetTimerTicks();
+	}
+}
+// Simulate stepping the drivers, for debugging.
+// This is basically a copy of StepDrivers except that instead of being called from the timer ISR and generating steps,
+// it is called from the Move task and outputs info on the step timings. It ignores endstops.
+void Move::SimulateSteppingDrivers(Platform& p) noexcept
+{
+	static uint32_t lastStepTime;
+	static bool checkTiming = false;
+	static uint8_t lastDrive = 0;
+
+	DriveMovement* dm = activeDMs;
+	if (dm != nullptr)
+	{
+		// Generating and sending the debug output can take a lot of time, so to avoid shutting out high priority tasks, reduce our priority
+		const unsigned int oldPriority = TaskBase::GetCurrentTaskPriority();
+		TaskBase::SetCurrentTaskPriority(TaskPriority::SpinPriority);
+		const uint32_t dueTime = dm->nextStepTime;
+		while (dm != nullptr && (int32_t)(dueTime >= dm->nextStepTime) >= 0)			// if the next step is due
+		{
+			uint32_t timeDiff;
+			const bool badTiming = checkTiming && dm->drive == lastDrive && ((timeDiff = dm->nextStepTime - lastStepTime) < 10 || timeDiff > 100000000);
+			if (dm->nextStep == 1)
+			{
+				dm->DebugPrint();
+				MoveSegment::DebugPrintList('s', dm->segments);
+			}
+#if 1
+			if (badTiming || (dm->nextStep & 255) == 1 || dm->nextStep + 1 == dm->segmentStepLimit)
+#endif
+			{
+				debugPrintf("%10" PRIu32 " D%u %c ns=%" PRIi32 "%s", dm->nextStepTime, dm->drive, (dm->direction) ? 'F' : 'B', dm->nextStep, (badTiming) ? " *\n" : "\n");
+			}
+			lastDrive = dm->drive;
+			dm = dm->nextDM;
+		}
+		lastStepTime = dueTime;
+		checkTiming = true;
+
+		for (DriveMovement *dm2 = activeDMs; dm2 != dm; dm2 = dm2->nextDM)
+		{
+			(void)dm2->CalcNextStepTime();								// calculate next step times
+		}
+
+		// Remove those drives from the list, update the direction pins where necessary, and re-insert them so as to keep the list in step-time order.
+		DriveMovement *dmToInsert = activeDMs;							// head of the chain we need to re-insert
+		activeDMs = dm;													// remove the chain from the list
+		while (dmToInsert != dm)										// note that both of these may be nullptr
+		{
+			DriveMovement * const nextToInsert = dmToInsert->nextDM;
+			if (dmToInsert->state >= DMState::firstMotionState)
+			{
+				dmToInsert->directionChanged = false;
+				InsertDM(dmToInsert);
+			}
+			dmToInsert = nextToInsert;
+		}
+		TaskBase::SetCurrentTaskPriority(oldPriority);
+	}
+
+	if (activeDMs == nullptr)
+	{
+		checkTiming = false;		// don't check the timing of the first step in the next move
+	}
+}
+
+// This is called when we abort a move because we have hit an endstop.
+// It stops all drives and adjusts the end points of the current move to account for how far through the move we got.
+bool Move::StopAllDrivers(bool executingMove) noexcept
+{
+	bool wakeAsyncSender = false;
+	for (size_t drive = 0; drive < MaxAxesPlusExtruders; ++drive)
+	{
+		if (StopAxisOrExtruder(executingMove, drive)) { wakeAsyncSender = true; }
+	}
+	return wakeAsyncSender;
+}
+
+// Stop a drive and re-calculate the end position. Return true if any remote drivers were scheduled to be stopped.
+bool Move::StopAxisOrExtruder(bool executingMove, size_t logicalDrive) noexcept
+{
+	int32_t netStepsTaken;
+	const bool wasMoving = dms[logicalDrive].StopDriver(netStepsTaken);
+	bool wakeAsyncSender = false;
+#if SUPPORT_CAN_EXPANSION
+	const Platform& p = reprap.GetPlatform();
+	if (logicalDrive < reprap.GetGCodes().GetTotalAxes())
+	{
+		const AxisDriversConfig& cfg = p.GetAxisDriversConfig(logicalDrive);
+		for (size_t i = 0; i < cfg.numDrivers; ++i)
+		{
+			const DriverId driver = cfg.driverNumbers[i];
+			if (driver.IsRemote())
+			{
+				if (executingMove)
+				{
+					if (wasMoving)
+					{
+						if (CanMotion::StopDriverWhenExecuting(driver, netStepsTaken)) { wakeAsyncSender = true; }
+					}
+				}
+				else
+				{
+					CanMotion::StopDriverWhenProvisional(driver);
+				}
+			}
+		}
+	}
+	else
+	{
+		const DriverId driver = p.GetExtruderDriver(LogicalDriveToExtruder(logicalDrive));
+		if (executingMove)
+		{
+			if (wasMoving)
+			{
+				if (CanMotion::StopDriverWhenExecuting(driver, netStepsTaken)) { wakeAsyncSender = true; }
+			}
+		}
+		else
+		{
+			CanMotion::StopDriverWhenProvisional(driver);
+		}
+	}
+#else
+	(void)wasMoving;
+#endif
+	motorPositionsAfterScheduledMoves[logicalDrive] = dms[logicalDrive].GetCurrentMotorPosition();
+	return wakeAsyncSender;
+}
+
+#if SUPPORT_REMOTE_COMMANDS
+
+// Stop a drive and re-calculate the end position
+void Move::StopDriveFromRemote(size_t drive) noexcept
+{
+	dms[drive].StopDriverFromRemote();
+	motorPositionsAfterScheduledMoves[drive] = dms[drive].GetCurrentMotorPosition();
+}
+
+#endif
+
+#if 0
+
+// THIS CODE IS NOT USED. It's here because we need to replicate the functionality somewhere else.
+void Move::OnMoveCompleted(DDA *cdda, Platform& p) noexcept
+{
+	bool wakeLaserTask = false;
+	if (cdda->IsScanningProbeMove())
+	{
+		reprap.GetMove().SetProbeReadingNeeded();
+		wakeLaserTask = true;						// wake the laser task to take a reading
+	}
+
+	// The following finish time is wrong if we aborted the move because of endstop or Z probe checks.
+	// However, following a move that checks endstops or the Z probe, we always wait for the move to complete before we schedule another, so this doesn't matter.
+	const uint32_t finishTime = cdda->GetMoveFinishTime();	// calculate when this move should finish
+
+	CurrentMoveCompleted();							// tell the DDA ring that the current move is complete
+
+	// Try to start a new move
+	const DDA::DDAState st = getPointer->GetState();
+	if (st == DDA::frozen)
+	{
+#if SUPPORT_LASER || SUPPORT_IOBITS
+		if (StartNextMove(p, finishTime))
+		{
+			wakeLaserTask = true;
+		}
+#else
+		(void)StartNextMove(p, finishTime);
+#endif
+	}
+	else
+	{
+		if (st == DDA::provisional)
+		{
+			++numPrepareUnderruns;					// there are more moves available, but they are not prepared yet. Signal an underrun.
+		}
+		else if (!waitingForRingToEmpty)
+		{
+			++numNoMoveUnderruns;
+		}
+		p.ExtrudeOff();								// turn off ancillary PWM
+		if (cdda->GetTool() != nullptr)
+		{
+			cdda->GetTool()->StopFeedForward();
+		}
+#if SUPPORT_LASER
+		if (reprap.GetGCodes().GetMachineType() == MachineType::laser)
+		{
+			p.SetLaserPwm(0);						// turn off the laser
+		}
+#endif
+		waitingForRingToEmpty = false;
+	}
+
+	if (wakeLaserTask)
+	{
+		Move::WakeLaserTaskFromISR();
+	}
+}
+
+#endif
+
+// Adjust the motor endpoints without moving the motors. Called after auto-calibrating a linear delta or rotary delta machine.
+// There must be no pending movement when calling this!
+void Move::AdjustMotorPositions(const float adjustment[], size_t numMotors) noexcept
+{
+	for (size_t drive = 0; drive < numMotors; ++drive)
+	{
+		dms[drive].AdjustMotorPosition(lrintf(adjustment[drive] * driveStepsPerMm[drive]));
+		motorPositionsAfterScheduledMoves[drive] = dms[drive].GetCurrentMotorPosition();
+	}
+
+	liveCoordinatesValid = false;		// force the live XYZ position to be recalculated
+}
+
+// Reset all extruder positions to zero. Called when we start a print.
+void Move::ResetExtruderPositions() noexcept
+{
+	for (size_t drive = MaxAxesPlusExtruders - reprap.GetGCodes().GetNumExtruders(); drive < MaxAxesPlusExtruders; ++drive)
+	{
+		dms[drive].SetMotorPosition(0);
+	}
+}
+
+#if SUPPORT_CAN_EXPANSION
+
+// This is called when we update endstop states because of a message from a remote board.
+// In time we may use it to help implement interrupt-driven local endstops too, but for now those are checked in the step ISR by a direct call to DDA::CheckEndstops().
+void Move::OnEndstopOrZProbeStatesChanged() noexcept
+{
+	const uint32_t oldPrio = ChangeBasePriority(NvicPriorityStep);		// shut out the step interrupt
+	const bool wakeAsyncSender = CheckEndstops(reprap.GetPlatform(), true);
+	RestoreBasePriority(oldPrio);										// allow step interrupts again
+	if (wakeAsyncSender) { CanInterface::WakeAsyncSender(); }
+}
+
+#endif
+
+#if SUPPORT_REMOTE_COMMANDS
+
+// Stop some drivers and update the corresponding motor positions
+void Move::StopDriversFromRemote(uint16_t whichDrives) noexcept
+{
+	DriversBitmap dr(whichDrives);
+	dr.Iterate([this](size_t drive, unsigned int)
+				{
+					StopDriveFromRemote(drive);
+				}
+			  );
+}
+
+#endif
+
+#if SUPPORT_ASYNC_MOVES
 
 // Get and lock the aux move buffer. If successful, return a pointer to the buffer.
 // The caller must not attempt to lock the aux buffer more than once, and must call ReleaseAuxMove to release the buffer.

@@ -75,8 +75,8 @@ GCodeResult GCodes::SetPositions(GCodeBuffer& gb, const StringRef& reply) THROWS
 	MovementState& ms = GetMovementState(gb);
 	AxesBitmap axesIncluded;
 
-#if SUPPORT_ASYNC_MOVES
-	// Check for setting unowned axes before processing the command
+	// Don't wait for the machine to stop if only extruder drives are being reset.
+	// This avoids blobs and seams when the gcode uses absolute E coordinates and periodically includes G92 E0.
 	ParameterLettersBitmap axisLettersMentioned = gb.AllParameters() & allAxisLetters;
 	if (axisLettersMentioned.IsNonEmpty())
 	{
@@ -84,30 +84,19 @@ GCodeResult GCodes::SetPositions(GCodeBuffer& gb, const StringRef& reply) THROWS
 		{
 			return GCodeResult::notFinished;
 		}
+#if SUPPORT_ASYNC_MOVES
+		// Check for setting unowned axes before processing the command
 		axisLettersMentioned.ClearBits(ms.GetOwnedAxisLetters());
 		if (axisLettersMentioned.IsNonEmpty())
 		{
 			AllocateAxisLetters(gb, ms, axisLettersMentioned);
 		}
-#else
-	{
 #endif
-		// Don't wait for the machine to stop if only extruder drives are being reset.
-		// This avoids blobs and seams when the gcode uses absolute E coordinates and periodically includes G92 E0.
 		for (size_t axis = 0; axis < numVisibleAxes; ++axis)
 		{
 			if (gb.Seen(axisLetters[axis]))
 			{
 				const float axisValue = gb.GetDistance();
-#if !SUPPORT_ASYNC_MOVES
-				if (axesIncluded.IsEmpty())
-				{
-					if (!LockCurrentMovementSystemAndWaitForStandstill(gb))	// lock movement and get current coordinates
-					{
-						return GCodeResult::notFinished;
-					}
-				}
-#endif
 				axesIncluded.SetBit(axis);
 				ms.currentUserPosition[axis] = axisValue;
 			}
@@ -146,7 +135,7 @@ GCodeResult GCodes::SetPositions(GCodeBuffer& gb, const StringRef& reply) THROWS
 			{
 				zDatumSetByProbing = false;
 			}
-			reprap.MoveUpdated();				// because we may have updated axesHomed or zDatumSetByProbing
+			reprap.MoveUpdated();							// because we may have updated axesHomed or zDatumSetByProbing
 		}
 	}
 
@@ -523,6 +512,7 @@ GCodeResult GCodes::DoDriveMapping(GCodeBuffer& gb, const StringRef& reply) THRO
 					reprap.MoveUpdated();
 				}
 				platform.SetAxisDriversConfig(drive, numValues, drivers);
+				reprap.GetMove().SetAsExtruder(drive, false);
 #if SUPPORT_CAN_EXPANSION
 				axesToUpdate.SetBit(drive);
 #endif
@@ -541,8 +531,10 @@ GCodeResult GCodes::DoDriveMapping(GCodeBuffer& gb, const StringRef& reply) THRO
 		for (size_t i = 0; i < numValues; ++i)
 		{
 			platform.SetExtruderDriver(i, drivers[i]);
+			const size_t drive = ExtruderToLogicalDrive(i);
+			reprap.GetMove().SetAsExtruder(drive, true);
 #if SUPPORT_CAN_EXPANSION
-			axesToUpdate.SetBit(ExtruderToLogicalDrive(i));
+			axesToUpdate.SetBit(drive);
 #endif
 		}
 		if (FilamentMonitor::CheckDriveAssignments(reply) && rslt == GCodeResult::ok)
@@ -1212,7 +1204,7 @@ GCodeResult GCodes::ConfigureLocalDriverBasicParameters(GCodeBuffer& gb, const S
 				const uint32_t thigh = SmartDrivers::GetRegister(drive, SmartDriverRegister::thigh);
 				const uint32_t axis = SmartDrivers::GetAxisNumber(drive);
 				bool bdummy;
-				const float mmPerSec = (12000000.0 * SmartDrivers::GetMicrostepping(drive, bdummy))/(256 * thigh * platform.DriveStepsPerUnit(axis));
+				const float mmPerSec = (12000000.0 * SmartDrivers::GetMicrostepping(drive, bdummy))/(256 * thigh * reprap.GetMove().DriveStepsPerMm(axis));
 				reply.catf(", thigh %" PRIu32 " (%.1f mm/sec)", thigh, (double)mmPerSec);
 			}
 # endif
@@ -1232,7 +1224,7 @@ GCodeResult GCodes::ConfigureLocalDriverBasicParameters(GCodeBuffer& gb, const S
 				const uint32_t tpwmthrs = SmartDrivers::GetRegister(drive, SmartDriverRegister::tpwmthrs);
 				const uint32_t axis = SmartDrivers::GetAxisNumber(drive);
 				bool bdummy;
-				const float mmPerSec = (12000000.0 * SmartDrivers::GetMicrostepping(drive, bdummy))/(256 * tpwmthrs * platform.DriveStepsPerUnit(axis));
+				const float mmPerSec = (12000000.0 * SmartDrivers::GetMicrostepping(drive, bdummy))/(256 * tpwmthrs * reprap.GetMove().DriveStepsPerMm(axis));
 				const uint32_t pwmScale = SmartDrivers::GetRegister(drive, SmartDriverRegister::pwmScale);
 				const uint32_t pwmAuto = SmartDrivers::GetRegister(drive, SmartDriverRegister::pwmAuto);
 				const unsigned int pwmScaleSum = pwmScale & 0xFF;
@@ -1346,7 +1338,7 @@ void GCodes::ChangeExtrusionFactor(unsigned int extruder, float factor) noexcept
 // The required next state must be set up (e.g. by gb.SetState()) before calling this
 void GCodes::DeployZProbe(GCodeBuffer& gb) noexcept
 {
-	auto zp = reprap.GetPlatform().GetEndstops().GetZProbe(currentZProbeNumber);
+	auto zp = platform.GetEndstops().GetZProbe(currentZProbeNumber);
 	if (zp.IsNotNull() && zp->GetProbeType() != ZProbeType::none && !zp->IsDeployedByUser())
 	{
 		String<StringLength20> fileName;
@@ -1364,7 +1356,7 @@ void GCodes::DeployZProbe(GCodeBuffer& gb) noexcept
 // The required next state must be set up (e.g. by gb.SetState()) before calling this
 void GCodes::RetractZProbe(GCodeBuffer& gb) noexcept
 {
-	auto zp = reprap.GetPlatform().GetEndstops().GetZProbe(currentZProbeNumber);
+	auto zp = platform.GetEndstops().GetZProbe(currentZProbeNumber);
 	if (zp.IsNotNull() && zp->GetProbeType() != ZProbeType::none && !zp->IsDeployedByUser())
 	{
 		String<StringLength20> fileName;

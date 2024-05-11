@@ -10,9 +10,22 @@
 #include "SmartDrivers.h"
 
 #if SUPPORT_TMC51xx
-
+#include <RTOSIface/RTOSIface.h>
+#include <Platform/Platform.h>
+#include <Platform/RepRap.h>
+#include <Movement/Move.h>
+#include <Hardware/Spi/SharedSpiDevice.h>
+#include <Hardware/Spi/SharedSpiClient.h>
+#include <Platform/TaskPriorities.h>
+#include <General/Portability.h>
+#include <AppNotifyIndices.h>
+#include <Endstops/Endstop.h>
+#include "TmcDriverState.h"
+#include "TMC51xxDriver.h"
+#if 0
 #include <RTOSIface/RTOSIface.h>
 #include <Platform/TaskPriorities.h>
+#include <Platform/RepRap.h>
 #include <Movement/Move.h>
 #include <Hardware/Spi/SharedSpiDevice.h>
 #include <Hardware/Spi/SharedSpiClient.h>
@@ -22,7 +35,7 @@
 #include "TMC51xxDriver.h"
 #include "AppNotifyIndices.h"
 #include <functional>
-
+#endif
 // On some processors we need to ensure that memory mapped I/O operations are synced to the hardware
 # if STM32H7
 # define SYNC_GPIO() __DSB()
@@ -994,10 +1007,11 @@ void Tmc51xxDriverState::AppendStallConfig(const StringRef& reply) const noexcep
 		threshold -= 128;
 	}
 	const uint32_t fullstepsPerSecond = StepClockRate/maxStallStepInterval;
-	const float speed1 = ((fullstepsPerSecond << microstepShiftFactor)/reprap.GetPlatform().DriveStepsPerUnit(axisNumber));
+	const float stepsPerMm = reprap.GetMove().DriveStepsPerMm(axisNumber);
+	const float speed1 = (float)(fullstepsPerSecond << microstepShiftFactor)/stepsPerMm;
 	const uint32_t tcoolthrs = writeRegisters[WriteTcoolthrs] & ((1ul << 20) - 1u);
 	bool bdummy;
-	const float speed2 = ((float)TmcClockSpeed * GetMicrostepping(bdummy))/(256 * tcoolthrs * reprap.GetPlatform().DriveStepsPerUnit(axisNumber));
+	const float speed2 = (float)((TmcClockSpeed/256) * GetMicrostepping(bdummy))/((float)tcoolthrs * stepsPerMm);
 	reply.catf("stall threshold %d, filter %s, steps/sec %" PRIu32 " (%.1f mm/sec), coolstep threshold %" PRIu32 " (%.1f mm/sec)",
 				threshold, ((filtered) ? "on" : "off"), fullstepsPerSecond, (double)speed1, tcoolthrs, (double)speed2);
 }
