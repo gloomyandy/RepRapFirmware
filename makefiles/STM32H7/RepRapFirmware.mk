@@ -59,9 +59,9 @@ RRF_INCLUDES += -I$(RRF_SRC_BASE)/Libraries/Fatfs/
 
 #If building ESP8266 WIFI we only need to add the include from DuetWifiSocketServer as it has a file needed to compile RRF 
 ifeq ($(NETWORK), WIFI)
-	RRF_INCLUDES += -IDuetWiFiSocketServer/src/include -I$(RRF_SRC_BASE)/Networking/MQTT/MQTT_C/include
+	RRF_INCLUDES += -IWiFiSocketServerRTOS/src/include -I$(RRF_SRC_BASE)/Networking/MQTT/MQTT_C/include
 else ifeq ($(NETWORK), COMBINED)
-	RRF_INCLUDES += -IDuetWiFiSocketServer/src/include -I$(RRF_SRC_BASE)/Networking/MQTT/MQTT_C/include
+	RRF_INCLUDES += -IWiFiSocketServerRTOS/src/include -I$(RRF_SRC_BASE)/Networking/MQTT/MQTT_C/include
 endif
 RRF_INCLUDES += -IIAP/src
 #end RRF

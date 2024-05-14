@@ -1,3 +1,11 @@
+Version 3.5.1+2
+===============
+* Duet3d fixes
+* New startup code to support boards with no SD card
+* Fix for running out of CCMRAM
+* Increase SPICAN board reset timeout
+* Fly MMU support
+
 Version 3.5.1
 =============
 * Duet 3d 3.5.1
