@@ -568,7 +568,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 
 				ToolOffsetTransform(tempMs);
 				tempMs.feedRate = ConvertSpeedFromMmPerMin(DefaultFeedRate);	// ask for a good feed rate, we may have paused during a slow move
-				NewSingleSegmentMoveAvailable(tempMs);
+				NewSegmentableMoveAvailable(tempMs);
 			}
 			gb.SetState((zPendingRestore) ? GCodeState::resuming2 : GCodeState::resuming3);
 #else
@@ -785,7 +785,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 					ms.coords[Z_AXIS] = axesCoords[Z_AXIS];
 					ms.feedRate = zp->GetTravelSpeed();
 					ms.linearAxesMentioned = ms.rotationalAxesMentioned = true;		// assume that both linear and rotational axes might be moving
-					NewSingleSegmentMoveAvailable(ms);
+					NewSegmentableMoveAvailable(ms);
 
 #if SUPPORT_SCANNING_PROBES
 					if (zp->GetProbeType() == ZProbeType::scanningAnalog)
@@ -1185,7 +1185,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 			ms.coords[Z_AXIS] = zp->GetStartingHeight(true);
 			ms.feedRate = zp->GetTravelSpeed();
 			ms.linearAxesMentioned = true;
-			NewSingleSegmentMoveAvailable(ms);
+			NewSegmentableMoveAvailable(ms);
 			gb.AdvanceState();
 		}
 		break;
@@ -1201,7 +1201,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 			ms.coords[Z_AXIS] = zp->GetStartingHeight(true);
 			ms.feedRate = zp->GetTravelSpeed();
 			ms.linearAxesMentioned = ms.rotationalAxesMentioned = true;		// assume that both linear and rotational axes might be moving
-			NewSingleSegmentMoveAvailable(ms);
+			NewSegmentableMoveAvailable(ms);
 
 			InitialiseTaps(false);									// don't do fast-then-slow probing
 			gb.AdvanceState();
@@ -1346,7 +1346,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 #if SUPPORT_ASYNC_MOVES
 					ms.OwnedAxisCoordinateUpdated(Z_AXIS);
 #endif
-					reprap.GetMove().SetNewPosition(ms.coords, ms.GetMsNumber(), false);
+					reprap.GetMove().SetNewPosition(ms.coords, ms, false);
 
 					// Find the coordinates of the Z probe to pass to SetZeroHeightError
 					float tempCoords[MaxAxes];
@@ -1409,7 +1409,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 			{
 				// Setting the Z height with G30
 				ms.coords[Z_AXIS] -= g30zHeightError;
-				reprap.GetMove().SetNewPosition(ms.coords, ms.GetMsNumber(), false);
+				reprap.GetMove().SetNewPosition(ms.coords, ms, false);
 
 				// Find the coordinates of the Z probe to pass to SetZeroHeightError
 				float tempCoords[MaxAxes];
@@ -1436,7 +1436,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 				// G30 with a silly Z value and S=1 is equivalent to G30 with no parameters in that it sets the current Z height
 				// This is useful because it adjusts the XY position to account for the probe offset.
 				ms.coords[Z_AXIS] -= g30zHeightError;
-				reprap.GetMove().SetNewPosition(ms.coords, ms.GetMsNumber(), false);
+				reprap.GetMove().SetNewPosition(ms.coords, ms, false);
 				ToolOffsetInverseTransform(ms);
 			}
 			else if (g30SValue >= -1)
@@ -1591,7 +1591,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 
 	// Scanning probe calibration states
 	case GCodeState::probeCalibration1:
-		// We just deployed the Z probe, read to start calibrating. Move t the trigger height plus the scanning range.
+		// We just deployed the Z probe, read to start calibrating. Move to the trigger height plus the scanning range.
 		if (LockCurrentMovementSystemAndWaitForStandstill(gb))
 		{
 			SetMoveBufferDefaults(ms);
@@ -1602,7 +1602,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 			}
 			ms.linearAxesMentioned = true;
 			numCalibrationReadingsTaken = 0;
-			NewSingleSegmentMoveAvailable(ms);
+			NewSegmentableMoveAvailable(ms);
 			gb.AdvanceState();
 		}
 		break;

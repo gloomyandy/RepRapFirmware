@@ -807,7 +807,7 @@ void GCodes::EndSimulation(GCodeBuffer *null gb) noexcept
 	RestorePosition(ms.GetSimulationRestorePoint(), gb);
 	ms.SelectTool(ms.GetSimulationRestorePoint().toolNumber, true);
 	ToolOffsetTransform(ms);
-	reprap.GetMove().SetNewPosition(ms.coords, msNumber, true);
+	reprap.GetMove().SetNewPosition(ms.coords, ms, true);
 	axesVirtuallyHomed = axesHomed;
 	reprap.MoveUpdated();
 }
@@ -2259,11 +2259,9 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 				ms.reduceAcceleration = reduceAcceleration;
 			}
 			ms.checkEndstops = true;
-			ms.noShaping = true;
 			break;
 
 		case 2:
-			ms.noShaping = true;
 			break;
 
 		default:
@@ -2271,14 +2269,14 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 		}
 	}
 
-	LoadExtrusionAndFeedrateFromGCode(gb, ms, axesMentioned.IsNonEmpty());		// for type 1 moves, this must be called after calling EnableAxisEndstops, because EnableExtruderEndstop assumes that
+	LoadExtrusionAndFeedrateFromGCode(gb, ms, axesMentioned.IsNonEmpty());	// for type 1 moves, this must be called after calling EnableAxisEndstops, because EnableExtruderEndstop assumes that
 
 	const bool isPrintingMove = ms.hasPositiveExtrusion && axesMentioned.IsNonEmpty();
-	if (ms.IsFirstMoveSincePrintingResumed())									// if this is the first move after skipping an object
+	if (ms.IsFirstMoveSincePrintingResumed())								// if this is the first move after skipping an object
 	{
 		if (isPrintingMove)
 		{
-			if (TravelToStartPoint(gb))											// don't start a printing move from the wrong place
+			if (TravelToStartPoint(gb))										// don't start a printing move from the wrong place
 			{
 				ms.DoneMoveSincePrintingResumed();
 			}
@@ -2948,7 +2946,7 @@ bool GCodes::TravelToStartPoint(GCodeBuffer& gb) noexcept
 	ms.feedRate = rp.feedRate;
 	ms.movementTool = ms.currentTool;
 	ms.linearAxesMentioned = ms.rotationalAxesMentioned = true;			// assume that both linear and rotational axes might be moving
-	NewSingleSegmentMoveAvailable(ms);
+	NewSegmentableMoveAvailable(ms);
 	return true;
 }
 
@@ -3083,7 +3081,7 @@ bool GCodes::ReadMove(MovementSystemNumber queueNumber, RawMove& m) noexcept
 	}
 }
 
-// Flag that a new move is available for consumption by the Move subsystem
+// Flag that a new single-segment move is available for consumption by the Move subsystem
 // Code that sets up a new move should ensure that segmentsLeft is zero, then set up all the move parameters,
 // then call this function to update SegmentsLeft safely in a multi-threaded environment
 void GCodes::NewSingleSegmentMoveAvailable(MovementState& ms) noexcept
@@ -3091,6 +3089,38 @@ void GCodes::NewSingleSegmentMoveAvailable(MovementState& ms) noexcept
 	ms.totalSegments = 1;
 	__DMB();									// make sure that all the move details have been written first
 	ms.segmentsLeft = 1;						// set the number of segments to indicate that a move is available to be taken
+	reprap.GetMove().MoveAvailable();			// notify the Move task that we have a move
+}
+
+// Flag that a new move that should be segmented is available for consumption by the Move subsystem
+// Code that sets up a new move should ensure that segmentsLeft is zero, then set up all the move parameters,
+// then call this function to update SegmentsLeft safely in a multi-threaded environment
+void GCodes::NewSegmentableMoveAvailable(MovementState& ms) noexcept
+{
+	const Kinematics& kin = reprap.GetMove().GetKinematics();
+	const SegmentationType st = kin.GetSegmentationType();
+	if (st.useSegmentation)
+	{
+		// This kinematics approximates linear motion by means of segmentation
+		// To establish the effective XY movement distance, pick one X and one Y axis
+		const size_t effectiveXAxis = ms.GetCurrentXAxes().LowestSetBit();
+		const size_t effectiveYAxis = ms.GetCurrentYAxes().LowestSetBit();
+		float moveLengthSquared = fsquare(ms.coords[effectiveXAxis] - ms.initialCoords[effectiveXAxis]) + fsquare(ms.coords[effectiveYAxis] - ms.initialCoords[effectiveYAxis]);
+		if (st.useZSegmentation)
+		{
+			const size_t effectiveZAxis = ms.GetCurrentZAxes().LowestSetBit();
+			moveLengthSquared += fsquare(ms.coords[effectiveZAxis] - ms.initialCoords[effectiveZAxis]);
+		}
+		const float moveLength = fastSqrtf(moveLengthSquared);
+		const float moveTime = moveLength/(ms.feedRate * StepClockRate);		// this is a best-case time, often the move will take longer
+		ms.totalSegments = (unsigned int)max<long>(1, lrintf(min<float>(moveLength * kin.GetReciprocalMinSegmentLength(), moveTime * kin.GetSegmentsPerSecond())));
+	}
+	else
+	{
+		ms.totalSegments = 1;
+	}
+	__DMB();									// make sure that all the move details have been written first
+	ms.segmentsLeft = ms.totalSegments;			// set the number of segments to indicate that a move is available to be taken
 	reprap.GetMove().MoveAvailable();			// notify the Move task that we have a move
 }
 
@@ -5424,7 +5454,7 @@ void GCodes::UpdateAllCoordinates(const GCodeBuffer& gb) noexcept
 	memcpyf(ms.coords, MovementState::GetLastKnownMachinePositions(), MaxAxes);
 	reprap.GetMove().InverseAxisAndBedTransform(ms.coords, ms.currentTool);
 	UpdateUserPositionFromMachinePosition(gb, ms);
-	reprap.GetMove().SetNewPosition(ms.coords, ms.GetMsNumber(), true);
+	reprap.GetMove().SetNewPosition(ms.coords, ms, true);
 }
 
 #endif
