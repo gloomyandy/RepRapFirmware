@@ -162,7 +162,7 @@ DDA::DDA(DDA* n) noexcept : next(n), prev(nullptr), state(empty)
 
 // Return the number of clocks this DDA still needs to execute.
 uint32_t DDA::GetTimeLeft() const noexcept
-pre(state == executing || state == frozen || state == completed)
+pre(state == provisional || state == committed)
 {
 	switch (state)
 	{
@@ -1042,6 +1042,14 @@ void DDA::SetPositions(const float position[MaxAxes], AxesBitmap axesMoved) noex
 					 );
 	flags.endCoordinatesValid = true;
 	driversMoved.Iterate([&move, this](unsigned int driver, unsigned int)->void { move.SetMotorPosition(driver, this->endPoint[driver]); });
+}
+
+// Force an end point. Called when a homing switch is triggered.
+void DDA::SetDriveCoordinate(int32_t a, size_t drive) noexcept
+{
+	endPoint[drive] = a;
+	flags.endCoordinatesValid = false;
+	reprap.GetMove().SetMotorPosition(drive, a);
 }
 
 // Get a Cartesian end coordinate from this move
