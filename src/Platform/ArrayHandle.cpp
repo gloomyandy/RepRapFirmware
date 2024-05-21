@@ -64,17 +64,31 @@ void ArrayHandle::AssignElement(size_t index, ExpressionValue &val) THROWS(GCode
 void ArrayHandle::AssignIndexed(const ExpressionValue& ev, size_t numIndices, const uint32_t *indices) THROWS(GCodeException)
 {
 	WriteLocker locker(Heap::heapLock);							// prevent other tasks modifying the heap
-	InternalAssignIndexed(ev, numIndices, indices);
+	// We may need to allocate heap space to complete this assignment. However this may result
+	// in garbage collection moving some of the storage used for the array, which may invalidate
+	// pointers to that storage. To avoid this we restart the assigment process (and so re calculate any
+	// pointers) if we have needed to allocate storage. The previously alocated storage is then provided
+	// via the newStorage variable.
+	ArrayHandle newStorage;
+	while (!InternalAssignIndexed(ev, numIndices, indices, newStorage))
+	{
+	}
 }
 
 // Make an array unique and assign an element, possibly nested
-void ArrayHandle::InternalAssignIndexed(const ExpressionValue& ev, size_t numIndices, const uint32_t *indices) THROWS(GCodeException)
+// return true if the assigment completed, false if we had to allocate new stoarge and so need to be
+// called again to complete the operation
+bool ArrayHandle::InternalAssignIndexed(const ExpressionValue& ev, size_t numIndices, const uint32_t *indices, ArrayHandle& newStorage) THROWS(GCodeException)
 {
 	if (indices[0] >= GetNumElements())
 	{
 		throw GCodeException("array index out of bounds");
 	}
-	MakeUnique();
+	if (!MakeUnique(newStorage))
+	{
+		// we needed to allocate new storage, so unwind the stack and start again
+		return false;
+	}
 	ArrayStorageSpace * const aSpace = reinterpret_cast<ArrayStorageSpace*>(slotPtr->storage);
 	if (numIndices == 1)
 	{
@@ -86,10 +100,9 @@ void ArrayHandle::InternalAssignIndexed(const ExpressionValue& ev, size_t numInd
 	}
 	else
 	{
-		// Note that slotPtr->storage and hence aSpace may move when we call InternalAssignIndexed recursively, but the handle won't move
-		//?? the following doesn't allow for that!
-		aSpace->elements[indices[0]].ahVal.InternalAssignIndexed(ev, numIndices - 1, indices + 1);
+		return aSpace->elements[indices[0]].ahVal.InternalAssignIndexed(ev, numIndices - 1, indices + 1, newStorage);
 	}
+	return true;
 }
 
 // Get the number of elements in a heap array
@@ -182,7 +195,8 @@ const ArrayHandle& ArrayHandle::IncreaseRefCount() const noexcept
 }
 
 // Make this handle refer to non-shared array (the individual elements may be shared). Caller must already own a read lock on the heap.
-void ArrayHandle::MakeUnique() THROWS(GCodeException)
+// return true if we completed the operation, false if we need to be called again
+bool ArrayHandle::MakeUnique(ArrayHandle& ah2) THROWS(GCodeException)
 {
 #if CHECK_HEAP_LOCKED
 	Heap::heapLock.CheckHasWriteLock();
@@ -191,9 +205,13 @@ void ArrayHandle::MakeUnique() THROWS(GCodeException)
 	{
 		const ArrayStorageSpace * const aSpace = reinterpret_cast<const ArrayStorageSpace*>(slotPtr->storage);
 		const size_t count = aSpace->count;
-
-		ArrayHandle ah2;
-		ah2.Allocate(count);
+		// Have we previously allocated the needed storage?
+		if (ah2.slotPtr == nullptr)
+		{
+			// no so allocate the storage and return so we can be called again
+			ah2.Allocate(count);
+			return false;
+		}
 		ArrayStorageSpace * const aSpace2 = reinterpret_cast<ArrayStorageSpace*>(ah2.slotPtr->storage);
 		for (size_t i = 0; i < count; ++i)
 		{
@@ -202,7 +220,9 @@ void ArrayHandle::MakeUnique() THROWS(GCodeException)
 
 		--slotPtr->refCount;
 		slotPtr = ah2.slotPtr;
+		ah2.slotPtr = nullptr;
 	}
+	return true;
 }
 
 // AutoArrayHandle members
