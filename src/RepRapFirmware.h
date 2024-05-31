@@ -377,7 +377,7 @@ typedef Bitmap<uint16_t> DriverChannelsBitmap;		// Type of a bitmap representing
 typedef Bitmap<uint32_t> TriggerNumbersBitmap;		// Type of a bitmap representing a set of trigger numbers
 typedef Bitmap<uint64_t> ToolNumbersBitmap;			// Type of a bitmap representing a set of tool numbers
 
-#if defined(DUET3)
+#if defined(DUET3) || STM32H7
 typedef Bitmap<uint64_t> ParameterLettersBitmap;	// Type of a bitmap representing a set of parameter letters in A..Z and a..z
 constexpr char HighestAxisLetter = 'z';
 #else

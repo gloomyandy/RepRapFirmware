@@ -304,7 +304,7 @@ public:
 #endif
 
 	static constexpr const char *AllowedAxisLetters =
-#if defined(DUET3)
+#if defined(DUET3) || STM32H7
 						"XYZUVWABCDabcdefghijklmnopqrstuvwxyz";
 #else
 						"XYZUVWABCDabcdef";
@@ -790,7 +790,6 @@ private:
 	bool isRemotePrinting;
 #endif
 
-	int8_t lastAuxStatusReportType;				// The type of the last status report requested by PanelDue
 	bool displayNoToolWarning;					// True if we need to display a 'no tool selected' warning
 	bool m501SeenInConfigFile;					// true if M501 was executed from config.g
 	bool daemonRunning;
