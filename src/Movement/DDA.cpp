@@ -127,17 +127,17 @@ void PrepParams::SetFromDDA(const DDA& dda) noexcept
 	// We need to make sure that accelDistance <= decelStartDistance for subsequent calculations to work.
 	accelDistance = min<float>(dda.beforePrepare.accelDistance, decelStartDistance);
 	const float steadyDistance = decelStartDistance - accelDistance;
-	steadyClocks = (steadyDistance <= 0.0) ? 0.0 : steadyDistance/dda.topSpeed;
+	steadyClocks = (steadyDistance <= 0.0) ? 0.0 : lrintf(steadyDistance/dda.topSpeed);
 	acceleration = dda.acceleration;
 	deceleration = dda.deceleration;
-	accelClocks = (dda.topSpeed - dda.startSpeed)/dda.acceleration;
-	decelClocks = (dda.topSpeed - dda.endSpeed)/dda.deceleration;
+	accelClocks = lrintf((dda.topSpeed - dda.startSpeed)/dda.acceleration);
+	decelClocks = lrintf((dda.topSpeed - dda.endSpeed)/dda.deceleration);
 }
 
 void PrepParams::DebugPrint() const noexcept
 {
-	debugPrintf("pp: td=%.3e ad=%.3e dsd=%.3e a=%.3e d=%.3e ac=%.3e sc=%.3e dc=%.3e\n",
-					(double)totalDistance, (double)accelDistance, (double)decelStartDistance, (double)acceleration, (double)deceleration, (double)accelClocks, (double)steadyClocks, (double)decelClocks);
+	debugPrintf("pp: td=%.3e ad=%.3e dsd=%.3e a=%.3e d=%.3e ac=%" PRIu32 " sc=%" PRIu32 " dc=%" PRIu32 "\n",
+					(double)totalDistance, (double)accelDistance, (double)decelStartDistance, (double)acceleration, (double)deceleration, accelClocks, steadyClocks, decelClocks);
 }
 
 DDA::DDA(DDA* n) noexcept : next(n), prev(nullptr), state(empty)
@@ -347,6 +347,7 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 	flags.canPauseAfter = nextMove.canPauseAfter;
 	flags.usingStandardFeedrate = nextMove.usingStandardFeedrate;
 	flags.isPrintingMove = flags.xyMoving && forwardExtruding;					// require forward extrusion so that wipe-while-retracting doesn't count
+	flags.isNonPrintingExtruderMove = extrudersMoving && !flags.isPrintingMove;	// flag used by filament monitors - we can ignore Z movement
 	flags.usePressureAdvance = nextMove.usePressureAdvance;
 #if SUPPORT_SCANNING_PROBES
 	flags.scanningProbeMove = nextMove.scanningProbeMove;
@@ -611,6 +612,7 @@ bool DDA::InitFromRemote(const CanMessageMovementLinearShaped& msg) noexcept
 	flags.isRemote = true;
 	flags.isPrintingMove = flags.usePressureAdvance = msg.usePressureAdvance;
 	// TODO For now we treat any non-printing move as a non-printing extruder move. Better to pass a flag for it in the CAN message.
+	flags.isNonPrintingExtruderMove = !flags.isPrintingMove;
 
 	// Prepare for movement
 	PrepParams params;
@@ -1097,7 +1099,7 @@ void DDA::Prepare(DDARing& ring, SimulationMode simMode) noexcept
 	// Prepare for movement
 	PrepParams params;
 	params.SetFromDDA(*this);
-	clocksNeeded = (uint32_t)params.TotalClocks();
+	clocksNeeded = params.TotalClocks();
 
 	// Copy the unshaped acceleration and deceleration back to the DDA because ManageLaserPower uses them
 	acceleration = params.acceleration;
@@ -1147,7 +1149,7 @@ void DDA::Prepare(DDARing& ring, SimulationMode simMode) noexcept
 						{
 							CanMotion::AddLinearAxisMovement(params, driver, delta);
 						}
-						else
+						else		// we don't generate segments for leadscrew adjustment moves to remote drivers
 #endif
 						{
 							move.AddLinearSegments(*this, driver.localDriver + MaxAxesPlusExtruders, afterPrepare.moveStartTime, params, (float)delta, segFlags);
@@ -1185,15 +1187,8 @@ void DDA::Prepare(DDARing& ring, SimulationMode simMode) noexcept
 						move.SetHomingDda(drive, this);
 					}
 
-					if (platform.GetDriversBitmap(drive) != 0					// if any of the drives is local
-#if SUPPORT_CAN_EXPANSION
-						|| flags.checkEndstops									// if checking endstops or a Z probe, create segments even if there are no local drives involved
-#endif
-					   )
-					{
-						move.AddLinearSegments(*this, drive, afterPrepare.moveStartTime, params, (float)delta, segFlags);
-					}
-
+					// We generate segments even for nonlocal drivers so that the final position is correct and to track the position in near real time
+					move.AddLinearSegments(*this, drive, afterPrepare.moveStartTime, params, (float)delta, segFlags);
 					afterPrepare.drivesMoving.SetBit(drive);
 
 #if SUPPORT_CAN_EXPANSION
@@ -1257,7 +1252,7 @@ void DDA::Prepare(DDARing& ring, SimulationMode simMode) noexcept
 							// The MovementLinearShaped message requires the extrusion amount in steps to be passed as a float. The remote board adds the PA and handles fractional steps.
 							CanMotion::AddExtruderMovement(params, driver, delta, flags.usePressureAdvance);
 						}
-						else
+						else		// we don't generate local segments for remote extruders because we don't need to track their positions in real time
 #endif
 						{
 							move.AddLinearSegments(*this, drive, afterPrepare.moveStartTime, params, delta, segFlags);

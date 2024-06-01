@@ -28,14 +28,16 @@
 
 #define SEGMENT_DEBUG	(0)
 
+// This bit field is used in multiple contexts so that we can copy them efficiently from one context to another Not all flags are used in all contexts.
 union MovementFlags
 {
-	uint32_t all;												// this is to provide a means to clear all the flags n one go
+	uint32_t all;												// this is to provide a means to clear all the flags in one go
 	struct
 	{
 		uint32_t nonPrintingMove : 1,							// true if the move that generated this segment does not have both forwards extrusion and associated axis movement; used for filament monitoring
 				 checkEndstops : 1,								// true if we need to check endstops or Z probe while executing this segment
-				 noShaping : 1									// true if input shaping should be disabled for this move
+				 noShaping : 1,									// true if input shaping should be disabled for this move
+				 executing : 1									// normally clear, set in a MoveSegment when the move starts to be executed
 #if 0 //SUPPORT_REMOTE_COMMANDS
 			   , isRemote : 1									// set if we are in expansion board mode and this segment came from a move commanded by the main board
 #endif
@@ -84,7 +86,7 @@ public:
 	uint32_t GetStartTime() const noexcept { return startTime; }
 
 	// Get the segment duration in step clocks
-	float GetDuration() const noexcept { return duration; }
+	uint32_t GetDuration() const noexcept { return duration; }
 
 	// Get the initial speed
 	float GetU() const noexcept { return u; }
@@ -96,7 +98,7 @@ public:
 	float GetStartSpeed(float pressureAdvanceK) const noexcept { return u + a * pressureAdvanceK; }
 
 	// Get the actual ending speed when pressure advance is being applied
-	float GetEndSpeed(float pressureAdvanceK) const noexcept { return u + a * (pressureAdvanceK + duration); }
+	float GetEndSpeed(float pressureAdvanceK) const noexcept { return u + a * (pressureAdvanceK + (float)duration); }
 
 	// Get the length
 	float GetLength() const noexcept { return distance; }
@@ -105,7 +107,7 @@ public:
 	float GetDistanceToReverse() const noexcept;
 
 	// Set the parameters of this segment
-	void SetParameters(uint32_t p_startTime, float p_duration, float p_distance, float p_u, float p_a, MovementFlags p_flags) noexcept;
+	void SetParameters(uint32_t p_startTime, uint32_t p_duration, float p_distance, float p_u, float p_a, MovementFlags p_flags) noexcept;
 
 	// Split this segment in two, returning a pointer to the second part
 	MoveSegment *Split(uint32_t firstDuration) noexcept pre(firstDuration < duration);
@@ -116,6 +118,9 @@ public:
 	// Normalise this segment by removing very small accelerations that cause problems, update t0, return true if it is linear
 	bool NormaliseAndCheckLinear(float distanceCarriedForwards, float& t0) noexcept;
 
+	// Set the 'executing' bit in the flags
+	void SetExecuting() noexcept { flags.executing = true; }
+
 	// Get the next segment in this list
 	MoveSegment *GetNext() const noexcept;
 
@@ -123,10 +128,10 @@ public:
 	void SetNext(MoveSegment *p_next) noexcept;
 
 	// Print this segment to the debug channel
-	void DebugPrint(char ch) const noexcept;
+	void DebugPrint() const noexcept;
 
 	// Print list of segments
-	static void DebugPrintList(char ch, const MoveSegment *segs) noexcept;
+	static void DebugPrintList(const MoveSegment *segs) noexcept;
 
 	// Allocate a MoveSegment, clearing the flags
 	static MoveSegment *Allocate(MoveSegment *p_next) noexcept;
@@ -149,7 +154,7 @@ protected:
 	MoveSegment *next;										// pointer to the next segment
 	MovementFlags flags;
 	uint32_t startTime;										// when this segment should start, in movement clock ticks
-	float duration;											// the duration of this segment in movement ticks
+	uint32_t duration;										// the duration of this segment in movement ticks
 	float distance;											// the number of steps moved
 	float u;												// the initial speed in steps per movement tick
 	float a;												// the acceleration during this segment in steps per movement tick squared
@@ -195,7 +200,7 @@ inline bool MoveSegment::NormaliseAndCheckLinear(float distanceCarriedForwards, 
 		}
 
 		// The acceleration/deceleration is small enough to cause calculation problems, so change it to a linear move
-		u += 0.5 * a * duration;				// adjust the initial speed to preserve the total distance
+		u += 0.5 * a * (float)duration;				// adjust the initial speed to preserve the total distance
 		a = 0.0;
 	}
 
@@ -230,7 +235,7 @@ inline float MoveSegment::GetDistanceToReverse() const noexcept
 }
 
 // Set the parameters of this segment
-inline void MoveSegment::SetParameters(uint32_t p_startTime, float p_duration, float p_distance, float p_u, float p_a, MovementFlags p_flags) noexcept
+inline void MoveSegment::SetParameters(uint32_t p_startTime, uint32_t p_duration, float p_distance, float p_u, float p_a, MovementFlags p_flags) noexcept
 {
 	startTime = p_startTime;
 	duration = p_duration;
@@ -245,7 +250,7 @@ inline MoveSegment *MoveSegment::Split(uint32_t firstDuration) noexcept
 {
 	MoveSegment *const secondSeg = Allocate(next);
 	const float firstDistance = (u + 0.5 * a * firstDuration) * firstDuration;
-	secondSeg->SetParameters(startTime + firstDuration, duration - (float)firstDuration, distance - firstDistance, u + a * (float)firstDuration, a, flags);
+	secondSeg->SetParameters(startTime + firstDuration, duration - firstDuration, distance - firstDistance, u + a * (float)firstDuration, a, flags);
 #if SEGMENT_DEBUG
 	debugPrintf("split at %" PRIu32 ", fd=%.2f, sd=%.2f\n", firstDuration, (double)firstDistance, (double)(distance - firstDistance));
 #endif
@@ -260,7 +265,7 @@ inline void MoveSegment::Merge(float p_distance, float p_u, float p_a, MovementF
 {
 #if SEGMENT_DEBUG
 	debugPrintf("merge d=%.2f u=%.4e a=%.4e into ", (double)p_distance, (double)p_u, (double)p_a);
-	DebugPrint('o');
+	DebugPrint();
 #endif
 	distance += p_distance;
 	u += p_u;

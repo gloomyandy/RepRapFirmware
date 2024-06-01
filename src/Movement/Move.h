@@ -76,6 +76,10 @@ public:
 	uint16_t GetRawMicrostepping(size_t axisOrExtruder) const noexcept pre(axisOrExtruder < MaxAxesPlusExtruders) { return microstepping[axisOrExtruder]; }
 
 	void GetCurrentMachinePosition(float m[MaxAxes], MovementSystemNumber msNumber, bool disableMotorMapping) const noexcept; // Get the current position in untransformed coords
+#if SUPPORT_ASYNC_MOVES
+	void GetPartialMachinePosition(float m[MaxAxes], MovementSystemNumber msNumber, AxesBitmap whichAxes) const noexcept
+			pre(queueNumber < NumMovementSystems);							// Get the current position of some axes from one of the rings
+#endif
 	void SetRawPosition(const float positions[MaxAxes], MovementSystemNumber msNumber, AxesBitmap axes) noexcept
 			pre(queueNumber < NumMovementSystems);							// Set the current position to be this without transforming them first
 	void GetCurrentUserPosition(float m[MaxAxes], MovementSystemNumber msNumber, uint8_t moveType, const Tool *tool) const noexcept;
@@ -134,7 +138,7 @@ public:
 	}
 
 	GCodeResult EutSetRemotePressureAdvance(const CanMessageMultipleDrivesRequest<float>& msg, size_t dataLength, const StringRef& reply) noexcept;
-	GCodeResult EutSetInputShaping(const CanMessageSetInputShaping& msg, size_t dataLength, const StringRef& reply) noexcept
+	GCodeResult EutSetInputShaping(const CanMessageSetInputShapingNew& msg, size_t dataLength, const StringRef& reply) noexcept
 	{
 		return axisShaper.EutSetInputShaping(msg, dataLength, reply);
 	}
@@ -366,7 +370,7 @@ private:
 	unsigned int idleCount;								// The number of times Spin was called and had no new moves to process
 	unsigned int numHiccups;
 
-	uint32_t whenLastMoveAdded;							// The time when we last added a move to any DDA ring
+	uint32_t whenLastMoveAdded[NumMovementSystems];		// The time when we last added a move to each DDA ring
 	uint32_t whenIdleTimerStarted;						// The approximate time at which the state last changed, except we don't record timing -> idle
 
 	uint32_t idleTimeout;								// How long we wait with no activity before we reduce motor currents to idle, in milliseconds
@@ -421,6 +425,16 @@ inline void Move::UpdateExtrusionPendingLimits(float extrusionPending) noexcept
 	if (extrusionPending > maxExtrusionPending) { maxExtrusionPending = extrusionPending; }
 	else if (extrusionPending < minExtrusionPending) { minExtrusionPending = extrusionPending; }
 }
+
+#if SUPPORT_ASYNC_MOVES
+
+// Get the current position of some axes from one of the rings
+inline void Move::GetPartialMachinePosition(float m[MaxAxes], MovementSystemNumber msNumber, AxesBitmap whichAxes) const noexcept
+{
+	rings[msNumber].GetPartialMachinePosition(m, whichAxes);
+}
+
+#endif
 
 // Set the current position to be this without transforming them first
 inline void Move::SetRawPosition(const float positions[MaxAxes], MovementSystemNumber msNumber, AxesBitmap axes) noexcept

@@ -257,7 +257,12 @@ void Move::Init() noexcept
 
 	idleTimeout = DefaultIdleTimeout;
 	moveState = MoveState::idle;
-	whenLastMoveAdded = whenIdleTimerStarted = millis();
+	const uint32_t now = millis();
+	whenIdleTimerStarted = now;
+	for (uint32_t& w : whenLastMoveAdded)
+	{
+		w = now;
+	}
 
 	simulationMode = SimulationMode::off;
 	longestGcodeWaitInterval = 0;
@@ -389,12 +394,12 @@ void Move::SetDriveStepsPerMm(size_t axisOrExtruder, float value, uint32_t reque
 					if (rings[0].AddSpecialMove(reprap.GetPlatform().MaxFeedrate(Z_AXIS), specialMoveCoords))
 					{
 						const uint32_t now = millis();
-						const uint32_t timeWaiting = now - whenLastMoveAdded;
+						const uint32_t timeWaiting = now - whenLastMoveAdded[0];
 						if (timeWaiting > longestGcodeWaitInterval)
 						{
 							longestGcodeWaitInterval = timeWaiting;
 						}
-						whenLastMoveAdded = now;
+						whenLastMoveAdded[0] = now;
 						moveState = MoveState::collecting;
 					}
 				}
@@ -423,12 +428,12 @@ void Move::SetDriveStepsPerMm(size_t axisOrExtruder, float value, uint32_t reque
 						if (rings[0].AddStandardMove(nextMove, !IsRawMotorMove(nextMove.moveType)))
 						{
 							const uint32_t now = millis();
-							const uint32_t timeWaiting = now - whenLastMoveAdded;
+							const uint32_t timeWaiting = now - whenLastMoveAdded[0];
 							if (timeWaiting > longestGcodeWaitInterval)
 							{
 								longestGcodeWaitInterval = timeWaiting;
 							}
-							whenLastMoveAdded = now;
+							whenLastMoveAdded[0] = now;
 							moveState = MoveState::collecting;
 						}
 					}
@@ -436,8 +441,8 @@ void Move::SetDriveStepsPerMm(size_t axisOrExtruder, float value, uint32_t reque
 			}
 		}
 
-		// Let ring 0 process moves. Better to have a few moves in the queue so that we can do lookahead, hence the test on idleCount and idleTime.
-		uint32_t nextPrepareDelay = rings[0].Spin(simulationMode, !canAddRing0Move, millis() - whenLastMoveAdded >= rings[0].GetGracePeriod());
+		// Let ring 0 process moves
+		uint32_t nextPrepareDelay = rings[0].Spin(simulationMode, !canAddRing0Move, millis() - whenLastMoveAdded[0] >= rings[0].GetGracePeriod());
 
 #if SUPPORT_ASYNC_MOVES
 		const bool canAddRing1Move = rings[1].CanAddMove();
@@ -449,12 +454,12 @@ void Move::SetDriveStepsPerMm(size_t axisOrExtruder, float value, uint32_t reque
 				if (rings[1].AddAsyncMove(auxMove))
 				{
 					const uint32_t now = millis();
-					const uint32_t timeWaiting = now - whenLastMoveAdded;
+					const uint32_t timeWaiting = now - whenLastMoveAdded[1];
 					if (timeWaiting > longestGcodeWaitInterval)
 					{
 						longestGcodeWaitInterval = timeWaiting;
 					}
-					whenLastMoveAdded = now;
+					whenLastMoveAdded[1] = now;
 					moveState = MoveState::collecting;
 				}
 				auxMoveAvailable = false;
@@ -476,12 +481,12 @@ void Move::SetDriveStepsPerMm(size_t axisOrExtruder, float value, uint32_t reque
 						if (rings[1].AddStandardMove(nextMove, !IsRawMotorMove(nextMove.moveType)))
 						{
 							const uint32_t now = millis();
-							const uint32_t timeWaiting = now - whenLastMoveAdded;
+							const uint32_t timeWaiting = now - whenLastMoveAdded[1];
 							if (timeWaiting > longestGcodeWaitInterval)
 							{
 								longestGcodeWaitInterval = timeWaiting;
 							}
-							whenLastMoveAdded = now;
+							whenLastMoveAdded[1] = now;
 							moveState = MoveState::collecting;
 						}
 					}
@@ -489,7 +494,7 @@ void Move::SetDriveStepsPerMm(size_t axisOrExtruder, float value, uint32_t reque
 			}
 		}
 
-		const uint32_t auxPrepareDelay = rings[1].Spin(simulationMode, !canAddRing1Move,  millis() - whenLastMoveAdded >= rings[1].GetGracePeriod());
+		const uint32_t auxPrepareDelay = rings[1].Spin(simulationMode, !canAddRing1Move,  millis() - whenLastMoveAdded[1] >= rings[1].GetGracePeriod());
 		if (auxPrepareDelay < nextPrepareDelay)
 		{
 			nextPrepareDelay = auxPrepareDelay;
@@ -718,7 +723,13 @@ void Move::SetNewPosition(const float positionNow[MaxAxesPlusExtruders], const M
 	float newPos[MaxAxesPlusExtruders];
 	memcpyf(newPos, positionNow, ARRAY_SIZE(newPos));			// copy to local storage because Transform modifies it
 	AxisAndBedTransform(newPos, ms.currentTool, doBedCompensation);
-	SetRawPosition(newPos, ms.GetMsNumber(), ms.GetAxesAndExtrudersOwned());
+	SetRawPosition(newPos, ms.GetMsNumber(),
+#if SUPPORT_ASYNC_MOVES
+					ms.GetAxesAndExtrudersOwned()
+#else
+					AxesBitmap::MakeLowestNBits(reprap.GetGCodes().GetVisibleAxes())
+#endif
+				  );
 }
 
 // Convert distance to steps for a particular drive
@@ -1570,26 +1581,26 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 	// The algorithm for merging segments into existing segments currently assumes that there are no gaps between the existing segments.
 	// To ensure this, we must add all of the acceleration, steady speed, and deceleration parts of a move for one impulse before proceeding to the next impulse
 
-	const uint32_t steadyStartTime = startTime + (uint32_t)params.accelClocks;
-	const uint32_t decelStartTime = steadyStartTime + (uint32_t)params.steadyClocks;
+	const uint32_t steadyStartTime = startTime + params.accelClocks;
+	const uint32_t decelStartTime = steadyStartTime + params.steadyClocks;
 	const float steadyDistance = params.decelStartDistance - params.accelDistance;
 	const float decelDistance = dda.totalDistance - params.decelStartDistance;
 
 	if (moveFlags.noShaping)
 	{
-		if (params.accelClocks > 0.0)
+		if (params.accelClocks != 0)
 		{
-			dmp->AddSegment(startTime, (uint32_t)params.accelClocks,
+			dmp->AddSegment(startTime, params.accelClocks,
 								params.accelDistance * stepsPerMm, dda.startSpeed * stepsPerMm, dda.acceleration * stepsPerMm, moveFlags);
 		}
-		if (params.steadyClocks > 0.0)
+		if (params.steadyClocks != 0)
 		{
-			dmp->AddSegment(steadyStartTime, (uint32_t)params.steadyClocks,
+			dmp->AddSegment(steadyStartTime, params.steadyClocks,
 											steadyDistance * stepsPerMm, dda.topSpeed * stepsPerMm, 0.0, moveFlags);
 		}
 		if (params.decelClocks != 0)
 		{
-			dmp->AddSegment(decelStartTime, (uint32_t)params.decelClocks,
+			dmp->AddSegment(decelStartTime, params.decelClocks,
 											decelDistance * stepsPerMm, dda.topSpeed * stepsPerMm, -(dda.deceleration * stepsPerMm), moveFlags);
 		}
 	}
@@ -1598,19 +1609,19 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 		for (size_t index = 0; index < axisShaper.GetNumImpulses(); ++index)
 		{
 			const float factor = axisShaper.GetImpulseSize(index) * stepsPerMm;
-			if (params.accelClocks > 0.0)
+			if (params.accelClocks != 0)
 			{
-				dmp->AddSegment(startTime + axisShaper.GetImpulseDelay(index), (uint32_t)params.accelClocks,
+				dmp->AddSegment(startTime + axisShaper.GetImpulseDelay(index), params.accelClocks,
 									params.accelDistance * factor, dda.startSpeed * factor, dda.acceleration * factor, moveFlags);
 			}
-			if (params.steadyClocks > 0.0)
+			if (params.steadyClocks != 0)
 			{
-				dmp->AddSegment(steadyStartTime + axisShaper.GetImpulseDelay(index), (uint32_t)params.steadyClocks,
+				dmp->AddSegment(steadyStartTime + axisShaper.GetImpulseDelay(index), params.steadyClocks,
 												steadyDistance * factor, dda.topSpeed * factor, 0.0, moveFlags);
 			}
 			if (params.decelClocks != 0)
 			{
-				dmp->AddSegment(decelStartTime + axisShaper.GetImpulseDelay(index), (uint32_t)params.decelClocks,
+				dmp->AddSegment(decelStartTime + axisShaper.GetImpulseDelay(index), params.decelClocks,
 												decelDistance * factor, dda.topSpeed * factor, -(dda.deceleration * factor), moveFlags);
 			}
 		}
@@ -1942,8 +1953,17 @@ void Move::StepDrivers(Platform& p, uint32_t now) noexcept
 	// Calculate the next step times. We must do this even if no local drivers are stepping in case endstops or Z probes are active.
 	for (DriveMovement *dm2 = activeDMs; dm2 != dm; dm2 = dm2->nextDM)
 	{
-		dm2->TakenStep();
-		(void)dm2->CalcNextStepTime();								// calculate next step times
+# if SUPPORT_CAN_EXPANSION
+		if (unlikely(!flags.checkEndstops && p.GetDriversBitmap(dm2->drive) == 0))
+		{
+			dm2->TakeStepsAndCalcStepTimeRarely(now);
+		}
+		else
+# endif
+		{
+			dm2->TakenStep();
+			(void)dm2->CalcNextStepTime();							// calculate next step times
+		}
 	}
 #else
 # if SUPPORT_SLOW_DRIVERS											// if supporting slow drivers
@@ -1962,8 +1982,17 @@ void Move::StepDrivers(Platform& p, uint32_t now) noexcept
 
 		for (DriveMovement *dm2 = activeDMs; dm2 != dm; dm2 = dm2->nextDM)
 		{
-			dm2->TakenStep();
-			(void)dm2->CalcNextStepTime();							// calculate next step times
+# if SUPPORT_CAN_EXPANSION
+			if (unlikely(!flags.checkEndstops && p.GetDriversBitmap(dm2->drive) == 0))
+			{
+				dm2->TakeStepsAndCalcStepTimeRarely(now);
+			}
+			else
+# endif
+			{
+				dm2->TakenStep();
+				(void)dm2->CalcNextStepTime();						// calculate next step times
+			}
 		}
 
 		while (StepTimer::GetTimerTicks() - lastStepPulseTime < p.GetSlowDriverStepHighClocks()) {}
@@ -1979,8 +2008,17 @@ void Move::StepDrivers(Platform& p, uint32_t now) noexcept
 # endif
 		for (DriveMovement *dm2 = activeDMs; dm2 != dm; dm2 = dm2->nextDM)
 		{
-			dm2->TakenStep();
-			(void)dm2->CalcNextStepTime();							// calculate next step times
+# if SUPPORT_CAN_EXPANSION
+			if (unlikely(!flags.checkEndstops && p.GetDriversBitmap(dm2->drive) == 0))
+			{
+				dm2->TakeStepsAndCalcStepTimeRarely(now);
+			}
+			else
+# endif
+			{
+				dm2->TakenStep();
+				(void)dm2->CalcNextStepTime();						// calculate next step times
+			}
 		}
 
 		StepPins::StepDriversLow(driversStepping);					// step drivers low
@@ -2052,7 +2090,7 @@ void Move::SimulateSteppingDrivers(Platform& p) noexcept
 			if (dm->nextStep == 1)
 			{
 				dm->DebugPrint();
-				MoveSegment::DebugPrintList('s', dm->segments);
+				MoveSegment::DebugPrintList(dm->segments);
 			}
 #if 1
 			if (badTiming || (dm->nextStep & 255) == 1 || dm->nextStep + 1 == dm->segmentStepLimit)

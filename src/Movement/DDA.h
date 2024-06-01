@@ -28,14 +28,14 @@ struct PrepParams
 	float totalDistance;
 	float accelDistance;
 	float decelStartDistance;
-	float accelClocks, steadyClocks, decelClocks;
+	uint32_t accelClocks, steadyClocks, decelClocks;
 	float acceleration, deceleration;				// the acceleration and deceleration to use, both positive
 	float topSpeed;									// the top speed, may be modified by the input shaper
 	bool modified;									// true if this has been modified since we set it from the DDA
 	bool useInputShaping;
 
 	// Get the total clocks needed
-	float TotalClocks() const noexcept { return accelClocks + steadyClocks + decelClocks; }
+	uint32_t TotalClocks() const noexcept { return accelClocks + steadyClocks + decelClocks; }
 
 	// Set up the parameters from the DDA, excluding steadyClocks because that may be affected by input shaping
 	void SetFromDDA(const DDA& dda) noexcept;
@@ -124,6 +124,7 @@ public:
 	uint32_t GetClocksNeeded() const noexcept { return clocksNeeded; }
 	bool HasExpired() const noexcept pre(state == committed);
 	bool IsGoodToPrepare() const noexcept;
+	bool IsNonPrintingExtruderMove() const noexcept { return flags.isNonPrintingExtruderMove; }
 	void UpdateMovementAccumulators(volatile int32_t *accumulators) const noexcept;
 	uint32_t GetMoveStartTime() const noexcept { return afterPrepare.moveStartTime; }
 	uint32_t GetMoveFinishTime() const noexcept { return afterPrepare.moveStartTime + clocksNeeded; }
@@ -196,6 +197,7 @@ private:
 					 xyMoving : 1,					// True if movement along an X axis or a Y axis was requested, even if it's too small to do
 					 isLeadscrewAdjustmentMove : 1,	// True if this is a leadscrews adjustment move
 					 usingStandardFeedrate : 1,		// True if this move uses the standard feed rate
+					 isNonPrintingExtruderMove : 1,	// True if this move is an extruder-only move, or involves reverse extrusion (and possibly axis movement too)
 					 continuousRotationShortcut : 1, // True if continuous rotation axes take shortcuts
 					 checkEndstops : 1,				// True if this move monitors endstops or Z probe
 					 controlLaser : 1,				// True if this move controls the laser or iobits
