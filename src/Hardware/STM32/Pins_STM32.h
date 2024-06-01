@@ -155,16 +155,15 @@ constexpr int8_t DefaultE0Heater = 1;                // Index of the default fir
 constexpr size_t NumThermistorInputs = 9;
 
 constexpr size_t MinAxes = 3;                        // The minimum and default number of axes
-constexpr size_t MaxAxes = 15;                       // The maximum number of movement axes in the machine, usually just X, Y and Z, <= DRIVES
+constexpr size_t MaxAxes = 30;                       // The maximum number of movement axes in the machine, usually just X, Y and Z, <= DRIVES
 constexpr size_t MaxDriversPerAxis = 8;              // The maximum number of stepper drivers assigned to one axis
 
 constexpr size_t MaxExtruders = 20;                  // The maximum number of extruders
-constexpr size_t NumDefaultExtruders = 1;            // The number of drivers that we configure as extruders by default
 
 constexpr size_t MaxAxesPlusExtruders = 32;          // May be <= MaxAxes + MaxExtruders
 
 constexpr size_t MaxHeatersPerTool = 20;
-constexpr size_t MaxExtrudersPerTool = 10;
+constexpr size_t MaxExtrudersPerTool = 12;
 
 constexpr unsigned int MaxTriggers = 32;            // Must be <= 32 because we store a bitmap of pending triggers in a uint32_t
 constexpr size_t MaxLedPorts = 32;                  // Max number of LED ports
@@ -183,7 +182,6 @@ constexpr size_t MaxAxes = 15;                       // The maximum number of mo
 constexpr size_t MaxDriversPerAxis = 4;              // The maximum number of stepper drivers assigned to one axis
 
 constexpr size_t MaxExtruders = 14;                  // The maximum number of extruders
-constexpr size_t NumDefaultExtruders = 1;            // The number of drivers that we configure as extruders by default
 
 constexpr size_t MaxAxesPlusExtruders = 15;
 

@@ -5287,7 +5287,7 @@ void GCodes::AllocateAxes(const GCodeBuffer& gb, MovementState& ms, AxesBitmap a
 		if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::AxisAllocation))
 		{
 			debugPrintf("Failed to allocate axes %07" PRIx32 " to MS %u letters %08"
-#if defined(DUET3)
+#if defined(DUET3) || STM32H7
 				PRIx64
 #else
 				PRIx32

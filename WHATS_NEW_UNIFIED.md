@@ -1,3 +1,7 @@
+Version 3.5.2-rc.1
+==================
+* Duet3d rc.1
+
 Version 3.5.1+2
 ===============
 * Duet3d fixes

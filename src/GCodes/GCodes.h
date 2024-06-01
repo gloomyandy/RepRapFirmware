@@ -297,7 +297,7 @@ public:
 #endif
 
 	static constexpr const char *AllowedAxisLetters =
-#if defined(DUET3)
+#if defined(DUET3) || STM32H7
 						"XYZUVWABCDabcdefghijklmnopqrstuvwxyz";
 #else
 						"XYZUVWABCDabcdef";

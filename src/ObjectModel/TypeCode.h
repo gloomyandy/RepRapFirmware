@@ -10,7 +10,7 @@
 
 #include <cstdint>
 
-#define SUPPORT_BITMAP64	(SAME70 || SAME5x)		// we don't have any 64-bit bitmaps in the OM on Duet 2
+#define SUPPORT_BITMAP64	(SAME70 || SAME5x || STM32)		// we don't have any 64-bit bitmaps in the OM on Duet 2
 
 // Type codes to indicate what type of expression we have and how it is represented.
 // The "Special" type is for items that we have to evaluate when we are ready to write them out, in particular strings whose storage might disappear.
