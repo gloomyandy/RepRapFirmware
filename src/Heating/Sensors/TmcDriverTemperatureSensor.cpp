@@ -6,7 +6,7 @@
  */
 
 #include "TmcDriverTemperatureSensor.h"
-#include <Platform/Platform.h>
+#include <Movement/Move.h>
 #include <Platform/RepRap.h>
 
 #if HAS_SMART_DRIVERS
@@ -36,7 +36,7 @@ void TmcDriverTemperatureSensor::Poll() noexcept
 		maxTemp = max<float>(maxTemp, SmartDrivers::GetDriverTemperature(drive));
 	SetResult(maxTemp, TemperatureError::ok);
 #else	
-	SetResult(reprap.GetPlatform().GetTmcDriversTemperature(channel), TemperatureError::ok);
+	SetResult(reprap.GetMove().GetTmcDriversTemperature(channel), TemperatureError::ok);
 #endif
 }
 
