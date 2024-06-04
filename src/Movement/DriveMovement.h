@@ -27,6 +27,7 @@ enum class DMState : uint8_t
 	// All higher values are various states of motion
 	firstMotionState,
 	starting = firstMotionState,					// interrupt scheduled for when the move should start
+	ending,											// interrupt scheduled for when the move should end
 	cartAccel,										// linear accelerating motion
 	cartLinear,										// linear steady speed
 	cartDecelNoReverse,
@@ -43,7 +44,7 @@ public:
 	DriveMovement() noexcept { }
 	void Init(size_t drv) noexcept;
 
-	bool CalcNextStepTime() noexcept SPEED_CRITICAL;
+	bool CalcNextStepTime(uint32_t now) noexcept SPEED_CRITICAL;
 	void TakenStep() noexcept SPEED_CRITICAL;
 	bool PrepareCartesianAxis(const DDA& dda, const PrepParams& params) noexcept SPEED_CRITICAL;
 	bool PrepareExtruder(const DDA& dda, const PrepParams& params, float signedEffStepsPerMm) noexcept SPEED_CRITICAL;
@@ -68,7 +69,7 @@ public:
 	uint32_t GetStepInterval(uint32_t microstepShift) const noexcept;	// Get the current full step interval for this axis or extruder
 #endif
 
-	void ClearMovementPending() noexcept { distanceCarriedForwards = 0.0; }
+	void ClearMovementPending() noexcept;
 
 	bool HasError() const noexcept { return state != DMState::idle && state < DMState::firstMotionState; }
 
@@ -76,11 +77,11 @@ public:
 	static int32_t GetAndClearMinStepInterval() noexcept;
 
 private:
-	bool CalcNextStepTimeFull() noexcept SPEED_CRITICAL;
+	bool CalcNextStepTimeFull(uint32_t now) noexcept SPEED_CRITICAL;
 #if SUPPORT_CAN_EXPANSION
 	void TakeStepsAndCalcStepTimeRarely(uint32_t clocksNow) noexcept SPEED_CRITICAL;
 #endif
-	MoveSegment *NewSegment() noexcept SPEED_CRITICAL;
+	MoveSegment *NewSegment(uint32_t now) noexcept SPEED_CRITICAL;
 	bool ScheduleFirstSegment() noexcept;
 
 	void CheckDirection(bool reversed) noexcept;
@@ -140,7 +141,7 @@ inline void DriveMovement::TakenStep() noexcept
 // Calculate and store the time since the start of the move when the next step for the specified DriveMovement is due.
 // Return true if there are more steps to do. When finished, leave nextStep == totalSteps + 1 and state == DMState::idle.
 // We inline this part to speed things up when we are doing double/quad/octal stepping.
-inline bool DriveMovement::CalcNextStepTime() noexcept
+inline bool DriveMovement::CalcNextStepTime(uint32_t now) noexcept
 {
 	++nextStep;
 	if (stepsTillRecalc != 0)
@@ -157,7 +158,7 @@ inline bool DriveMovement::CalcNextStepTime() noexcept
 #endif
 		return true;
 	}
-	return CalcNextStepTimeFull();
+	return CalcNextStepTimeFull(now);
 }
 
 // Return the number of net steps already taken for the current segment in the forwards direction.
@@ -206,6 +207,17 @@ inline int32_t DriveMovement::GetAndClearMinStepInterval() noexcept
 	minStepInterval = 0;
 	return ret;
 
+}
+
+// Clear any pending movement. This is called for extruders, mostly as an aid to debugging.
+// Don't clear the extrusion pending if movement is in progress because this may lead to distanceCarriedForwards becoming out of range, resulting in step errors.
+inline void DriveMovement::ClearMovementPending() noexcept
+{
+	AtomicCriticalSectionLocker lock;
+	if (state == DMState::idle)
+	{
+		distanceCarriedForwards = 0.0;
+	}
 }
 
 #if HAS_SMART_DRIVERS
