@@ -78,7 +78,7 @@ FLAGS  += -DUSE_SDIO=1
 FLAGS += -DRTOS -DFREERTOS_USED -DUSBCON -DUSBD_USE_CDC -DUSB_PRODUCT=\"RepRapFirmware\" -DVECT_TAB_OFFSET=0x20000
 #FLAGS += -DRTOS -DFREERTOS_USED -DUSBCON -DUSBD_USE_CDC -DUSB_PRODUCT=\"RepRapFirmware\" -DVECT_TAB_OFFSET=0x00000
 FLAGS += -DHAL_RRF=1 -DFORCE_ESTACK=1 -DSUPPORT_CAN=1
-FLAGS +=  -Wall -c -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mfp16-format=ieee -mcpu=cortex-m7 -mthumb -fno-math-errno -mno-unaligned-access -ffunction-sections -fdata-sections
+FLAGS +=  -Wall -c -mfpu=fpv5-d16 -mfloat-abi=hard -mfp16-format=ieee -mcpu=cortex-m7 -mthumb -fno-math-errno -mno-unaligned-access -ffunction-sections -fdata-sections
 FLAGS += -nostdlib -Wdouble-promotion -fsingle-precision-constant -fstack-usage
 #FLAGS += -Wfloat-equal
 #FLAGS += -Wundef
