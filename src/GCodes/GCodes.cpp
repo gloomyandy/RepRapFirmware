@@ -1724,7 +1724,12 @@ bool GCodes::LockMovementSystemAndWaitForStandstill(GCodeBuffer& gb, MovementSys
 		break;
 
 	default:
-		if (!reprap.GetMove().WaitingForAllMovesFinished(msNumber))
+		if (!reprap.GetMove().WaitingForAllMovesFinished(msNumber
+#if SUPPORT_ASYNC_MOVES
+															, ms.GetAxesAndExtrudersOwned()
+#endif
+														)
+		   )
 		{
 			return false;
 		}
@@ -1747,6 +1752,7 @@ bool GCodes::LockMovementSystemAndWaitForStandstill(GCodeBuffer& gb, MovementSys
 	if (RTOSIface::GetCurrentTask() == Tasks::GetMainTask())
 	{
 		// Get the current positions. These may not be the same as the ones we remembered from last time if we just did a special move.
+		//TODO only do this is we did a special move
 #if SUPPORT_ASYNC_MOVES
 		// Get the position of all axes by combining positions from the queues
 		ms.UpdateOwnAxisCoordinates();

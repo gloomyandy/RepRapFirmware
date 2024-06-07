@@ -13,18 +13,16 @@
 #include "MoveSegment.h"
 #include "ExtruderShaper.h"
 
+#define STEPS_DEBUG			(1)
+
 class PrepParams;
 
 enum class DMState : uint8_t
 {
 	idle = 0,
+	stepError,
 
-	// All states from stepError1 to just less than firstMotionState must be error states, see function DDA::HasStepEreor
-	stepError1,
-	stepError2,
-	stepError3,
-
-	// All higher values are various states of motion
+	// All higher values are various states of motion and require interrupts to be generated
 	firstMotionState,
 	starting = firstMotionState,					// interrupt scheduled for when the move should start
 	ending,											// interrupt scheduled for when the move should end
@@ -45,7 +43,6 @@ public:
 	void Init(size_t drv) noexcept;
 
 	bool CalcNextStepTime(uint32_t now) noexcept SPEED_CRITICAL;
-	void TakenStep() noexcept SPEED_CRITICAL;
 	bool PrepareCartesianAxis(const DDA& dda, const PrepParams& params) noexcept SPEED_CRITICAL;
 	bool PrepareExtruder(const DDA& dda, const PrepParams& params, float signedEffStepsPerMm) noexcept SPEED_CRITICAL;
 
@@ -62,7 +59,7 @@ public:
 	bool IsPrintingExtruderMovement() const noexcept;					// returns true if this is an extruder executing a printing move
 	bool CheckingEndstops() const noexcept;								// returns true when executing a move that checks endstops or Z probe
 
-	void AddSegment(uint32_t startTime, uint32_t duration, float distance, float u, float a, MovementFlags moveFlags) noexcept;
+	void AddSegment(uint32_t startTime, uint32_t duration, motioncalc_t distance, motioncalc_t u, motioncalc_t a, MovementFlags moveFlags) noexcept;
 	void SetAsExtruder(bool p_isExtruder) noexcept { isExtruder = p_isExtruder; }
 
 #if HAS_SMART_DRIVERS
@@ -84,9 +81,8 @@ private:
 	MoveSegment *NewSegment(uint32_t now) noexcept SPEED_CRITICAL;
 	bool ScheduleFirstSegment() noexcept;
 
-	void CheckDirection(bool reversed) noexcept;
 	void ReleaseSegments() noexcept;					// release the list of segments and set it to nullptr
-	bool LogStepError() noexcept;						// tell the Move class that we had a step error
+	bool LogStepError(uint8_t type) noexcept;			// tell the Move class that we had a step error
 
 	static int32_t maxStepsLate;
 	static int32_t minStepInterval;
@@ -103,21 +99,22 @@ private:
 	uint8_t drive;										// the drive that this DM controls
 	uint8_t direction : 1,								// true=forwards, false=backwards
 			directionChanged : 1,						// set by CalcNextStepTime if the direction is changed
-			directionReversed : 1,						// true if we have reversed the requested motion direction because of pressure advance
 			isExtruder : 1,								// true if this DM is for an extruder
-					: 2,								// padding to make the next field last
+			stepErrorType : 3,							// records what type of step error we had
 			stepsTakenThisSegment : 2;					// how many steps we have taken this phase, counts from 0 to 2. Last field in the byte so that we can increment it efficiently.
 	uint8_t stepsTillRecalc;							// how soon we need to recalculate
 
 	int32_t netStepsThisSegment;						// the (signed) net number of steps in the current segment
 	int32_t segmentStepLimit;							// the first step number of the next phase, or the reverse start step if smaller
 	int32_t reverseStartStep;							// the step number for which we need to reverse direction due to pressure advance or delta movement
-	float q, t0, p;										// the movement parameters of the current segment
+	motioncalc_t q, t0, p;								// the movement parameters of the current segment
 	MovementFlags segmentFlags;							// whether this segment checks endstops etc.
-	float distanceCarriedForwards;						// the residual distance in microsteps (less than one) that was pending at the end of the previous segment
+	motioncalc_t distanceCarriedForwards;				// the residual distance in microsteps (less than one) that was pending at the end of the previous segment
+
 	int32_t currentMotorPosition;						// the current motor position in microsteps
-#if SUPPORT_CAN_EXPANSION
 	int32_t positionAtSegmentStart;						// the value of currentMotorPosition at the start of the current segment
+#if STEPS_DEBUG
+	motioncalc_t positionRequested;						// accumulated position changes requested by moves executed
 #endif
 
 	// These values change as the segment is executed
@@ -131,22 +128,19 @@ private:
 	uint32_t extruderPrintingSince = 0;					// the millis ticks when this extruder started doing printing moves
 };
 
-// Update the step counter because we have taken a step
-inline void DriveMovement::TakenStep() noexcept
-{
-	const int32_t adjustment = (direction << 1) - 1;	// to avoid a conditional jump, calculate +1 or -1 according to direction
-	currentMotorPosition += adjustment;					// adjust the current position
-}
-
 // Calculate and store the time since the start of the move when the next step for the specified DriveMovement is due.
 // Return true if there are more steps to do. When finished, leave nextStep == totalSteps + 1 and state == DMState::idle.
 // We inline this part to speed things up when we are doing double/quad/octal stepping.
 inline bool DriveMovement::CalcNextStepTime(uint32_t now) noexcept
 {
+	// We have just taken a step, so update the current motor position
+	const int32_t adjustment = (int32_t)(direction << 1) - 1;	// to avoid a conditional jump, calculate +1 or -1 according to direction
+	currentMotorPosition += adjustment;					// adjust the current position
+
 	++nextStep;
 	if (stepsTillRecalc != 0)
 	{
-		--stepsTillRecalc;					// we are doing double/quad/octal stepping
+		--stepsTillRecalc;								// we are doing double/quad/octal stepping
 		nextStepTime += stepInterval;
 #if defined(DUET3_MB6HC) || STM32H7			// we need to increase the minimum step pulse length to be long enough for the TMC5160
 		asm volatile("nop");
@@ -166,15 +160,7 @@ inline bool DriveMovement::CalcNextStepTime(uint32_t now) noexcept
 // Caller must disable interrupts before calling this
 inline int32_t DriveMovement::GetNetStepsTaken() const noexcept
 {
-	if (segments == nullptr)
-	{
-		return 0;
-	}
-
-	const int32_t netStepsTaken = (directionReversed) 								// if started reverse phase
-									? nextStep - (2 * reverseStartStep) + 1			// allowing for direction having changed
-										: nextStep - 1;
-	return (direction) ? netStepsTaken : -netStepsTaken;
+	return currentMotorPosition - positionAtSegmentStart;
 }
 
 // Return true if this is an extruder executing a printing move
@@ -182,16 +168,6 @@ inline int32_t DriveMovement::GetNetStepsTaken() const noexcept
 inline bool DriveMovement::IsPrintingExtruderMovement() const noexcept
 {
 	return !segmentFlags.nonPrintingMove;
-}
-
-inline void DriveMovement::CheckDirection(bool reversed) noexcept
-{
-	if (reversed != directionReversed)
-	{
-		directionReversed = !directionReversed;										// this can be done by an xor so hopefully more efficient than assignment
-		direction = !direction;
-		directionChanged = true;
-	}
 }
 
 inline int32_t DriveMovement::GetAndClearMaxStepsLate() noexcept
@@ -206,7 +182,6 @@ inline int32_t DriveMovement::GetAndClearMinStepInterval() noexcept
 	const int32_t ret = minStepInterval;
 	minStepInterval = 0;
 	return ret;
-
 }
 
 // Clear any pending movement. This is called for extruders, mostly as an aid to debugging.
