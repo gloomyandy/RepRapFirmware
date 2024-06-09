@@ -984,7 +984,7 @@ void Move::Diagnostics(MessageType mtype) noexcept
 
 	Platform& p = reprap.GetPlatform();
 	p.MessageF(mtype,
-				"=== Move ===\nSegments created %u, maxWait %" PRIu32 "ms, bed compensation in use: %s, height map offset %.3f, hiccups %u, hiccup time %.2fms, max steps late %" PRIi32
+				"=== Move ===\nSegments created %u, maxWait %" PRIu32 "ms, bed comp in use: %s, height map offset %.3f, hiccups added %u (%.2fms), max steps late %" PRIi32
 #if 1	//debug
 				", ebfmin %.2f, ebfmax %.2f"
 #endif
@@ -2078,8 +2078,7 @@ void Move::Interrupt() noexcept
 			}
 
 			// The next step is due immediately. Check whether we have been in this ISR for too long already and need to take a break
-			now = StepTimer::GetMovementTimerTicks();
-			const int32_t clocksTaken = (int32_t)(now - isrStartTime);
+			const int32_t clocksTaken = (int32_t)(StepTimer::GetMovementTimerTicks() - isrStartTime);
 			if (clocksTaken >= (int32_t)MoveTiming::MaxStepInterruptTime)
 			{
 				// Force a break by updating the move start time.
@@ -2112,7 +2111,6 @@ void Move::Interrupt() noexcept
 						return;
 					}
 					// We probably had an interrupt that delayed us further. Recalculate the hiccup length, also we increase the hiccup time on each iteration.
-					now = StepTimer::GetMovementTimerTicks();
 				}
 			}
 		}
