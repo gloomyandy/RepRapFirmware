@@ -968,6 +968,8 @@ void Move::CancelStepping() noexcept
 
 #endif
 
+extern uint32_t maxCriticalElapsedTime;
+
 void Move::Diagnostics(MessageType mtype) noexcept
 {
 	// Get the type of bed compensation in use
@@ -979,7 +981,7 @@ void Move::Diagnostics(MessageType mtype) noexcept
 	scratchString.copy(GetCompensationTypeString());
 
 	const uint32_t currentMovementDelay = StepTimer::GetMovementDelay();
-	const float delayToReport = (currentMovementDelay - lastReportedMovementDelay) * (1000.0/(float)StepTimer::GetTickRate());
+	const float delayToReport = (float)(currentMovementDelay - lastReportedMovementDelay) * (1000.0/(float)StepTimer::GetTickRate());
 	lastReportedMovementDelay = currentMovementDelay;
 
 	Platform& p = reprap.GetPlatform();
@@ -987,17 +989,20 @@ void Move::Diagnostics(MessageType mtype) noexcept
 				"=== Move ===\nSegments created %u, maxWait %" PRIu32 "ms, bed comp in use: %s, height map offset %.3f, hiccups added %u (%.2fms), max steps late %" PRIi32
 #if 1	//debug
 				", ebfmin %.2f, ebfmax %.2f"
+				", mcet %.3f"
 #endif
 				"\n",
 						MoveSegment::NumCreated(), longestGcodeWaitInterval, scratchString.c_str(), (double)zShift, numHiccups, (double)delayToReport, DriveMovement::GetAndClearMaxStepsLate()
 #if 1
 						, (double)minExtrusionPending, (double)maxExtrusionPending
+						, (double)((float)maxCriticalElapsedTime * (1000.0/(float)StepTimer::GetTickRate()))
 #endif
 		);
 	longestGcodeWaitInterval = 0;
 	numHiccups = 0;
 #if 1	//debug
 	minExtrusionPending = maxExtrusionPending = 0.0;
+	maxCriticalElapsedTime = 0;
 #endif
 
 #if STEPS_DEBUG
@@ -2078,7 +2083,8 @@ void Move::Interrupt() noexcept
 			}
 
 			// The next step is due immediately. Check whether we have been in this ISR for too long already and need to take a break
-			const int32_t clocksTaken = (int32_t)(StepTimer::GetMovementTimerTicks() - isrStartTime);
+			now = StepTimer::GetMovementTimerTicks();
+			const int32_t clocksTaken = (int32_t)(now - isrStartTime);
 			if (clocksTaken >= (int32_t)MoveTiming::MaxStepInterruptTime)
 			{
 				// Force a break by updating the move start time.
@@ -2110,7 +2116,7 @@ void Move::Interrupt() noexcept
 #endif
 						return;
 					}
-					// We probably had an interrupt that delayed us further. Recalculate the hiccup length, also we increase the hiccup time on each iteration.
+					// The hiccup wasn't long enough, so go round the loop again
 				}
 			}
 		}
@@ -2283,7 +2289,7 @@ void Move::StepDrivers(uint32_t now) noexcept
 	MovementFlags flags;
 	flags.Clear();
 	DriveMovement* dm = activeDMs;
-	while (dm != nullptr && (int32_t)(now - dm->nextStepTime) >= 0)			// if the next step is due
+	while (dm != nullptr && (int32_t)(dm->nextStepTime - now) <= (int32_t)MoveTiming::MinInterruptInterval)		// if the next step is due
 	{
 		driversStepping |= dm->driversCurrentlyUsed;
 		flags |= dm->segmentFlags;
@@ -2302,7 +2308,7 @@ void Move::StepDrivers(uint32_t now) noexcept
 		driversStepping = 0;
 		dm = activeDMs;
 		now = StepTimer::GetMovementTimerTicks();
-		while (dm != nullptr && (int32_t)(now - dm->nextStepTime) >= 0)		// if the next step is due
+		while (dm != nullptr && (int32_t)(dm->nextStepTime - now) <= (int32_t)MoveTiming::MinInterruptInterval)	// if the next step is due
 		{
 			driversStepping |= dm->driversCurrentlyUsed;
 			dm = dm->nextDM;
