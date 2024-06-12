@@ -1,3 +1,8 @@
+Version 3.5.2
+=============
+* Duet3d 3.5.2
+* Fix error message if WiFi module type is unknown
+
 Version 3.5.2-rc.1
 ==================
 * Duet3d rc.1
