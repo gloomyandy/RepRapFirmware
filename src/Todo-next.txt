@@ -11,16 +11,20 @@ Next steps for new movement system+IS
 [done] Extend use of DMState::starting to cover the case of the next segment starting some time after the previous one ends
 [done] Sort out ClearExtrusionPending - don't update distanceBroughtForwards during motion
 [done] Do we still need GetNetStepsTaken? Can we use the step counts instead?
-
-Sort out use of Kinematics::ControllingDrivers. Need different behaviour depending on whether it is used when homing or to update machine positions.
+[done] Sort out use of Kinematics::ControllingDrivers. Need different behaviour depending on whether it is used when homing or to update machine positions.
+[done] Avoid zero-length/zero-duration moves
+[probably caused by known issue when a tool selection fails due to insufficient axes homed, so ignore] If we try to start a print job without homing first, after that we can't home Z without a reset. 
+[believed completed] Auto-generated moves on delta printers: need to segment them, except for Z probing moves
+[not needed unless we get tiny layer shifts, also this is not as easy as I first thought] Eventually, store end position in segments. End positions specified by user must be exact numbers of motor steps. Segment boundaries may be fractional steps.
+[done] Delta printer auto calibration not working
 
 Remove excess debug e.g. reporting hiccups in debug
 
-Remove CheckSegments excepr when debugging
+Remove CheckSegments except when debugging
 
-If we try to start a print job without homing first, after that we can't home Z without a reset.
+Reduce RAM usage on Duet 2 and Duet 3 Mini.
 
-Eventually, store end position in segments. End positions specified by user must be exact numbers of motor steps. Segment boundaries may be fractional steps.
+When using segmentation, sync segment duration to multiples/submultiples of IS period - this should reduce the number of segments needed
 
 Fix ExtruderPrintingSince, need to update variable extruderPrintingSince when we start a printing extruder move after not doing one - in NewSegmnent?
 
@@ -30,14 +34,10 @@ Allow for expansion boards introducing hiccups
 
 Set up params.useInputShaping, needed for CAN
 
-Avoid zero-length/zero-duration moves
-
 At the end of Prepare, don't send the move over CAN if it won't happen because endstops are already triggered - previously it checked for state=completed
 Also, check whether/how in CanMotion we handle individual drives not moving because their endstops have triggered - that may be enough to handle the above.
 
 Segment moves to keep them shorter than 2^31 step clocks
-
-[I think I completed this, so re-test] Auto-generated moves on delta printers: need to segment them, except for Z probing moves
 
 In the DM have a direction variable set to +1 or -1, to reduce conditional jumps
 
@@ -46,6 +46,8 @@ Move 'wasTriggered' into ZProbe, clear it on SetProbing(true), return it on SetP
 Change ZProbe::wasDeployedByUser to a count?
 
 Store segments per step clock not segments per second, avoids a multiplication
+
+Consider supporting separate X and Y IS parameters on Cartesian/Polar/SCARA machines and separate Z shaping parameters
 
 Bugs:
 - [done] "Tool was not driven because its temperatures were not high enough" in simulation mode
@@ -58,4 +60,5 @@ Bugs:
 - [done] Pauses after G1 H2 moves, especially if expansion boards are involved
 - [done] Z probing not working
 - [re-test] G1 H2 moves on delta: moves the wrong number of steps according to M114 (too few) if just 1 tower moving; ok if all 3 moving
-- [re-test] Delta printer auto calibration not working
+- Christian reports that G1 H1 E moves (using stall detection) crash
+
