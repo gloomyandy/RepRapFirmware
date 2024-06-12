@@ -335,6 +335,9 @@ void CanMotion::InsertHiccup(uint32_t numClocks) noexcept
 // Flag a CAN-connected driver as not moving when we haven't sent the movement message yet
 void CanMotion::StopDriverWhenProvisional(DriverId driver) noexcept
 {
+#if SUPPORT_SPICAN
+	if (!canEnabled) return;
+#endif
 	// Search for the correct movement buffer
 	CanMessageBuffer* buf = movementBufferList;
 	while (buf != nullptr && buf->id.Dst() != driver.boardAddress)
@@ -352,6 +355,9 @@ void CanMotion::StopDriverWhenProvisional(DriverId driver) noexcept
 // Tell a CAN-connected driver to stop moving after we have sent the movement message
 bool CanMotion::StopDriverWhenExecuting(DriverId driver, int32_t netStepsTaken) noexcept
 {
+#if SUPPORT_SPICAN
+	if (!canEnabled) return false;
+#endif
 	DriversStopList *sl = stopList;
 	while (sl != nullptr)
 	{
@@ -374,7 +380,7 @@ bool CanMotion::StopDriverWhenExecuting(DriverId driver, int32_t netStepsTaken) 
 bool CanMotion::RevertStoppedDrivers() noexcept
 {
 #if SUPPORT_SPICAN
-	if (!canEnabled) return false;
+	if (!canEnabled) return true;
 #endif
 	if (!revertAll && !revertedAll)							// if not started reverting yet
 	{
