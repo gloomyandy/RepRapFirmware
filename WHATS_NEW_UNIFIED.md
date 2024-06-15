@@ -2,6 +2,7 @@ Version 3.5.2
 =============
 * Duet3d 3.5.2
 * Fix error message if WiFi module type is unknown
+* Added support for Fly Pro X10 STM32H723
 
 Version 3.5.2-rc.1
 ==================
