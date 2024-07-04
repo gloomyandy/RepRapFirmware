@@ -1969,7 +1969,7 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 	const uint32_t steadyStartTime = startTime + params.accelClocks;
 	const uint32_t decelStartTime = steadyStartTime + params.steadyClocks;
 
-	// Phases with zero duration will not get executed. Avoid introducing distance errors because of this.
+	// Phases with zero duration will not get executed and may lead to infinities in the calculations. Avoid introducing them. Keep the total distance correct.
 	const motioncalc_t accelDistance = (params.accelClocks == 0) ? (motioncalc_t)0.0 : (motioncalc_t)params.accelDistance;
 	const motioncalc_t decelDistance = (params.decelClocks == 0) ? (motioncalc_t)0.0 : (motioncalc_t)(dda.totalDistance - params.decelStartDistance);
 	const motioncalc_t steadyDistance = (params.steadyClocks == 0) ? (motioncalc_t)0.0 : (motioncalc_t)dda.totalDistance - accelDistance - decelDistance;
@@ -1982,18 +1982,15 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 	{
 		if (params.accelClocks != 0)
 		{
-			dmp->AddSegment(startTime, params.accelClocks,
-								accelDistance * stepsPerMm, (motioncalc_t)dda.startSpeed * stepsPerMm, (motioncalc_t)dda.acceleration * stepsPerMm, moveFlags);
+			dmp->AddSegment(startTime, params.accelClocks, accelDistance * stepsPerMm, (motioncalc_t)dda.acceleration * stepsPerMm, moveFlags);
 		}
 		if (params.steadyClocks != 0)
 		{
-			dmp->AddSegment(steadyStartTime, params.steadyClocks,
-								steadyDistance * stepsPerMm, (motioncalc_t)dda.topSpeed * stepsPerMm, (motioncalc_t)0.0, moveFlags);
+			dmp->AddSegment(steadyStartTime, params.steadyClocks, steadyDistance * stepsPerMm, (motioncalc_t)0.0, moveFlags);
 		}
 		if (params.decelClocks != 0)
 		{
-			dmp->AddSegment(decelStartTime, params.decelClocks,
-								decelDistance * stepsPerMm, (motioncalc_t)dda.topSpeed * stepsPerMm, -((motioncalc_t)dda.deceleration * stepsPerMm), moveFlags);
+			dmp->AddSegment(decelStartTime, params.decelClocks, decelDistance * stepsPerMm, -((motioncalc_t)dda.deceleration * stepsPerMm), moveFlags);
 		}
 	}
 	else
@@ -2004,18 +2001,15 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 			const uint32_t delay = axisShaper.GetImpulseDelay(index);
 			if (params.accelClocks != 0)
 			{
-				dmp->AddSegment(startTime + delay, params.accelClocks,
-									accelDistance * factor, (motioncalc_t)dda.startSpeed * factor, (motioncalc_t)dda.acceleration * factor, moveFlags);
+				dmp->AddSegment(startTime + delay, params.accelClocks, accelDistance * factor, (motioncalc_t)dda.acceleration * factor, moveFlags);
 			}
 			if (params.steadyClocks != 0)
 			{
-				dmp->AddSegment(steadyStartTime + delay, params.steadyClocks,
-									steadyDistance * factor, (motioncalc_t)dda.topSpeed * factor, (motioncalc_t)0.0, moveFlags);
+				dmp->AddSegment(steadyStartTime + delay, params.steadyClocks, steadyDistance * factor, (motioncalc_t)0.0, moveFlags);
 			}
 			if (params.decelClocks != 0)
 			{
-				dmp->AddSegment(decelStartTime + delay, params.decelClocks,
-									decelDistance * factor, (motioncalc_t)dda.topSpeed * factor, -((motioncalc_t)dda.deceleration * factor), moveFlags);
+				dmp->AddSegment(decelStartTime + delay, params.decelClocks, decelDistance * factor, -((motioncalc_t)dda.deceleration * factor), moveFlags);
 			}
 		}
 	}
@@ -2848,8 +2842,10 @@ void Move::EngageBrake(size_t driver) noexcept
 {
 #if SUPPORT_BRAKE_PWM
 	currentBrakePwm[driver] = 0.0;
-#endif
+	brakePorts[driver].WriteAnalog(0.0);
+#else
 	brakePorts[driver].WriteDigital(false);			// turn the brake solenoid off to engage the brake
+#endif
 }
 
 void Move::DisengageBrake(size_t driver) noexcept
