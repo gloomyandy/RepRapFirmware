@@ -380,7 +380,7 @@ class Tmc22xxDriverState: public TmcDriverState
 {
 public:
 	Tmc22xxDriverState() noexcept;
-	void Init(uint32_t p_driverNumber, Pin p_enablePin
+	void Init(uint8_t p_driverNumber, Pin p_enablePin
 #if HAS_STALL_DETECT
 							, Pin p_diagPin
 #endif
@@ -388,7 +388,7 @@ public:
 	void SetAxisNumber(size_t p_axisNumber) noexcept;
 	uint32_t GetAxisNumber() const noexcept { return axisNumber; }
 	void WriteAll() noexcept;
-	bool SetMicrostepping(uint32_t shift, bool interpolate) noexcept;
+	bool SetMicrostepping(uint8_t shift, bool interpolate) noexcept;
 	unsigned int GetMicrostepping(bool& interpolation) const noexcept;
 	bool SetDriverMode(unsigned int mode) noexcept;
 	DriverMode GetDriverMode() const noexcept;
@@ -488,20 +488,20 @@ private:
 
 	volatile uint32_t writeRegisters[NumWriteRegisters + 1];	// the values we want the TMC22xx writable registers to have
 	volatile uint32_t readRegisters[NumReadRegisters + 1];	// the last values read from the TMC22xx readable registers
-	volatile uint32_t accumulatedReadRegisters[NumReadRegisters];
+	volatile uint32_t accumulatedDriveStatus;
 
 	uint32_t configuredChopConfReg;							// the configured chopper control register, in the Enabled state, without the microstepping bits
-	volatile uint32_t registersToUpdate;					// bitmap of register indices whose values need to be sent to the driver chip
 
-	uint32_t axisNumber;									// the axis number of this driver as used to index the DriveMovements in the DDA
-	uint32_t microstepShiftFactor;							// how much we need to shift 1 left by to get the current microstepping
 	float motorCurrent;										// the configured motor current
 	uint32_t maxOpenLoadStepInterval;						// the maximum step pulse interval for which we consider open load detection to be reliable
 
+	volatile uint16_t registersToUpdate;					// bitmap of register indices whose values need to be sent to the driver chip
+
 #if HAS_STALL_DETECT
 	uint16_t minSgLoadRegister;								// the maximum value of the StallGuard bits we read
-	DriversBitmap driverBit;								// bitmap of just this driver number
 #endif
+	uint8_t axisNumber;									// the axis number of this driver as used to index the DriveMovements in the DDA
+	uint8_t microstepShiftFactor;							// how much we need to shift 1 left by to get the current microstepping
 
 	// To write a register, we send one 8-byte packet to write it, then a 4-byte packet to ask for the IFCOUNT register, then we receive an 8-byte packet containing IFCOUNT.
 	// This is the message we send - volatile because we care about when it is written
@@ -593,8 +593,8 @@ constexpr uint8_t Tmc22xxDriverState::ReadRegCRCs[NumReadRegisters] =
 #endif
 };
 
-Tmc22xxDriverState::Tmc22xxDriverState() noexcept : TmcDriverState(), configuredChopConfReg(0),registersToUpdate(0),
- axisNumber(0), microstepShiftFactor(0), motorCurrent(0.0f), maxOpenLoadStepInterval(0), minSgLoadRegister(0)
+Tmc22xxDriverState::Tmc22xxDriverState() noexcept : TmcDriverState(), configuredChopConfReg(0),
+ motorCurrent(0.0f), maxOpenLoadStepInterval(0), registersToUpdate(0), minSgLoadRegister(0), axisNumber(0), microstepShiftFactor(0)
 {
 }
 
@@ -690,7 +690,7 @@ void Tmc22xxDriverState::UpdateChopConfRegister() noexcept
 }
 
 // Initialise the state of the driver and its CS pin
-void Tmc22xxDriverState::Init(uint32_t p_driverNumber, Pin p_enablePin
+void Tmc22xxDriverState::Init(uint8_t p_driverNumber, Pin p_enablePin
 #if HAS_STALL_DETECT
 							, Pin p_diagPin
 #endif
@@ -704,7 +704,6 @@ pre(!driversPowered)
 	IoPort::SetPinMode(p_enablePin, OUTPUT_HIGH);
 
 #if HAS_STALL_DETECT
-	driverBit = DriversBitmap::MakeFromBits(driverNumber);
 	diagPin = p_diagPin;
 	IoPort::SetPinMode(p_diagPin, INPUT_PULLUP);
 #endif
@@ -731,8 +730,9 @@ pre(!driversPowered)
 
 	for (size_t i = 0; i < NumReadRegisters; ++i)
 	{
-		accumulatedReadRegisters[i] = readRegisters[i] = 0;				// clear all read registers so that we don't use dud values, in particular we don't know the driver type yet
+		readRegisters[i] = 0;				// clear all read registers so that we don't use dud values, in particular we don't know the driver type yet
 	}
+	accumulatedDriveStatus = 0;
 	regnumBeingUpdated = 0xFF;
 	registerToRead = 0;
 	lastIfCount = 0;
@@ -793,7 +793,7 @@ void Tmc22xxDriverState::SetStandstillCurrentPercent(float percent) noexcept
 }
 
 // Set the microstepping and microstep interpolation. The desired microstepping is (1 << shift).
-bool Tmc22xxDriverState::SetMicrostepping(uint32_t shift, bool interpolate) noexcept
+bool Tmc22xxDriverState::SetMicrostepping(uint8_t shift, bool interpolate) noexcept
 {
 	microstepShiftFactor = shift;
 	configuredChopConfReg = (configuredChopConfReg & ~(CHOPCONF_MRES_MASK | CHOPCONF_INTPOL)) | ((8 - shift) << CHOPCONF_MRES_SHIFT);
@@ -1051,10 +1051,10 @@ StandardDriverStatus Tmc22xxDriverState::GetStatus(bool accumulated, bool clearA
 		{
 			AtomicCriticalSectionLocker lock;
 
-			status = accumulatedReadRegisters[ReadDrvStat];
+			status = accumulatedDriveStatus;
 			if (clearAccumulated)
 			{
-				accumulatedReadRegisters[ReadDrvStat] = readRegisters[ReadDrvStat];
+				accumulatedDriveStatus = readRegisters[ReadDrvStat];
 			}
 		}
 		else
@@ -1214,7 +1214,10 @@ inline void Tmc22xxDriverState::TransferDone() noexcept
 			}
 			else
 			{
-				accumulatedReadRegisters[registerToRead] |= regVal;
+				if (registerToRead == ReadDrvStat)
+				{
+					accumulatedDriveStatus |= regVal;
+				}
 				++registerToRead;
 				if (registerToRead == ReadSpecial && specialReadRegisterNumber >= 0x80)
 				{
@@ -1286,8 +1289,9 @@ void Tmc22xxDriverState::ResetReadRegisters() noexcept
 {
 	for (size_t i = 0; i < NumReadRegisters; ++i)
 	{
-		accumulatedReadRegisters[i] = readRegisters[i] = 0;				// clear all read registers so that we don't use dud values, in particular we don't know the driver type yet
+		readRegisters[i] = 0;				// clear all read registers so that we don't use dud values, in particular we don't know the driver type yet
 	}
+	accumulatedDriveStatus = 0;
 }
 
 DriversState Tmc22xxDriverState::SetupDriver(bool reset) noexcept

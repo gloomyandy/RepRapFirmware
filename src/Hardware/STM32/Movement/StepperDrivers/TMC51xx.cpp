@@ -339,7 +339,7 @@ public:
 	void SetAxisNumber(size_t p_axisNumber) noexcept;
 	uint32_t GetAxisNumber() const noexcept { return axisNumber; }
 	void WriteAll() noexcept;
-	bool SetMicrostepping(uint32_t shift, bool interpolate) noexcept;
+	bool SetMicrostepping(uint8_t shift, bool interpolate) noexcept;
 	unsigned int GetMicrostepping(bool& interpolation) const noexcept;
 	bool SetDriverMode(unsigned int mode) noexcept;
 	DriverMode GetDriverMode() const noexcept;
@@ -576,7 +576,7 @@ void Tmc51xxDriverState::SetStandstillCurrentPercent(float percent) noexcept
 }
 
 // Set the microstepping and microstep interpolation. The desired microstepping is (1 << shift) where shift is in 0..8.
-bool Tmc51xxDriverState::SetMicrostepping(uint32_t shift, bool interpolate) noexcept
+bool Tmc51xxDriverState::SetMicrostepping(uint8_t shift, bool interpolate) noexcept
 {
 	microstepShiftFactor = shift;
 	configuredChopConfReg = (configuredChopConfReg & ~(CHOPCONF_MRES_MASK | CHOPCONF_INTPOL)) | ((8 - shift) << CHOPCONF_MRES_SHIFT);

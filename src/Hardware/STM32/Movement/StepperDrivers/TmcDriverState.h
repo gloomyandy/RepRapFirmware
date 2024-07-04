@@ -8,7 +8,7 @@ class TmcDriverState
 public:
 	virtual void SetAxisNumber(size_t p_axisNumber) noexcept;
 	virtual uint32_t GetAxisNumber() const noexcept = 0;
-	virtual bool SetMicrostepping(uint32_t shift, bool interpolate) noexcept = 0;
+	virtual bool SetMicrostepping(uint8_t shift, bool interpolate) noexcept = 0;
 	virtual unsigned int GetMicrostepping(bool& interpolation) const noexcept = 0;
 	virtual bool SetDriverMode(unsigned int mode) noexcept = 0;
 	virtual DriverMode GetDriverMode() const noexcept = 0;
