@@ -20,7 +20,7 @@ constexpr size_t SbcFileWriteBufLen = 4192;					// Available size of each write 
 #elif STM32F4
 constexpr size_t NumFileWriteBuffers = 2;
 constexpr size_t FileWriteBufLen = 4096;
-constexpr size_t SbcFileWriteBufLen = 4192;
+constexpr size_t SbcFileWriteBufLen = 4096;
 #elif SAM4E || SAM4S || SAME5x
 constexpr size_t NumFileWriteBuffers = 1;					// Number of write buffers
 constexpr size_t FileWriteBufLen = 8192;					// Size of each write buffer
