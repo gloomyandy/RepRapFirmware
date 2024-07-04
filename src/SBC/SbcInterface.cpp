@@ -87,27 +87,19 @@ void SbcInterface::FreeMemory() noexcept
 
 void SbcInterface::Init() noexcept
 {
-	if (reprap.UsingSbcInterface())
-	{
 #if STM32
-		// We have already allocated memory in the constructor so just start things here
-		transfer.Init();
-		sbcTask->Create(SBCTaskStart, "SBC", nullptr, TaskPriority::SbcPriority);
+	// We have already allocated memory in the constructor so just start things here
+	transfer.Init();
+	sbcTask->Create(SBCTaskStart, "SBC", nullptr, TaskPriority::SbcPriority);
 #else
-		fileMutex.Create("SBCFile");
-		gcodeReplyMutex.Create("SBCReply");
-		codeBuffer = (char *)new uint32_t[(SpiCodeBufferSize + 3)/4];
-		transfer.Init();
-		sbcTask = new Task<SBCTaskStackWords>();
-		sbcTask->Create(SBCTaskStart, "SBC", nullptr, TaskPriority::SbcPriority);
-		iapRamAvailable = (const char*)&_estack - Tasks::GetHeapTop();
+	fileMutex.Create("SBCFile");
+	gcodeReplyMutex.Create("SBCReply");
+	codeBuffer = (char *)new uint32_t[(SpiCodeBufferSize + 3)/4];
+	transfer.Init();
+	sbcTask = new Task<SBCTaskStackWords>();
+	sbcTask->Create(SBCTaskStart, "SBC", nullptr, TaskPriority::SbcPriority);
+	iapRamAvailable = (const char*)&_estack - Tasks::GetHeapTop();
 #endif
-	}
-	else
-	{
-		// Set up the data transfer to exchange the header + response code. No task is started to save memory
-		transfer.Init();
-	}
 }
 
 [[noreturn]] void SbcInterface::TaskLoop() noexcept

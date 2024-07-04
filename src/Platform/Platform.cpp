@@ -886,7 +886,7 @@ void Platform::Spin() noexcept
 	Move& move = reprap.GetMove();
 	if (move.HasMovementError())
 	{
-		Message(AddError(MessageType::GenericMessage), "Movement halted because a step timing error occurred. Please reset the controller.\n");
+		MessageF(AddError(MessageType::GenericMessage), "Movement halted because a step timing error occurred (code %u). Please reset the controller.\n", move.GetStepErrorType());
 		move.GenerateMovementErrorDebug();
 		move.ResetAfterError();
 	}
@@ -1434,7 +1434,7 @@ extern uint32_t numUsbInterrupts;
 // Return diagnostic information
 void Platform::Diagnostics(MessageType mtype) noexcept
 {
-#if USE_CACHE && (SAM4E || SAME5x)
+#if 0	// USE_CACHE && (SAM4E || SAME5x)
 	// Get the cache statistics before we start messing around with the cache
 	const uint32_t cacheCount = Cache::GetHitCount();
 #endif
@@ -1478,7 +1478,7 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 	}
 #endif
 
-#ifdef DUET3MINI
+#if 0	//ifdef DUET3MINI
 	// Report the processor revision level and analogIn status (trying to debug the spurious zero VIN issue)
 	{
 		// The DSU clocks are enabled by default so no need to enable them here
@@ -1545,7 +1545,7 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 		Message(mtype, "not set\n");
 	}
 
-#if USE_CACHE && (SAM4E || SAME5x)
+#if 0	// USE_CACHE && (SAM4E || SAME5x)
 	MessageF(mtype, "Cache data hit count %" PRIu32 "\n", cacheCount);
 #endif
 
