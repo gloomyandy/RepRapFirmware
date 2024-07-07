@@ -2162,7 +2162,7 @@ void Move::DeactivateDM(DriveMovement *dmToRemove) noexcept
 // If executingMove is set then the move is already being executed; otherwise we are preparing to commit the move.
 #if SUPPORT_CAN_EXPANSION
 // Returns true if the caller needs to wake the async sender task because CAN-connected drivers need to be stopped
-bool Move::CheckEndstops( bool executingMove) noexcept
+bool Move::CheckEndstops(bool executingMove) noexcept
 #else
 void Move::CheckEndstops(bool executingMove) noexcept
 #endif
@@ -3599,18 +3599,6 @@ void Move::StopDriveFromRemote(size_t drive) noexcept
 }
 
 #endif
-
-// Adjust the motor endpoints without moving the motors. Called after auto-calibrating a linear delta or rotary delta machine.
-// There must be no pending movement when calling this!
-void Move::AdjustMotorPositions(const float adjustment[], size_t numMotors) noexcept
-{
-	for (size_t drive = 0; drive < numMotors; ++drive)
-	{
-		dms[drive].AdjustMotorPosition(lrintf(adjustment[drive] * driveStepsPerMm[drive]));
-	}
-
-	liveCoordinatesValid = false;		// force the live XYZ position to be recalculated
-}
 
 // Reset all extruder positions to zero. Called when we start a print.
 void Move::ResetExtruderPositions() noexcept
