@@ -521,8 +521,6 @@ void Move::Init() noexcept
 	slowDriversBitmap = 0;										// assume no drivers need extended step pulse timing
 #endif
 
-	EnableAllSteppingDrivers();									// no drivers disabled
-
 #if HAS_SMART_DRIVERS
 	// Initialise TMC driver module
 # if SUPPORT_TMC51xx
@@ -586,10 +584,6 @@ void Move::Init() noexcept
 	lastReportedMovementDelay = 0;
 	bedLevellingMoveAvailable = false;
 	activeDMs = nullptr;
-	for (volatile int32_t& acc : movementAccumulators)
-	{
-		acc = 0;
-	}
 	for (uint16_t& ms : microstepping)
 	{
 		ms = 16 | 0x8000;
@@ -949,7 +943,7 @@ bool Move::IsAccessibleProbePoint(float axesCoords[MaxAxes], AxesBitmap axes) co
 // Pause the print as soon as we can, returning true if we are able to skip any moves and updating ms.pauseRestorePoint to the first move we skipped.
 bool Move::PausePrint(MovementState& ms) noexcept
 {
-	return rings[ms.GetMsNumber()].PauseMoves(ms);
+	return rings[ms.GetNumber()].PauseMoves(ms);
 }
 
 #if HAS_VOLTAGE_MONITOR || HAS_STALL_DETECT
@@ -1063,31 +1057,18 @@ void Move::Diagnostics(MessageType mtype) noexcept
 	}
 }
 
-// Clear the movement pending value for an extruder
-void Move::ClearExtruderMovementPending(size_t extruder) noexcept
-{
-	dms[ExtruderToLogicalDrive(extruder)].ClearMovementPending();
-}
-
-// Return when we started doing normal moves after the most recent extruder-only move, in millisecond ticks
-uint32_t Move::ExtruderPrintingSince(size_t logicalDrive) const noexcept
-{
-	return dms[logicalDrive].extruderPrintingSince;
-}
-
 // Set the current position to be this
-void Move::SetNewPosition(const float positionNow[MaxAxesPlusExtruders], const MovementState& ms, bool doBedCompensation) noexcept
+void Move::SetNewPositionOfAllAxes(const MovementState& ms, bool doBedCompensation) noexcept
+{
+	SetNewPositionOfSomeAxes(ms, doBedCompensation, AxesBitmap::MakeLowestNBits(reprap.GetGCodes().GetVisibleAxes()));
+}
+
+void Move::SetNewPositionOfSomeAxes(const MovementState& ms, bool doBedCompensation, AxesBitmap axes) noexcept
 {
 	float newPos[MaxAxesPlusExtruders];
-	memcpyf(newPos, positionNow, ARRAY_SIZE(newPos));			// copy to local storage because Transform modifies it
+	memcpyf(newPos, ms.coords, ARRAY_SIZE(newPos));			// copy to local storage because Transform modifies it
 	AxisAndBedTransform(newPos, ms.currentTool, doBedCompensation);
-	SetRawPosition(newPos, ms.GetMsNumber(),
-#if SUPPORT_ASYNC_MOVES
-					ms.GetAxesAndExtrudersOwned()
-#else
-					AxesBitmap::MakeLowestNBits(reprap.GetGCodes().GetVisibleAxes())
-#endif
-				  );
+	SetRawPosition(newPos, ms.GetNumber(), axes);
 }
 
 // Convert distance to steps for a particular drive
@@ -1939,16 +1920,31 @@ void Move::LaserTaskRun() noexcept
 	}
 }
 
-// Get the accumulated extruder motor steps taken by an extruder since the last call. Used by the filament monitoring code.
+// Extruder and filament monitor support
+
+// Clear the movement pending value for an extruder
+void Move::ClearExtruderMovementPending(size_t extruder) noexcept
+{
+	dms[ExtruderToLogicalDrive(extruder)].ClearMovementPending();
+}
+
+// Return when we started doing normal moves after the most recent extruder-only move, in millisecond ticks
+uint32_t Move::ExtruderPrintingSince(size_t logicalDrive) const noexcept
+{
+	return dms[logicalDrive].extruderPrintingSince;
+}
+
+// Get the accumulated extruder motor steps taken by an extruder since the last call to this function. Used by the filament monitoring code.
 // Returns the number of motor steps moved since the last call, and sets isPrinting true unless we are currently executing an extruding but non-printing move
 // This is called from the filament monitor ISR and from FilamentMonitor::Spin
 int32_t Move::GetAccumulatedExtrusion(size_t logicalDrive, bool& isPrinting) noexcept
 {
+	DriveMovement& dm = dms[logicalDrive];
 	AtomicCriticalSectionLocker lock;							// we don't want a move to complete and the ISR update the movement accumulators while we are doing this
-	const int32_t ret = movementAccumulators[logicalDrive];
-	const int32_t adjustment = dms[logicalDrive].GetNetStepsTaken();
-	movementAccumulators[logicalDrive] = -adjustment;
-	isPrinting = dms[logicalDrive].IsPrintingExtruderMovement();
+	const int32_t ret = dm.movementAccumulator;
+	const int32_t adjustment = dm.GetNetStepsTaken();
+	dm.movementAccumulator = -adjustment;
+	isPrinting = dms[logicalDrive].extruderPrinting;
 	return ret + adjustment;
 }
 
@@ -2247,9 +2243,14 @@ void Move::CheckEndstops(bool executingMove) noexcept
 			{
 				if (executingMove)
 				{
-					int32_t netStepsTaken;
-					const bool wasMoving = dms[hitDetails.axis].StopDriver(netStepsTaken);
-					if (wasMoving && CanMotion::StopDriverWhenExecuting(hitDetails.driver, netStepsTaken)) { wakeAsyncSender = true; }
+					DriveMovement& dm = dms[hitDetails.axis];
+					if (dm.state >= DMState::firstMotionState)
+					{
+						if (CanMotion::StopDriverWhenExecuting(hitDetails.driver, dm.GetNetStepsTaken()))
+						{
+							wakeAsyncSender = true;
+						}
+					}
 				}
 				else
 				{
@@ -2259,25 +2260,8 @@ void Move::CheckEndstops(bool executingMove) noexcept
 			else
 #endif
 			{
-				DisableSteppingDriver(hitDetails.driver.localDriver);
-			}
-
-			{
-				// Get the DDA associated with the axis that has triggered
-				DDA *homingDda = dms[hitDetails.axis].homingDda;
-				if (homingDda != nullptr && homingDda->GetState() == DDA::committed && homingDda->IsCheckingEndstops())
-				{
-					if (hitDetails.setAxisLow)
-					{
-						kinematics->OnHomingSwitchTriggered(hitDetails.axis, false, driveStepsPerMm, *homingDda);
-						reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
-					}
-					else if (hitDetails.setAxisHigh)
-					{
-						kinematics->OnHomingSwitchTriggered(hitDetails.axis, true, driveStepsPerMm, *homingDda);
-						reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
-					}
-				}
+				const size_t localDriver = hitDetails.driver.localDriver;
+				dms[localDriver].driversCurrentlyUsed &= ~StepPins::CalcDriverBitmap(localDriver);
 			}
 			break;
 
@@ -2323,8 +2307,6 @@ void Move::StepDrivers(uint32_t now) noexcept
 			dm = dm->nextDM;
 		}
 	}
-
-	driversStepping &= steppingEnabledDriversBitmap;
 
 #ifdef DUET3_MB6XD
 	if (driversStepping != 0)
@@ -2410,6 +2392,7 @@ void Move::PrepareForNextSteps(DriveMovement *stopDm, MovementFlags flags, uint3
 		{
 			if (dm2->NewSegment(now) != nullptr && dm2->state != DMState::starting)
 			{
+				dm2->driversCurrentlyUsed = dm2->driversNormallyUsed;	// we set driversCurrentlyUsed to 0 to avoid generating a step, so restore it now
 # if SUPPORT_CAN_EXPANSION
 				flags |= dm2->segmentFlags;
 				if (unlikely(!flags.checkEndstops && dm2->driversNormallyUsed == 0))
@@ -3905,7 +3888,7 @@ void Move::TurnSmartDriversOff() noexcept
 #if SUPPORT_CAN_EXPANSION
 
 // This is called when we update endstop states because of a message from a remote board.
-// In time we may use it to help implement interrupt-driven local endstops too, but for now those are checked in the step ISR by a direct call to DDA::CheckEndstops().
+// In time we may use it to help implement interrupt-driven local endstops too, but for now those are checked in the step ISR by a direct call to CheckEndstops().
 void Move::OnEndstopOrZProbeStatesChanged() noexcept
 {
 	const uint32_t oldPrio = ChangeBasePriority(NvicPriorityStep);		// shut out the step interrupt

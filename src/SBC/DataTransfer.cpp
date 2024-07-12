@@ -35,16 +35,16 @@
 # define USE_DMAC_MANAGER	1		// use SAME5x DmacManager module
 constexpr IRQn SBC_SPI_IRQn = SbcSpiSercomIRQn;
 
-# if HAS_LWIP_NETWORKING
-#  include "LwipEthernet/AllocateFromPbufPool.h"
-# endif
-
 #elif STM32
 # define USE_DMAC			0
 # define USE_XDMAC			0
 uint32_t HeaderCRCErrors, DataCRCErrors;
 #else
 # error Unknown board
+#endif
+
+#if HAS_LWIP_NETWORKING
+# include "LwipEthernet/AllocateFromPbufPool.h"
 #endif
 
 #if USE_DMAC
@@ -420,8 +420,10 @@ __nocache TransferHeader DataTransfer::rxHeader;
 __nocache TransferHeader DataTransfer::txHeader;
 __nocache uint32_t DataTransfer::rxResponse;
 __nocache uint32_t DataTransfer::txResponse;
+#if STM32H7
 alignas(4) __nocache char DataTransfer::rxBuffer[SbcTransferBufferSize];
 alignas(4) __nocache char DataTransfer::txBuffer[SbcTransferBufferSize];
+#endif
 #endif
 
 DataTransfer::DataTransfer() noexcept : state(InternalTransferState::ExchangingData), lastTransferNumber(0), failedTransfers(0), checksumErrors(0),
@@ -463,22 +465,33 @@ void DataTransfer::Init() noexcept
 	// Initialise transfer ready pin
 	pinMode(SbcTfrReadyPin, OUTPUT_LOW);
 
-#if !SAME70 && !STM32
-	// Allocate buffers in SBC mode
-# if HAS_LWIP_NETWORKING && defined(DUET3MINI_V04)
+#if HAS_LWIP_NETWORKING
+	// We are going try allocating the transfer buffer memory from the PBUF pool.
+	// In SAME70 builds we are relying on the PBUF pool size being large enough to accommodate both transfer buffers, because they must be in non-cached RAM.
 	InitAllocationFromPbufPool();				// we are not using a wired Ethernet interface on the Duet so we can use the PBUF pool memory
 	{
 		void *const mem = AllocateFromPbufPool(SbcTransferBufferSize);
+# if SAME70
+		rxBuffer = (char *)mem;					// we MUST allocate from the PBUF pool because we need the memory to be non-cached
+# else
 		rxBuffer = (mem != nullptr) ? (char *)mem : (char *)new uint32_t[(SbcTransferBufferSize + 3)/4];
+# endif
 	}
 	{
 		void *const mem = AllocateFromPbufPool(SbcTransferBufferSize);
-		txBuffer = (mem != nullptr) ? (char *)mem : (char *)new uint32_t[(SbcTransferBufferSize + 3)/4];
-	}
+# if SAME70
+		txBuffer = (char *)mem;
 # else
+		txBuffer = (mem != nullptr) ? (char *)mem : (char *)new uint32_t[(SbcTransferBufferSize + 3)/4];
+# endif
+	}
+#elif STM32
+	// Nothing to do, we have already allocated memory
+#elif SAME70
+# error Must allocate buffers from non-cached RAM
+#else
 	rxBuffer = (char *)new uint32_t[(SbcTransferBufferSize + 3)/4];
 	txBuffer = (char *)new uint32_t[(SbcTransferBufferSize + 3)/4];
-# endif
 #endif
 
 #if STM32
@@ -648,20 +661,6 @@ GCodeChannel DataTransfer::ReadCodeChannel() noexcept
 {
 	const CodeChannelHeader *header = ReadDataHeader<CodeChannelHeader>();
 	return GCodeChannel(header->channel);
-}
-
-void DataTransfer::ReadFileChunk(char *buffer, int32_t& dataLength, uint32_t& fileLength) noexcept
-{
-	// Read header
-	const FileChunk *header = ReadDataHeader<FileChunk>();
-	dataLength = header->dataLength;
-	fileLength = header->fileLength;
-
-	// Read file chunk
-	if (header->dataLength > 0)
-	{
-		memcpy(buffer, ReadData(header->dataLength), header->dataLength);
-	}
 }
 
 GCodeChannel DataTransfer::ReadEvaluateExpression(size_t packetLength, const StringRef& expression) noexcept
@@ -1239,27 +1238,6 @@ bool DataTransfer::WriteLocked(GCodeChannel channel) noexcept
 	header->channel = channel.ToBaseType();
 	header->paddingA = 0;
 	header->paddingB = 0;
-	return true;
-}
-
-bool DataTransfer::WriteFileChunkRequest(const char *filename, uint32_t offset, uint32_t maxLength) noexcept
-{
-	const size_t filenameLength = strlen(filename);
-	if (!CanWritePacket(sizeof(FileChunkHeader) + filenameLength))
-	{
-		return false;
-	}
-	// Write packet header
-	(void)WritePacketHeader(FirmwareRequest::FileChunk, sizeof(FileChunkHeader) + filenameLength);
-
-	// Write header
-	FileChunkHeader *header = WriteDataHeader<FileChunkHeader>();
-	header->offset = offset;
-	header->maxLength = maxLength;
-	header->filenameLength = filenameLength;
-
-	// Write data
-	WriteData(filename, filenameLength);
 	return true;
 }
 
