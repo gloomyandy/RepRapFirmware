@@ -203,13 +203,13 @@ constexpr uint32_t CanClockIntervalMillis = 200;
 
 #if SUPPORT_SPICAN
 // CanSender management task
-constexpr size_t CanSenderTaskStackWords = 500;
+constexpr size_t CanSenderTaskStackWords = 250;
 static TASKMEM Task<CanSenderTaskStackWords> canSenderTask;
 
-constexpr size_t CanReceiverTaskStackWords = 500;
+constexpr size_t CanReceiverTaskStackWords = 350;
 static TASKMEM Task<CanReceiverTaskStackWords> canReceiverTask;
 
-constexpr size_t CanClockTaskStackWords = 500;			// used to be 300 but RD had a stack overflow
+constexpr size_t CanClockTaskStackWords = 250;			// used to be 300 but RD had a stack overflow
 static TASKMEM Task<CanSenderTaskStackWords> canClockTask;
 #else
 // CanSender management task

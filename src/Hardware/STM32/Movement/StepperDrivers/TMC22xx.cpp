@@ -67,7 +67,7 @@ constexpr bool DefaultInterpolation = true;					// interpolation enabled
 constexpr uint32_t DefaultTpwmthrsReg = 2000;				// low values (high changeover speed) give horrible jerk at the changeover from stealthChop to spreadCycle
 constexpr uint32_t MaximumWaitTime = 10;					// Wait time for commands we need to complete
 constexpr uint16_t DriverNotPresentTimeouts = 10;			// Number of timeouts before we decide to ignore the driver
-constexpr size_t TmcTaskStackWords = 200;
+constexpr size_t TmcTaskStackWords = 140;
 
 #if HAS_STALL_DETECT
 const int DefaultStallDetectThreshold = 1;

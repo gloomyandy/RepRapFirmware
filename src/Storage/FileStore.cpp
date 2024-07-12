@@ -837,7 +837,7 @@ bool FileStore::SetClusterMap(uint32_t tbl[]) noexcept
 #endif
 
 #if HAS_WRITER_TASK
-constexpr size_t WriterStackWords = 600;
+constexpr size_t WriterStackWords = 200;
 constexpr uint32_t FileIoTimeout = 2000;
 
 static TASKMEM Task<WriterStackWords> WriterTask;
