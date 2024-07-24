@@ -345,6 +345,12 @@ DEFINE_GET_OBJECT_MODEL_TABLE(Move)
 
 Move::Move() noexcept
 	:
+#ifdef DUET3_MB6XD
+	  lastStepHighTime(0),
+#else
+	  lastStepLowTime(0),
+#endif
+	  lastDirChangeTime(0),
 #if SUPPORT_ASYNC_MOVES
 	  heightController(nullptr),
 #endif
@@ -671,7 +677,6 @@ void Move::SetDriveStepsPerMm(size_t axisOrExtruder, float value, uint32_t reque
 
 [[noreturn]] void Move::MoveLoop() noexcept
 {
-
 	timer.SetCallback(Move::TimerCallback, CallbackParameter(this));
 	for (;;)
 	{
@@ -1029,11 +1034,6 @@ void Move::Diagnostics(MessageType mtype) noexcept
 	p.MessageF(mtype, "%s\n", scratchString.c_str());
 	axisShaper.Diagnostics(mtype);
 
-	for (size_t i = 0; i < ARRAY_SIZE(rings); ++i)
-	{
-		rings[i].Diagnostics(mtype, i);
-	}
-
 	// Show the motor position and stall status
 	for (size_t drive = 0; drive < NumDirectDrivers; ++drive)
 	{
@@ -1054,6 +1054,12 @@ void Move::Diagnostics(MessageType mtype) noexcept
 #endif
 		driverStatus.cat('\n');
 		p.Message(mtype, driverStatus.c_str());
+	}
+
+	// Show the status of each DDA ring
+	for (size_t i = 0; i < ARRAY_SIZE(rings); ++i)
+	{
+		rings[i].Diagnostics(mtype, i);
 	}
 }
 
@@ -2055,8 +2061,11 @@ void Move::Interrupt() noexcept
 	{
 		uint32_t now = StepTimer::GetMovementTimerTicks();
 		const uint32_t isrStartTime = now;
+#if 0	// TEMP DEBUG - see later
 		for (unsigned int iterationCount = 0; ; )
-//		for (;;)
+#else
+		for (;;)
+#endif
 		{
 			// Generate steps for the current move segments
 			StepDrivers(now);									// check endstops if necessary and step the drivers
@@ -2093,13 +2102,12 @@ void Move::Interrupt() noexcept
 					// Reschedule the next step interrupt. This time it should succeed if the hiccup time was long enough.
 					if (!ScheduleNextStepInterrupt())
 					{
-#if 1	//TEMP DEBUG
+#if 0	//TEMP DEBUG
 # if SUPPORT_CAN_EXPANSION
 						debugPrintf("Add hiccup %" PRIu32 ", ic=%u, now=%" PRIu32 "\n", hiccupTimeInserted, iterationCount, now);
 # else
 						debugPrintf("Add hiccup, ic=%u, now=%" PRIu32 "\n", iterationCount, now);
 # endif
-#endif
 						activeDMs->DebugPrint();
 						MoveSegment::DebugPrintList(activeDMs->segments);
 						if (activeDMs->nextDM != nullptr)
@@ -2109,6 +2117,7 @@ void Move::Interrupt() noexcept
 
 						}
 						//END DEBUG
+#endif
 #if SUPPORT_CAN_EXPANSION
 # if SUPPORT_REMOTE_COMMANDS
 						if (CanInterface::InExpansionMode())
@@ -2392,7 +2401,7 @@ void Move::PrepareForNextSteps(DriveMovement *stopDm, MovementFlags flags, uint3
 		{
 			if (dm2->NewSegment(now) != nullptr && dm2->state != DMState::starting)
 			{
-				dm2->driversCurrentlyUsed = dm2->driversNormallyUsed;	// we set driversCurrentlyUsed to 0 to avoid generating a step, so restore it now
+				dm2->driversCurrentlyUsed = dm2->driversNormallyUsed;	// we previously set driversCurrentlyUsed to 0 to avoid generating a step, so restore it now
 # if SUPPORT_CAN_EXPANSION
 				flags |= dm2->segmentFlags;
 				if (unlikely(!flags.checkEndstops && dm2->driversNormallyUsed == 0))
@@ -2908,14 +2917,14 @@ GCodeResult Move::ConfigureDriverBrakePort(GCodeBuffer& gb, const StringRef& rep
 # if SUPPORT_BRAKE_PWM
 		brakePorts[driver].SetFrequency(BrakePwmFrequency);
 # endif
-		motorOffDelays[driver] = DefaultDelayAfterBrakeOn;
+		motorOffDelays[driver] = brakeOffDelays[driver] = DefaultDelayAfterBrakeOn;
 	}
 
 	uint32_t val;
 	if (gb.TryGetLimitedUIValue('S', val, seen, 1000))
 	{
 		seen = true;
-		motorOffDelays[driver] = val;
+		motorOffDelays[driver] = brakeOffDelays[driver] = (uint16_t)val;
 	}
 
 # if SUPPORT_BRAKE_PWM
@@ -2932,9 +2941,7 @@ GCodeResult Move::ConfigureDriverBrakePort(GCodeBuffer& gb, const StringRef& rep
 			reply.catf(" with voltage limited to %.1f by PWM", (double)brakeVoltages[driver]);
 		}
 # endif
-# if 0	// don't print this bit until we have implemented it!
-		reply.catf(" and %ums delay after turning the brake on", delayAfterBrakeOn[driver]);
-# endif
+		reply.catf(", brake delay %ums", motorOffDelays[driver]);
 	}
 	return GCodeResult::ok;
 }
@@ -4033,10 +4040,7 @@ GCodeResult Move::EutHandleSetDriverStates(const CanMessageMultipleDrivesRequest
 				break;
 
 			case DriverStateControl::driverIdle:
-				{
-					const uint16_t idleCurrentPercent = msg.values[count].idlePercentOrDelayAfterBrakeOn >> 4;
-					UpdateMotorCurrent(driver, motorCurrents[driver] * (float)idleCurrentPercent * 0.01);
-				}
+				UpdateMotorCurrent(driver, motorCurrents[driver] * (float)msg.values[count].idlePercent * 0.01);
 				driverState[driver] = DriverStatus::idle;
 				break;
 

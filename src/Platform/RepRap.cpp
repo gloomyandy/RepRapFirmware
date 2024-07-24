@@ -665,17 +665,14 @@ void RepRap::Init() noexcept
 			platform->MessageF(AddWarning(UsbMessage), "%s\n", reply.c_str());
 		}
 	}
-#elif defined(DUET_NG)
-	// It's the SBC build of Duet 2 firmware. Enable the PanelDue port so that the ATE can test it.
-	platform->SetBaudRate(1, 57600);
-	platform->SetCommsProperties(1, 1);
-	gCodes->SetAux0CommsProperties(1);
-	platform->SetAuxRaw(0, false);
-	platform->EnableAux(0);
 #endif
 #endif
 
 #if HAS_SBC_INTERFACE
+# if defined(DUET_NG)
+	// It's the SBC build of Duet 2 firmware. Enable the PanelDue port so that the ATE can test it.
+	platform->EnablePanelDuePort();
+# endif
 # if STM32
 	if (usingSbcInterface)
 	{
@@ -695,6 +692,7 @@ void RepRap::Init() noexcept
 		GetSbcInterface().FreeMemory();
 	}
 # endif
+
 	if (usingSbcInterface)
 	{
 		sbcInterface->Init();

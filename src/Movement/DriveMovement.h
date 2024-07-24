@@ -43,8 +43,6 @@ public:
 	void Init(size_t drv) noexcept;
 
 	bool CalcNextStepTime(uint32_t now) noexcept SPEED_CRITICAL;
-	bool PrepareCartesianAxis(const DDA& dda, const PrepParams& params) noexcept SPEED_CRITICAL;
-	bool PrepareExtruder(const DDA& dda, const PrepParams& params, float signedEffStepsPerMm) noexcept SPEED_CRITICAL;
 
 	void DebugPrint() const noexcept;
 	int32_t GetCurrentMotorPosition() const noexcept { return currentMotorPosition; }
@@ -83,7 +81,7 @@ private:
 	void ReleaseSegments() noexcept;					// release the list of segments and set it to nullptr
 	bool LogStepError(uint8_t type) noexcept;			// tell the Move class that we had a step error
 
-#if 1	//DEBUG
+#if CHECK_SEGMENTS
 	void CheckSegment(unsigned int line, MoveSegment *seg) noexcept;
 #endif
 
@@ -162,7 +160,6 @@ inline bool DriveMovement::CalcNextStepTime(uint32_t now) noexcept
 }
 
 // Return the number of net steps already taken for the current segment in the forwards direction.
-// We have already taken nextSteps - 1 steps
 // Caller must disable interrupts before calling this
 inline int32_t DriveMovement::GetNetStepsTaken() const noexcept
 {

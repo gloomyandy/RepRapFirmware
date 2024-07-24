@@ -132,6 +132,7 @@ void PrepParams::SetFromDDA(const DDA& dda) noexcept
 	deceleration = dda.deceleration;
 	accelClocks = lrintf((dda.topSpeed - dda.startSpeed)/dda.acceleration);
 	decelClocks = lrintf((dda.topSpeed - dda.endSpeed)/dda.deceleration);
+	useInputShaping = dda.flags.xyMoving && !dda.flags.isolatedMove && !dda.flags.isLeadscrewAdjustmentMove;
 }
 
 void PrepParams::DebugPrint() const noexcept
@@ -632,6 +633,14 @@ bool DDA::InitFromRemote(const CanMessageMovementLinearShaped& msg) noexcept
 		clocksNeeded = params.steadyClocks = 1;
 	}
 
+	const float accelDistanceExTopSpeed = -0.5 * params.acceleration * fsquare((float)params.accelClocks);
+	const float decelDistanceExTopSpeed = -0.5 * params.deceleration * fsquare((float)params.decelClocks);
+	topSpeed = (params.totalDistance - accelDistanceExTopSpeed - decelDistanceExTopSpeed)/clocksNeeded;
+
+	params.accelDistance =      accelDistanceExTopSpeed + topSpeed * params.accelClocks;
+	const float decelDistance = decelDistanceExTopSpeed + topSpeed * params.decelClocks;
+	params.decelStartDistance =  1.0 - decelDistance;
+
 	MovementFlags segFlags;
 	segFlags.Clear();
 	segFlags.nonPrintingMove = !msg.usePressureAdvance;
@@ -654,9 +663,8 @@ bool DDA::InitFromRemote(const CanMessageMovementLinearShaped& msg) noexcept
 			directionVector[drive] = extrusionRequested;
 			if (extrusionRequested != 0.0)
 			{
+				move.EnableDrivers(drive, false);
 				move.AddLinearSegments(*this, drive, msg.whenToExecute, params, extrusionRequested, segFlags);
-				//TODO will Move do the following?
-				reprap.GetMove().EnableDrivers(drive, false);
 			}
 		}
 		else
@@ -665,10 +673,9 @@ bool DDA::InitFromRemote(const CanMessageMovementLinearShaped& msg) noexcept
 			directionVector[drive] = delta;
 			if (delta != 0.0)
 			{
+				move.EnableDrivers(drive, false);
 				move.AddLinearSegments(*this, drive, msg.whenToExecute, params, delta, segFlags);
 				afterPrepare.drivesMoving.SetBit(drive);
-				//TODO will Move do the following?
-				reprap.GetMove().EnableDrivers(drive, false);
 			}
 		}
 	}
@@ -1143,7 +1150,7 @@ void DDA::Prepare(DDARing& ring, SimulationMode simMode) noexcept
 		MovementFlags segFlags;
 		segFlags.Clear();
 		segFlags.checkEndstops = flags.checkEndstops;
-		segFlags.noShaping = flags.isolatedMove || !flags.xyMoving || flags.isLeadscrewAdjustmentMove;
+		segFlags.noShaping = !params.useInputShaping;
 		segFlags.nonPrintingMove = !flags.isPrintingMove;
 		for (size_t drive = 0; drive < MaxAxesPlusExtruders; ++drive)
 		{

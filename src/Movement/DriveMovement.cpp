@@ -91,8 +91,7 @@ void DriveMovement::AddSegment(uint32_t startTime, uint32_t duration, motioncalc
 	// Adjust the distance (and implicitly the initial speed) to account for pressure advance
 	if (isExtruder && !moveFlags.nonPrintingMove)
 	{
-		const motioncalc_t extraSpeed = a * (motioncalc_t)extruderShaper.GetKclocks();
-		distance += extraSpeed * (motioncalc_t)duration;
+		distance += a * (motioncalc_t)extruderShaper.GetKclocks() * (motioncalc_t)duration;
 	}
 
 #if !SEGMENT_DEBUG
@@ -125,8 +124,9 @@ void DriveMovement::AddSegment(uint32_t startTime, uint32_t duration, motioncalc
 				 RestoreBasePriority(oldPrio);
 				 if (reprap.Debug(Module::Move))
 				 {
-					 debugPrintf("was executing, overlap %" PRIi32 " while trying to add s=%" PRIu32 " t=%" PRIu32 " d=%.2f a=%.4e f=%02" PRIx32 " at time %" PRIu32 "\n",
+					 debugPrintf("overlaps executing seg %" PRIi32 " while trying to add s=%" PRIu32 " t=%" PRIu32 " d=%.2f a=%.4e f=%02" PRIx32 " at time %" PRIu32 "\n",
 						 	 	 	 -timeInHand, startTime, duration, (double)distance, (double)a, moveFlags.all, now);
+					 MoveSegment::DebugPrintList(seg);
 				 }
 				 return;
 			 }
@@ -167,7 +167,7 @@ void DriveMovement::AddSegment(uint32_t startTime, uint32_t duration, motioncalc
 					{
 						prev->SetNext(seg);
 					}
-#if 1	//debug
+#if CHECK_SEGMENTS
 					CheckSegment(__LINE__, prev);
 					CheckSegment(__LINE__, seg);
 #endif
@@ -206,7 +206,7 @@ void DriveMovement::AddSegment(uint32_t startTime, uint32_t duration, motioncalc
 					{
 						prev = seg;
 						seg = seg->Split((uint32_t)offset);
-#if 1	//debug
+#if CHECK_SEGMENTS
 						CheckSegment(__LINE__, prev);
 						CheckSegment(__LINE__, seg);
 #endif
@@ -236,7 +236,7 @@ void DriveMovement::AddSegment(uint32_t startTime, uint32_t duration, motioncalc
 						debugPrintf("merge1: ");
 #endif
 						seg->Merge(firstDistance, a, moveFlags);
-#if 1	//debug
+#if CHECK_SEGMENTS
 						CheckSegment(__LINE__, prev);
 						CheckSegment(__LINE__, seg);
 #endif
@@ -252,7 +252,7 @@ void DriveMovement::AddSegment(uint32_t startTime, uint32_t duration, motioncalc
 						{
 							// Split the existing segment in two
 							seg->Split(duration);
-#if 1	//debug
+#if CHECK_SEGMENTS
 							CheckSegment(__LINE__, prev);
 							CheckSegment(__LINE__, seg);
 #endif
@@ -288,9 +288,9 @@ void DriveMovement::AddSegment(uint32_t startTime, uint32_t duration, motioncalc
 	}
 
 finished:
-#if 1	//debug
-					CheckSegment(__LINE__, prev);
-					CheckSegment(__LINE__, seg);
+#if CHECK_SEGMENTS
+	CheckSegment(__LINE__, prev);
+	CheckSegment(__LINE__, seg);
 #endif
 #if SEGMENT_DEBUG
 	MoveSegment::DebugPrintList(segments);
@@ -503,7 +503,6 @@ MoveSegment *DriveMovement::NewSegment(uint32_t now) noexcept
 }
 
 // Version of fastSqrt that allows for slightly negative operands caused by rounding error
-
 static inline motioncalc_t fastLimSqrtm(motioncalc_t f) noexcept
 {
 #if USE_DOUBLE_MOTIONCALC
@@ -783,7 +782,7 @@ bool DriveMovement::StopDriver(int32_t& netStepsTaken) noexcept
 	return false;
 }
 
-#if 1	//DEBUG
+#if CHECK_SEGMENTS
 
 void DriveMovement::CheckSegment(unsigned int line, MoveSegment *seg) noexcept
 {

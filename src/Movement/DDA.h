@@ -31,7 +31,6 @@ struct PrepParams
 	uint32_t accelClocks, steadyClocks, decelClocks;
 	float acceleration, deceleration;				// the acceleration and deceleration to use, both positive
 	float topSpeed;									// the top speed, may be modified by the input shaper
-	bool modified;									// true if this has been modified since we set it from the DDA
 	bool useInputShaping;
 
 	// Get the total clocks needed
@@ -258,7 +257,7 @@ private:
 			// These are calculated from the above and used in the ISR, so they are set up by Prepare()
 			uint32_t moveStartTime;					// clock count at which the move is due to start (before execution) or was started (during execution)
 			float averageExtrusionSpeed;			// the average extrusion speed in mm/sec, for applying heater feedforward
-			AxesBitmap drivesMoving;				// bitmap of logical drives moving - needed to keep track of whether remote drives are moving and to determine when a nve that checks endsts has terminated
+			AxesBitmap drivesMoving;				// bitmap of logical drives moving - needed to keep track of whether remote drives are moving and to determine when a move that checks endstops has terminated
 		} afterPrepare;
 	};
 
