@@ -352,7 +352,7 @@ public:
 	void SetMaxCurrent(float value) noexcept;
 	void AppendDriverStatus(const StringRef& reply) noexcept;
 	float GetDriverTemperature() noexcept;
-	bool UpdatePending() const noexcept { return (registersToUpdate | newRegistersToUpdate.load()) != 0; }
+	bool UpdatePending() const noexcept { return (registersToUpdate.load() | newRegistersToUpdate.load()) != 0; }
 #if HAS_STALL_DETECT
 	void SetStallDetectThreshold(int sgThreshold) noexcept;
 	void SetStallDetectFilter(bool sgFilter) noexcept;
@@ -440,7 +440,7 @@ private:
 	uint32_t minSgLoadRegister;								// the minimum value of the StallGuard bits we read
 
 	std::atomic<uint32_t> newRegistersToUpdate;				// bitmap of register indices whose values need to be sent to the driver chip
-	uint32_t registersToUpdate;								// bitmap of register indices whose values need to be sent to the driver chip
+	std::atomic<uint32_t> registersToUpdate;								// bitmap of register indices whose values need to be sent to the driver chip
 	DriversBitmap driverBit;								// a bitmap containing just this driver number
 	uint32_t axisNumber;									// the axis number of this driver as used to index the DriveMovements in the DDA
 	uint32_t microstepShiftFactor;							// how much we need to shift 1 left by to get the current microstepping
@@ -503,7 +503,7 @@ pre(!driversPowered)
 	axisNumber = p_driverNumber;										// axes are mapped straight through to drivers initially
 	driverBit = DriversBitmap::MakeFromBits(p_driverNumber);
 	enabled = false;
-	registersToUpdate = 0;
+	registersToUpdate.store(0);
 	newRegistersToUpdate.store(0);
 	specialReadRegisterNumber = specialWriteRegisterNumber = 0xFF;
 	motorCurrent = 0;
@@ -1021,12 +1021,8 @@ void Tmc51xxDriverState::AppendStallConfig(const StringRef& reply) const noexcep
 bool Tmc51xxDriverState::GetSpiCommand(uint8_t *sendDataBlock, bool forceRead) noexcept
 {
 	// Find which register to send. The common case is when no registers need to be updated.
-	{
-		TaskCriticalSectionLocker lock;
-		registersToUpdate |= newRegistersToUpdate.exchange(0);
-	}
-
-	if (registersToUpdate == 0 || forceRead)
+	const uint32_t locRegistersToUpdate = (registersToUpdate |= newRegistersToUpdate.exchange(0));
+	if (locRegistersToUpdate == 0 || forceRead)
 	{
 		// Read a register
 		regIndexBeingUpdated = NoRegIndex;
@@ -1053,7 +1049,7 @@ bool Tmc51xxDriverState::GetSpiCommand(uint8_t *sendDataBlock, bool forceRead) n
 	else
 	{
 		// Write a register
-		const size_t regNum = LowestSetBit(registersToUpdate);
+		const size_t regNum = LowestSetBit(locRegistersToUpdate);
 		regIndexBeingUpdated = regNum;
 		sendDataBlock[0] = ((regNum == WriteSpecial) ? specialWriteRegisterNumber : WriteRegNumbers[regNum]) | 0x80;
 		StoreBEU32(sendDataBlock + 1, writeRegisters[regNum]);
