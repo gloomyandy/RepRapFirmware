@@ -38,7 +38,7 @@ void AuxDevice::SetMode(AuxMode p_mode) noexcept
 		else
 		{
 #if SUPPORT_MODBUS_RTU
-			uart->SetOnTxEndedCallback((mode == AuxMode::modbus_rtu) ? GlobalTxEndedCallback : nullptr, CallbackParameter(this));
+			uart->SetOnTxEndedCallback((p_mode == AuxMode::modbus_rtu) ? GlobalTxEndedCallback : nullptr, CallbackParameter(this));
 #endif
 			uart->begin(baudRate);
 			mode = p_mode;
@@ -182,10 +182,11 @@ void AuxDevice::AppendDirectionPortName(const StringRef& reply) const noexcept
 	txNotRx.AppendPinName(reply);
 }
 
-// Send some Modbus registers. May return GCodeResult notFinished if the buffer had insufficient room  but may have enough later, or the port was busy.
+// Send some Modbus registers. Returns GCodeResult::error if we failed to acquire the mutex, GCodeResult::ok if we sent the command.
+// After receiving the GCodeResult::ok response the caller must call CheckModbusResult until it doesn't return GCodeResult::notFinished.
 GCodeResult AuxDevice::SendModbusRegisters(uint8_t p_slaveAddress, uint16_t p_startRegister, uint16_t p_numRegisters, const uint16_t *data) noexcept
 {
-	if (numRegisters == 0 || numRegisters > MaxModbusRegisters)
+	if (p_numRegisters == 0 || p_numRegisters > MaxModbusRegisters)
 	{
 		return GCodeResult::badOrMissingParameter;
 	}
@@ -214,7 +215,7 @@ GCodeResult AuxDevice::SendModbusRegisters(uint8_t p_slaveAddress, uint16_t p_st
 		ModbusWriteWord(data[i]);
 	}
 
-	uart->write((uint8_t)crc.Get());						// CRC is sent low byte first
+	uart->write((uint8_t)crc.Get());
 	uart->write((uint8_t)(crc.Get() >> 8));
 
 	txNotRx.WriteDigital(true);								// set RS485 direction to transmit
@@ -227,10 +228,11 @@ GCodeResult AuxDevice::SendModbusRegisters(uint8_t p_slaveAddress, uint16_t p_st
 	return GCodeResult::ok;
 }
 
-// Read some Modbus registers. May return GCodeResult notFinished if the buffer had insufficient room  but may have enough later, or the port was busy.
+// Read some Modbus registers. Returns GCodeResult::error if we failed to acquire the mutex, GCodeResult::ok if we sent the command.
+// After receiving the GCodeResult::ok response the caller must call CheckModbusResult until it doesn't return GCodeResult::notFinished.
 GCodeResult AuxDevice::ReadModbusRegisters(uint8_t p_slaveAddress, uint16_t p_startRegister, uint16_t p_numRegisters, uint16_t *data) noexcept
 {
-	if (numRegisters == 0 || numRegisters > MaxModbusRegisters)
+	if (p_numRegisters == 0 || p_numRegisters > MaxModbusRegisters)
 	{
 		return GCodeResult::badOrMissingParameter;
 	}
@@ -253,7 +255,7 @@ GCodeResult AuxDevice::ReadModbusRegisters(uint8_t p_slaveAddress, uint16_t p_st
 	ModbusWriteWord(startRegister);
 	numRegisters = p_numRegisters;
 	ModbusWriteWord(numRegisters);
-	uart->write((uint8_t)crc.Get());						// CRC is sent low byte first
+	uart->write((uint8_t)crc.Get());
 	uart->write((uint8_t)(crc.Get() >> 8));
 
 	txNotRx.WriteDigital(true);								// set port to transmit
@@ -305,7 +307,8 @@ GCodeResult AuxDevice::CheckModbusResult() noexcept
 			break;
 
 		case ModbusFunction::readInputRegisters:
-			if (ModbusReadWord() == startRegister && ModbusReadWord() == numRegisters && ModbusReadByte() == 2 * numRegisters)
+		case ModbusFunction::readHoldingRegisters:
+			if (ModbusReadByte() == 2 * numRegisters)
 			{
 				while (numRegisters != 0)
 				{
@@ -344,6 +347,9 @@ uint8_t AuxDevice::ModbusReadByte() noexcept
 {
 	const uint8_t b = uart->read();
 	crc.UpdateModbus(b);
+#if 0
+	debugPrintf("Modbus Rx %02x\n", b);
+#endif
 	return b;
 }
 
