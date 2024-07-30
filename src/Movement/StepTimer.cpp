@@ -95,9 +95,7 @@ void StepTimer::Init() noexcept
 	//debugPrintf("ST clock rate %d ST base freq %d setting presacle %d\n", StepClockRate, static_cast<int>(STimer.getTimerClkFreq()), static_cast<int>(preScale));
 	STimer.setPrescaleFactor(preScale);
 	STimer.setOverflow(0, TICK_FORMAT);
-	STimer.setMode(1, TIMER_OUTPUT_COMPARE);
 	STHandle = &(HardwareTimer_Handle[get_timer_index(STEP_TC)]->handle);
-	STimer.setCaptureCompare(1, 1000, TICK_COMPARE_FORMAT);
 	NVIC_SetPriority(STEP_TC_IRQN, NvicPriorityStep);			    // Set the priority for this IRQ
 	STimer.resume();
 	__HAL_TIM_DISABLE_IT(STHandle, TIM_IT_CC1);
@@ -224,6 +222,7 @@ bool StepTimer::ScheduleTimerInterrupt(uint32_t tim) noexcept
 	StepTc->INTFLAG.reg = TC_INTFLAG_MC0;							// clear any existing compare match
 	StepTc->INTENSET.reg = TC_INTFLAG_MC0;
 #elif STM32
+	__HAL_TIM_CLEAR_IT(STHandle, TIM_IT_CC1);
 	__HAL_TIM_SET_COMPARE(STHandle, TIM_CHANNEL_1, tim);
 	__HAL_TIM_ENABLE_IT(STHandle, TIM_IT_CC1);
 #else
