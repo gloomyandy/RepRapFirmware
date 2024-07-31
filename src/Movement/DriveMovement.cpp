@@ -59,17 +59,20 @@ void DriveMovement::DebugPrint() const noexcept
 	}
 }
 
+// Set the position of a motor. Only call this when the motor is not moving.
 void DriveMovement::SetMotorPosition(int32_t pos) noexcept
 {
 	if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintTransforms))
 	{
 		debugPrintf("Changing drive %u pos from %" PRIi32 " to %" PRIi32 "\n", drive, currentMotorPosition, pos);
 	}
-	currentMotorPosition = pos;
+	currentMotorPosition = positionAtSegmentStart = pos;
 #if STEPS_DEBUG
 	positionRequested = (float)pos;
 #endif
 	ClearMovementPending();
+	movementAccumulator.store(0);
+	extruderPrinting = false;
 }
 
 // Calculate the initial speed given the duration, distance and acceleration
@@ -717,26 +720,28 @@ pre(stepsTillRecalc == 0; segments != nullptr)
 
 #if SUPPORT_CAN_EXPANSION
 
-// This is called when the 'drive' (i.e. axis) concerned has no local drivers and we are not checking endstops or Z probe.
+// This is called when the 'drive' (i.e. axis or extruder) concerned has no local drivers and we are not checking endstops or Z probe.
 // Instead of generating an interrupt for each step of the remote drive, generate interrupts only occasionally and at the end of each segment, to keep the axis position fairly up to date.
 // We must not call NewSegment significantly in advance of when the segment is due to start, to allow for segments being modified as new ones are added.
 // To make sure this is the case we schedule an interrupt at the end of each segment, so that a segment cannot be started before the previous one has completed.
 void DriveMovement::TakeStepsAndCalcStepTimeRarely(uint32_t clocksNow) noexcept
 {
-	MoveSegment *const currentSegment = segments;				// capture volatile variable
+	MoveSegment *currentSegment = segments;				// capture volatile variable
 	if (state == DMState::ending)
 	{
 		currentMotorPosition = positionAtSegmentStart + netStepsThisSegment;
 		distanceCarriedForwards += currentSegment->GetLength() - (motioncalc_t)netStepsThisSegment;
 		segments = currentSegment->GetNext();
 		MoveSegment::Release(currentSegment);
-		if (NewSegment(clocksNow) == nullptr || state == DMState::starting)
+		currentSegment = NewSegment(clocksNow);
+		if (currentSegment == nullptr || state == DMState::starting)
 		{
 			return;
 		}
 	}
 
-	const int32_t timeFromStart = (int32_t)(clocksNow - currentSegment->GetStartTime());
+	// We may be invoked slightly before the move started, so allow for that
+	const uint32_t timeFromStart = (uint32_t)max<int32_t>((int32_t)(clocksNow - currentSegment->GetStartTime()), 0);
 	currentMotorPosition = positionAtSegmentStart + lrintf((currentSegment->CalcU() + ((motioncalc_t)0.5 * currentSegment->GetA() * (motioncalc_t)timeFromStart)) * (motioncalc_t)timeFromStart + distanceCarriedForwards);
 	uint32_t targetTime;
 	if (currentSegment->GetDuration() <= timeFromStart + MoveTiming::MaxRemoteDriverPositionUpdateInterval)
