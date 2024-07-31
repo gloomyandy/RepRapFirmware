@@ -334,7 +334,7 @@ void DMABitIOInit() noexcept
     SUPeriod = period;
     SUTimer.setOverflow(period*SU_OVERSAMPLE, TICK_FORMAT);
     SUTimer.setCount(0, TICK_FORMAT);
-    __HAL_TIM_ENABLE_DMA(&(HardwareTimer_Handle[get_timer_index(TIM1)]->handle), TIM_DMA_UPDATE);
+    __HAL_TIM_ENABLE_DMA(SUTimer.getHandle(), TIM_DMA_UPDATE);
     __HAL_RCC_DMA2_CLK_ENABLE();    
     SUDma.Instance                 = DMA2_Stream5;
 #if STM32H7
