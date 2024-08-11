@@ -56,7 +56,11 @@ namespace CanInterface
 	CanMessageBuffer *AllocateBuffer(const GCodeBuffer* gb) THROWS(GCodeException);
 	void CheckCanAddress(uint32_t address, const GCodeBuffer& gb) THROWS(GCodeException);
 
+#if SUPPORT_SPICAN
+	void GetTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) noexcept;
+#else
 	uint16_t GetTimeStampCounter() noexcept;
+#endif
 
 #if DUAL_CAN
 	uint32_t SendPlainMessageNoFree(CanMessageBuffer *buf, uint32_t timeout = UsualSendTimeout) noexcept;

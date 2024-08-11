@@ -282,20 +282,17 @@ void StepTimer::DisableTimerInterrupt() noexcept
 	uint16_t timeStampNow;
 #if SUPPORT_SPICAN
 	{
-		uint32_t delta;
-		uint32_t tsCheck;
-		do {
-			uint32_t startTime = StepTimer::GetTimerTicks();
-			timeStampNow = CanInterface::GetTimeStampCounter();
-			localTimeNow = StepTimer::GetTimerTicks();
-			tsCheck = CanInterface::GetTimeStampCounter();
-			delta = localTimeNow - startTime;
-			if ((int16_t)(tsCheck - timeStampNow) < 0)
-			{
-				uint32_t ts3 = CanInterface::GetTimeStampCounter();
-				debugPrintf("Bad time stamp %u %u %u\n", (unsigned)timeStampNow, (unsigned)tsCheck, (unsigned)ts3);
-			}
-		} while (delta > 50 || (int16_t)(tsCheck - timeStampNow) < 0);
+		CanInterface::GetTimeStampCounters(timeStampNow, localTimeNow);
+		uint16_t tsCheck1;
+		uint32_t tsCheck2;
+		CanInterface::GetTimeStampCounters(tsCheck1, tsCheck2);
+		if ((int16_t)(tsCheck1 - timeStampNow) < 0)
+		{
+			uint16_t tsCheck3;
+			uint32_t tsCheck4;
+			CanInterface::GetTimeStampCounters(tsCheck3, tsCheck4);
+			debugPrintf("Bad time stamp %u %u %u\n", (unsigned)timeStampNow, (unsigned)tsCheck1, (unsigned)tsCheck3);
+		}
 	}
 #else
 	{

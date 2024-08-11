@@ -19,6 +19,7 @@ Description:
 #include "Hardware/Spi/SharedSpiDevice.h"
 #include "Hardware/Spi/SharedSpiClient.h"
 #include "RTOSIface/RTOSIface.h"
+#include "StepTimer.h"
 
 class CanSpiClient
 {
@@ -71,5 +72,10 @@ extern "C" void DRV_SPI_Deselect()
 extern "C" int8_t DRV_SPI_TransferData(uint32_t index, uint8_t *SpiTxData, uint8_t *SpiRxData, size_t spiTransferSize)
 {
     return !spiDev->TransceivePacket((const uint8_t *) SpiTxData, (uint8_t *)SpiRxData, spiTransferSize);
+}
+
+extern "C" uint32_t DRV_SPI_GetStepTimerTicks()
+{
+    return StepTimer::GetTimerTicks();
 }
 #endif

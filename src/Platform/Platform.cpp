@@ -2079,19 +2079,23 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 			uint32_t startClocks, endClocks;
 			uint16_t startTimeStamp, endTimeStamp;
 			{
-# if !USE_SPICAN
+# if SUPPORT_SPICAN
+				CanInterface::GetTimeStampCounters(startTimeStamp, startClocks);
+# else
 				AtomicCriticalSectionLocker lock;
-# endif
 				startTimeStamp = CanInterface::GetTimeStampCounter();
 				startClocks = StepTimer::GetTimerTicks();
+# endif
 			}
 			delay(2);
 			{
-# if !USE_SPICAN
+# if SUPPORT_SPICAN
+				CanInterface::GetTimeStampCounters(endTimeStamp, endClocks);
+#else
 				AtomicCriticalSectionLocker lock;
-# endif
 				endTimeStamp = CanInterface::GetTimeStampCounter();
 				endClocks = StepTimer::GetTimerTicks();
+# endif
 			}
 # if SAME70
 			const uint32_t tsDiff = (endTimeStamp - startTimeStamp) & 0xFFFF;

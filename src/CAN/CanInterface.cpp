@@ -530,10 +530,17 @@ void CanInterface::CheckCanAddress(uint32_t address, const GCodeBuffer& gb) THRO
 	}
 }
 
+#if SUPPORT_SPICAN
+void CanInterface::GetTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) noexcept
+{
+	return can0dev->ReadTimeStampCounters(canTimeStamp, stepTimeStamp);
+}
+#else
 uint16_t CanInterface::GetTimeStampCounter() noexcept
 {
 	return can0dev->ReadTimeStampCounter();
 }
+#endif
 
 #if !SAME70
 
@@ -690,20 +697,17 @@ extern "C" [[noreturn]] void CanClockLoop(void *) noexcept
 		lastTimeSent = StepTimer::GetTimerTicks();
 #elif SUPPORT_SPICAN
 		{
-			uint32_t delta;
-			uint32_t tsCheck;
-			do {
-				uint32_t startTime = StepTimer::GetTimerTicks();
-				lastTimeSyncTxPreparedStamp = CanInterface::GetTimeStampCounter();
-				lastTimeSent = StepTimer::GetTimerTicks();
-				tsCheck = CanInterface::GetTimeStampCounter();
-				delta = lastTimeSent - startTime;
-				if ((int16_t)(tsCheck - lastTimeSyncTxPreparedStamp) < 0)
-				{
-					uint32_t ts3 = CanInterface::GetTimeStampCounter();
-					debugPrintf("Bad time stamp %u %u %u\n", (unsigned)lastTimeSyncTxPreparedStamp, (unsigned)tsCheck, (unsigned)ts3);
-				}
-			} while (delta > 50 || (int16_t)(tsCheck - lastTimeSyncTxPreparedStamp) < 0);
+			CanInterface::GetTimeStampCounters(lastTimeSyncTxPreparedStamp, lastTimeSent);
+			uint16_t tsCheck1;
+			uint32_t tsCheck2;
+			CanInterface::GetTimeStampCounters(tsCheck1, tsCheck2);
+			if ((int16_t)(tsCheck1 - lastTimeSyncTxPreparedStamp) < 0)
+			{
+				uint16_t tsCheck3;
+				uint32_t tsCheck4;
+				CanInterface::GetTimeStampCounters(tsCheck3, tsCheck4);
+				debugPrintf("Bad time stamp %u %u %u\n", (unsigned)lastTimeSyncTxPreparedStamp, (unsigned)tsCheck1, (unsigned)tsCheck3);
+			}
 		}
 #else
 		{
