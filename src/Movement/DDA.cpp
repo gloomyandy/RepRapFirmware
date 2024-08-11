@@ -132,7 +132,12 @@ void PrepParams::SetFromDDA(const DDA& dda) noexcept
 	deceleration = dda.deceleration;
 	accelClocks = lrintf((dda.topSpeed - dda.startSpeed)/dda.acceleration);
 	decelClocks = lrintf((dda.topSpeed - dda.endSpeed)/dda.deceleration);
-	useInputShaping = dda.flags.xyMoving && !dda.flags.isolatedMove && !dda.flags.isLeadscrewAdjustmentMove;
+	useInputShaping = dda.flags.xyMoving
+					&& !(dda.flags.isolatedMove || dda.flags.isLeadscrewAdjustmentMove
+#if SUPPORT_SCANNING_PROBES
+						 || dda.flags.scanningProbeMove
+#endif
+						) ;
 }
 
 void PrepParams::DebugPrint() const noexcept
@@ -507,6 +512,7 @@ bool DDA::InitLeadscrewMove(DDARing& ring, float feedrate, const float adjustmen
 	// 3. Store some values
 	flags.all = 0;
 	flags.isLeadscrewAdjustmentMove = true;
+	flags.isolatedMove = true;
 	virtualExtruderPosition = prev->virtualExtruderPosition;
 	tool = nullptr;
 	filePos = prev->filePos;
@@ -1123,10 +1129,6 @@ void DDA::Prepare(DDARing& ring, SimulationMode simMode) noexcept
 	params.SetFromDDA(*this);
 	clocksNeeded = params.TotalClocks();
 
-	// Copy the unshaped acceleration and deceleration back to the DDA because ManageLaserPower uses them
-	acceleration = params.acceleration;
-	deceleration = params.deceleration;
-
 	const uint32_t now = StepTimer::GetMovementTimerTicks();
 	afterPrepare.moveStartTime =  (prev->state == committed && (int32_t)(prev->afterPrepare.moveStartTime + prev->clocksNeeded - now) >= 0)
 									? prev->afterPrepare.moveStartTime + prev->clocksNeeded		// this move follows directly after the previous one
@@ -1286,6 +1288,13 @@ void DDA::Prepare(DDARing& ring, SimulationMode simMode) noexcept
 		afterPrepare.averageExtrusionSpeed = (extrusionFraction * totalDistance * (float)StepClockRate)/(float)clocksNeeded;
 
 		state = committed;																// must do this before we call CheckEndstops
+#if SUPPORT_SCANNING_PROBES
+		if (flags.scanningProbeMove)
+		{
+			move.PrepareScanningProbeDataCollection(*this, params);
+		}
+		else
+#endif
 		if (flags.checkEndstops)
 		{
 			// Before we send movement commands to remote drives, if any endstop switches we are monitoring are already set, make sure we don't start the motors concerned.
