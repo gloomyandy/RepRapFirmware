@@ -320,9 +320,9 @@ extern Pin SPIPins[NumSPIDevices][NumSPIPins]; //GPIO pins for softwareSPI (used
 
 #define SERIAL_AUX_DEVICE   UART_Slot0
 #define serialWiFi  UART_Slot1
-//#define SERIAL_AUX2_DEVICE  UART_Slot2
+#define SERIAL_AUX2_DEVICE  UART_Slot2
 
-constexpr size_t NumSerialChannels = 2;				// The number of serial IO channels (USB + AUX)
+constexpr size_t NumSerialChannels = 3;				// The number of serial IO channels (USB + AUX + AUX2)
 constexpr size_t NumberSerialPins = 2;
 extern Pin AuxSerialRxTxPins[NumberSerialPins];
 
