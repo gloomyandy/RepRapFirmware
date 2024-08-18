@@ -2368,6 +2368,7 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 	{
 # if defined(I2C_IFACE)
 	case 0:		// I2C
+	case -1:
 		{
 			uint32_t numToReceive = 0;
 			bool seenR;
@@ -2431,7 +2432,7 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 					reply.copy("Invalid Modbus data");
 					return GCodeResult::error;
 				}
-				registersToSend[0] = (values[0] == 0) ? 0 : 0x00FF;
+				registersToSend[0] = (values[0] == 0) ? 0 : 0xFF00;
 				break;
 
 			case (uint8_t)ModbusFunction::writeSingleRegister:
@@ -2507,6 +2508,7 @@ GCodeResult Platform::ReceiveI2cOrModbus(GCodeBuffer& gb, const StringRef &reply
 	{
 # if defined(I2C_IFACE)
 	case 0:		// I2C
+	case -1:
 		{
 			I2C::Init();
 			uint8_t bValues[MaxI2cOrModbusValues];
