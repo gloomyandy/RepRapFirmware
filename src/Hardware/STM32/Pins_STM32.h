@@ -111,7 +111,7 @@ constexpr size_t NumFirmwareUpdateModules = 5;        // 3 modules, plus one for
 #define SUPPORT_FTP                      1
 #define SUPPORT_ACCELEROMETERS           1
 #define HAS_WRITER_TASK                  1
-
+#define SUPPORT_MODBUS_RTU               1
 
 // The physical capabilities of the machine
 constexpr size_t NumDirectDrivers = 14;               // The maximum number of drives supported by the electronics
