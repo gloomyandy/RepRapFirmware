@@ -52,6 +52,16 @@ namespace SmartDrivers
 	void SetMaxCurrent(size_t driver, float value) noexcept;
 	float GetMaxCurrent(size_t driver) noexcept;
 	float GetDriverTemperature(size_t driver) noexcept;
+#if SUPPORT_PHASE_STEPPING
+	bool EnablePhaseStepping(size_t driver, bool enable) noexcept;
+	bool IsPhaseSteppingEnabled(size_t driver) noexcept;
+#endif
+#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
+	float GetCurrent(size_t driver) noexcept;
+	unsigned int GetMicrostepShift(size_t driver) noexcept;
+	uint16_t GetMicrostepPosition(size_t driver) noexcept;
+	bool SetMotorPhases(size_t driver, uint32_t regVal) noexcept;
+#endif
 };
 
 #endif

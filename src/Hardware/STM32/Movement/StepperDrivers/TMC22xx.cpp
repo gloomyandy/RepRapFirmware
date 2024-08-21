@@ -390,6 +390,17 @@ public:
 	void WriteAll() noexcept;
 	bool SetMicrostepping(uint8_t shift, bool interpolate) noexcept;
 	unsigned int GetMicrostepping(bool& interpolation) const noexcept;
+#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
+	unsigned int GetMicrostepShift() const noexcept { return 0; }
+	uint16_t GetMicrostepPosition() const noexcept { return 0; }
+	bool SetXdirect(uint32_t regVal) noexcept {return false;}
+	uint32_t GetPhaseToSet() const noexcept { return 0; }
+	float GetCurrent() const noexcept { return (float)0.0f; }
+#endif	
+#if SUPPORT_PHASE_STEPPING
+	bool EnablePhaseStepping(bool enable) noexcept { return false; }
+	bool IsPhaseSteppingEnabled() const noexcept { return false; }
+#endif
 	bool SetDriverMode(unsigned int mode) noexcept;
 	DriverMode GetDriverMode() const noexcept;
 	void SetCurrent(float current) noexcept;

@@ -338,5 +338,44 @@ float SmartDrivers::GetDriverTemperature(size_t driver) noexcept
 	return (driver < numDrivers ? driverStates[driver]->GetDriverTemperature() : 0.0f);
 }
 
+#if SUPPORT_PHASE_STEPPING
+
+bool SmartDrivers::EnablePhaseStepping(size_t driver, bool enable) noexcept
+{
+	return (driver < numDrivers ? driverStates[driver]->EnablePhaseStepping(enable) : false);
+}
+
+bool SmartDrivers::IsPhaseSteppingEnabled(size_t driver) noexcept
+{
+	return (driver < numDrivers ? driverStates[driver]->IsPhaseSteppingEnabled() : false);
+}
+#endif
+#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
+// Get the configured motor current in mA
+float SmartDrivers::GetCurrent(size_t driver) noexcept
+{
+	return (driver < numDrivers ? driverStates[driver]->GetCurrent() : 0.0f);
+}
+
+// Get the amount we have to shift 1 left by to get the microstepping
+unsigned int SmartDrivers::GetMicrostepShift(size_t driver) noexcept
+{
+	return (driver < numDrivers ? driverStates[driver]->GetMicrostepShift() : 0);
+}
+
+// Get the coil A microstep position as a number in the range 0..1023
+uint16_t SmartDrivers::GetMicrostepPosition(size_t driver) noexcept
+{
+	return (driver < numDrivers ? driverStates[driver]->GetMicrostepPosition() : 0);
+}
+
+// Schedules a request to update the motor phases using XDIRECT register.
+// Returns true if request is scheduled. Will not schedule a request if it is equal to the current value.
+bool SmartDrivers::SetMotorPhases(size_t driver, uint32_t regVal) noexcept
+{
+		return (driver < numDrivers ? driverStates[driver]->SetXdirect(regVal) : false);
+}
+
+#endif
 #endif
 

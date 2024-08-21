@@ -21,7 +21,7 @@
 # define DUAL_CAN                    0
 # define SUPPORT_SPICAN              0
 # define FLASH_DATA_LENGTH (128*1024) //size of the Software Reset Data in Flash
-
+# define SUPPORT_PHASE_STEPPING      1
 # if STM32H743xx
 #  define STM_ELECTRONICS_STRING "STM32H743"
 #  define STM_BOARD_STRING "STM32H743"

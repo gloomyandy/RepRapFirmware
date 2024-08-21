@@ -37,6 +37,16 @@ public:
 	virtual float GetMaxCurrent() const noexcept = 0;
 	virtual void SetMaxCurrent(float value) noexcept = 0;
 	virtual float GetDriverTemperature() noexcept = 0;
+#if SUPPORT_PHASE_STEPPING
+	virtual bool EnablePhaseStepping(bool enable) noexcept = 0;
+	virtual bool IsPhaseSteppingEnabled() const noexcept = 0;
+#endif
+#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
+	virtual float GetCurrent() const noexcept = 0;
+	virtual unsigned int GetMicrostepShift() const noexcept = 0;
+	virtual uint16_t GetMicrostepPosition() const noexcept = 0;
+	virtual bool SetXdirect(uint32_t regVal) noexcept = 0;
+#endif
 
 };
 #endif
