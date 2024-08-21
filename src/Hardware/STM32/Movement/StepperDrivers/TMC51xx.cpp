@@ -1483,7 +1483,7 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 		// If we wake up as soon as the transfer has completed then we will use too much of the available CPU time.
 		// So schedule a wakeup call instead. Try to make the wakeup interval regular.
 		lastWakeupTime += (StepClockRate * DriversDirectSleepMicroseconds)/1000000;
-		if (!tmcTimer.ScheduleCallbackFromIsr(lastWakeupTime))
+		if (!tmcTimer.ScheduleCallback(lastWakeupTime))
 		{
 			TaskBase::TakeIndexed(NotifyIndices::Tmc);
 		}
