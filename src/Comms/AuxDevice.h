@@ -26,10 +26,7 @@ class AuxDevice
 public:
 	enum class AuxMode : uint8_t
 	{
-		disabled, raw, panelDue,
-#if SUPPORT_MODBUS_RTU
-		modbus_rtu,
-#endif
+		disabled, raw, panelDue, device,
 	};
 
 	AuxDevice() noexcept;
@@ -62,7 +59,11 @@ public:
 	void TxEndedCallback() noexcept;
 #endif
 
+	GCodeResult SendUartData(const uint8_t *data, size_t len) noexcept;
+	GCodeResult ReadUartData(uint8_t *data, size_t bytesToRead) noexcept;
+
 private:
+	uint32_t CalcTransmissionTime(unsigned int numChars) const noexcept;	// calculate the time in milliseconds to send or received the specified number of characters
 
 #if SUPPORT_MODBUS_RTU
 	void ModbusWriteByte(uint8_t b) noexcept;
@@ -70,15 +71,15 @@ private:
 	uint8_t ModbusReadByte() noexcept;
 	uint16_t ModbusReadWord() noexcept;
 	GCodeResult ReleaseMutexAndCheckCrc() noexcept;
-	uint32_t CalcTransmissionTime(unsigned int numChars) const noexcept;	// calculate the time in milliseconds to send or received the specified number of characters
 
 	static void GlobalTxEndedCallback(CallbackParameter cp) noexcept;
 
-	static constexpr uint32_t ModbusBusAvailableTimeout = 50;				// how many milliseconds we wait for the device to become available
 	static constexpr uint32_t ModbusResponseTimeout = 140;					// how many milliseconds we give the device time to respond, excluding transmission time
 	static constexpr uint16_t MaxModbusRegisters = 100;						// the maximum number of registers we send or receive
 	static constexpr uint16_t ModbusCrcInit = 0xFFFF;
 #endif
+	static constexpr uint32_t BusAvailableTimeout = 50;				// how many milliseconds we wait for the device to become available
+	static constexpr uint32_t UartResponseTimeout = 200;			// how many milliseconds we wait for the device to respond, excluding transmission time
 
 	AsyncSerial *uart;						// the underlying serial device
 	Mutex mutex;

@@ -587,7 +587,6 @@ void Move::Init() noexcept
 	simulationMode = SimulationMode::off;
 	longestGcodeWaitInterval = 0;
 	numHiccups = 0;
-	lastReportedMovementDelay = 0;
 	bedLevellingMoveAvailable = false;
 	activeDMs = nullptr;
 	for (uint16_t& ms : microstepping)
@@ -990,19 +989,33 @@ void Move::Diagnostics(MessageType mtype) noexcept
 #endif
 	scratchString.copy(GetCompensationTypeString());
 
-	const uint32_t currentMovementDelay = StepTimer::GetMovementDelay();
-	const float delayToReport = (float)(currentMovementDelay - lastReportedMovementDelay) * (1000.0/(float)StepTimer::GetTickRate());
-	lastReportedMovementDelay = currentMovementDelay;
+	const float totalDelayToReport = (float)StepTimer::GetMovementDelay() * (1000.0/(float)StepTimer::GetTickRate());
+
+#if SUPPORT_CAN_EXPANSION
+	const float ownDelayToReport = (float)StepTimer::GetOwnMovementDelay() * (1000.0/(float)StepTimer::GetTickRate());
+#endif
 
 	Platform& p = reprap.GetPlatform();
 	p.MessageF(mtype,
-				"=== Move ===\nSegments created %u, maxWait %" PRIu32 "ms, bed comp in use: %s, height map offset %.3f, hiccups added %u (%.2fms), max steps late %" PRIi32
+				"=== Move ===\nSegments created %u, maxWait %" PRIu32 "ms, bed comp in use: %s, height map offset %.3f, hiccups added %u"
+#if SUPPORT_CAN_EXPANSION
+				" (%.2f/%.2fms)"
+#else
+				" (%.2fms)"
+#endif
+				", max steps late %" PRIi32
 #if 1	//debug
 				", ebfmin %.2f, ebfmax %.2f"
 				", mcet %.3f"
 #endif
 				"\n",
-						MoveSegment::NumCreated(), longestGcodeWaitInterval, scratchString.c_str(), (double)zShift, numHiccups, (double)delayToReport, DriveMovement::GetAndClearMaxStepsLate()
+						MoveSegment::NumCreated(), longestGcodeWaitInterval, scratchString.c_str(), (double)zShift, numHiccups,
+#if SUPPORT_CAN_EXPANSION
+						(double)ownDelayToReport, (double)totalDelayToReport,
+#else
+						(double)totalDelayToReport,
+#endif
+						DriveMovement::GetAndClearMaxStepsLate()
 #if 1
 						, (double)minExtrusionPending, (double)maxExtrusionPending
 						, (double)((float)maxCriticalElapsedTime * (1000.0/(float)StepTimer::GetTickRate()))
@@ -1067,7 +1080,7 @@ void Move::Diagnostics(MessageType mtype) noexcept
 		p.Message(mtype, driverStatus.c_str());
 	}
 
-#if SUPPORT_PHASE_STEPPING
+#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
 	p.MessageF(mtype, "Phase step loop runtime (us): min=%" PRIu32 ", max=%" PRIu32 ", frequency (Hz): min=%" PRIu32 ", max=%" PRIu32 "\n",
 			StepTimer::TicksToIntegerMicroseconds(minPSControlLoopRuntime), StepTimer::TicksToIntegerMicroseconds(maxPSControlLoopRuntime),
 			TickPeriodToFreq(maxPSControlLoopCallInterval), TickPeriodToFreq(minPSControlLoopCallInterval));
@@ -1080,6 +1093,19 @@ void Move::Diagnostics(MessageType mtype) noexcept
 		rings[i].Diagnostics(mtype, i);
 	}
 }
+
+#if SUPPORT_REMOTE_COMMANDS
+
+void Move::AppendDiagnostics(const StringRef& reply) noexcept
+{
+	const float totalDelayToReport = (float)StepTimer::GetMovementDelay() * (1000.0/(float)StepTimer::GetTickRate());
+	const float ownDelayToReport = (float)StepTimer::GetOwnMovementDelay() * (1000.0/(float)StepTimer::GetTickRate());
+
+	reply.lcatf("Hiccups %u (%.2f/%.2fms), segs %u", numHiccups, (double)ownDelayToReport, (double)totalDelayToReport, MoveSegment::NumCreated());
+	numHiccups = 0;
+}
+
+#endif
 
 // Set the current position to be this
 void Move::SetNewPositionOfAllAxes(const MovementState& ms, bool doBedCompensation) noexcept
@@ -2099,6 +2125,10 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 	const motioncalc_t decelDistance = (params.decelClocks == 0) ? (motioncalc_t)0.0 : (motioncalc_t)(dda.totalDistance - params.decelStartDistance);
 	const motioncalc_t steadyDistance = (params.steadyClocks == 0) ? (motioncalc_t)0.0 : (motioncalc_t)dda.totalDistance - accelDistance - decelDistance;
 
+#if SUPPORT_S_CURVE
+	const motioncalc_t j = 0.0;			//***Temporary!***
+#endif
+
 #if STEPS_DEBUG
 	dmp->positionRequested += steps;
 #endif
@@ -2107,15 +2137,15 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 	{
 		if (params.accelClocks != 0)
 		{
-			dmp->AddSegment(startTime, params.accelClocks, accelDistance * stepsPerMm, (motioncalc_t)dda.acceleration * stepsPerMm, moveFlags);
+			dmp->AddSegment(startTime, params.accelClocks, accelDistance * stepsPerMm, (motioncalc_t)dda.acceleration * stepsPerMm J_ACTUAL_PARAMETER(j * stepsPerMm), moveFlags);
 		}
 		if (params.steadyClocks != 0)
 		{
-			dmp->AddSegment(steadyStartTime, params.steadyClocks, steadyDistance * stepsPerMm, (motioncalc_t)0.0, moveFlags);
+			dmp->AddSegment(steadyStartTime, params.steadyClocks, steadyDistance * stepsPerMm, (motioncalc_t)0.0 J_ACTUAL_PARAMETER((motioncalc_t)0.0), moveFlags);
 		}
 		if (params.decelClocks != 0)
 		{
-			dmp->AddSegment(decelStartTime, params.decelClocks, decelDistance * stepsPerMm, -((motioncalc_t)dda.deceleration * stepsPerMm), moveFlags);
+			dmp->AddSegment(decelStartTime, params.decelClocks, decelDistance * stepsPerMm, -((motioncalc_t)dda.deceleration * stepsPerMm) J_ACTUAL_PARAMETER(j * stepsPerMm), moveFlags);
 		}
 	}
 	else
@@ -2126,15 +2156,15 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 			const uint32_t delay = axisShaper.GetImpulseDelay(index);
 			if (params.accelClocks != 0)
 			{
-				dmp->AddSegment(startTime + delay, params.accelClocks, accelDistance * factor, (motioncalc_t)dda.acceleration * factor, moveFlags);
+				dmp->AddSegment(startTime + delay, params.accelClocks, accelDistance * factor, (motioncalc_t)dda.acceleration * factor J_ACTUAL_PARAMETER(j * factor), moveFlags);
 			}
 			if (params.steadyClocks != 0)
 			{
-				dmp->AddSegment(steadyStartTime + delay, params.steadyClocks, steadyDistance * factor, (motioncalc_t)0.0, moveFlags);
+				dmp->AddSegment(steadyStartTime + delay, params.steadyClocks, steadyDistance * factor, (motioncalc_t)0.0 J_ACTUAL_PARAMETER((motioncalc_t)0.0), moveFlags);
 			}
 			if (params.decelClocks != 0)
 			{
-				dmp->AddSegment(decelStartTime + delay, params.decelClocks, decelDistance * factor, -((motioncalc_t)dda.deceleration * factor), moveFlags);
+				dmp->AddSegment(decelStartTime + delay, params.decelClocks, decelDistance * factor, -((motioncalc_t)dda.deceleration * factor) J_ACTUAL_PARAMETER(j * factor), moveFlags);
 			}
 		}
 	}
