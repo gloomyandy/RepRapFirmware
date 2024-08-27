@@ -48,6 +48,7 @@
 # define SUPPORT_CAN_EXPANSION       1
 # define DUAL_CAN                    0
 # define SUPPORT_SPICAN              1
+# define SUPPORT_PHASE_STEPPING      1
 # define FLASH_DATA_LENGTH (16*1024) //size of the Software Reset Data in Flash
 
 # define STM_ELECTRONICS_STRING "STM32F4"
