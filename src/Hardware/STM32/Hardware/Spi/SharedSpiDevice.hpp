@@ -14,13 +14,17 @@
 
 constexpr uint32_t DefaultSharedSpiClockFrequency = 2000000;
 constexpr uint32_t SpiTimeout = 10000;
-
+static const char *names[] = { "SPI0", "SPI1", "SPI2", "SPI3", "SPI4", "SPI5" 
+#if STM32H7
+								"SPI6", "SPI7", "SPI8"
+#endif
+								};
 // SharedSpiDevice members
 
 SharedSpiDevice::SharedSpiDevice(SSPChannel chan) noexcept
     : SpiDevice(chan)
 {
-	mutex.Create("SPI");
+	mutex.Create(names[chan]);
 }
 
 // Static members
