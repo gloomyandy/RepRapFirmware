@@ -2321,7 +2321,7 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 		{
 			const uint32_t segStartTime = tail->GetStartTime();
 			const uint32_t endTime = segStartTime + tail->GetDuration();
-			if ((int32_t)startTime < (int32_t)endTime)
+			if ((int32_t)(startTime - endTime) < 0)										// if the segments we want to add start before this segment ends
 			{
 				if (tail->GetFlags().executing)
 				{
@@ -2829,9 +2829,10 @@ void Move::CheckEndstops(bool executingMove) noexcept
 #if SUPPORT_CAN_EXPANSION
 	bool wakeAsyncSender = false;
 #endif
+	EndstopsManager& emgr = reprap.GetPlatform().GetEndstops();
 	while (true)
 	{
-		const EndstopHitDetails hitDetails = reprap.GetPlatform().GetEndstops().CheckEndstops();
+		const EndstopHitDetails hitDetails = emgr.CheckEndstops();
 
 		switch (hitDetails.GetAction())
 		{
@@ -2868,6 +2869,11 @@ void Move::CheckEndstops(bool executingMove) noexcept
 					}
 				}
 			}
+
+			if (executingMove)
+			{
+				WakeMoveTaskFromISR();					// wake move task so that it sets the move as finished promptly
+			}
 #if SUPPORT_CAN_EXPANSION
 			return wakeAsyncSender;
 #else
@@ -2897,6 +2903,10 @@ void Move::CheckEndstops(bool executingMove) noexcept
 						reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
 					}
 				}
+			}
+			if (executingMove && !emgr.AnyEndstopsActive())
+			{
+				WakeMoveTaskFromISR();					// wake move task so that it sets the move as finished promptly
 			}
 			break;
 
@@ -3203,46 +3213,27 @@ bool Move::StopAllDrivers(bool executingMove) noexcept
 // Stop a drive and re-calculate the end position. Return true if any remote drivers were scheduled to be stopped.
 bool Move::StopAxisOrExtruder(bool executingMove, size_t logicalDrive) noexcept
 {
+	DriveMovement& dm = dms[logicalDrive];
 	int32_t netStepsTaken;
-	const bool wasMoving = dms[logicalDrive].StopDriver(netStepsTaken);
+	const bool wasMoving = dm.StopDriver(netStepsTaken);
 	bool wakeAsyncSender = false;
 #if SUPPORT_CAN_EXPANSION
-	if (logicalDrive < reprap.GetGCodes().GetTotalAxes())
+	if (wasMoving)
 	{
-		const AxisDriversConfig& cfg = GetAxisDriversConfig(logicalDrive);
-		for (size_t i = 0; i < cfg.numDrivers; ++i)
-		{
-			const DriverId driver = cfg.driverNumbers[i];
-			if (driver.IsRemote())
-			{
-				if (executingMove)
-				{
-					if (wasMoving)
-					{
-						if (CanMotion::StopDriverWhenExecuting(driver, netStepsTaken)) { wakeAsyncSender = true; }
-					}
-				}
-				else
-				{
-					CanMotion::StopDriverWhenProvisional(driver);
-				}
-			}
-		}
-	}
-	else
-	{
-		const DriverId driver = GetExtruderDriver(LogicalDriveToExtruder(logicalDrive));
-		if (executingMove)
-		{
-			if (wasMoving)
-			{
-				if (CanMotion::StopDriverWhenExecuting(driver, netStepsTaken)) { wakeAsyncSender = true; }
-			}
-		}
-		else
-		{
-			CanMotion::StopDriverWhenProvisional(driver);
-		}
+		IterateDrivers(logicalDrive,
+						[](uint8_t)->void { },						// no action if the driver is local
+						[executingMove, wasMoving, netStepsTaken, &wakeAsyncSender](DriverId did)->void
+							{
+								if (executingMove)
+								{
+									if (CanMotion::StopDriverWhenExecuting(did, netStepsTaken)) { wakeAsyncSender = true; }
+								}
+								else
+								{
+									CanMotion::StopDriverWhenProvisional(did);
+								}
+							}
+					  );
 	}
 #else
 	(void)wasMoving;
