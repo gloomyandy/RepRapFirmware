@@ -1087,6 +1087,7 @@ GCodeResult GCodes::ConfigureLocalDriverBasicParameters(GCodeBuffer& gb, const S
 	}
 
 	bool seen = false;
+	bool warn = false;
 	Move& move = reprap.GetMove();
 	if (gb.Seen('S'))
 	{
@@ -1115,15 +1116,16 @@ GCodeResult GCodes::ConfigureLocalDriverBasicParameters(GCodeBuffer& gb, const S
 #if HAS_SMART_DRIVERS
 	{
 		uint32_t val;
+		int32_t ival;
 		if (gb.TryGetUIValue('D', val, seen))	// set driver mode
 		{
-#if SUPPORT_PHASE_STEPPING
+# if SUPPORT_PHASE_STEPPING
 			if (SmartDrivers::IsPhaseSteppingEnabled(drive))
 			{
 				reply.printf("Can not set driver %u mode while phase stepping is enabled", drive);
 				return GCodeResult::error;
 			}
-#endif
+# endif
 			if (!SmartDrivers::SetDriverMode(drive, val))
 			{
 				reply.printf("Driver %u does not support mode '%s'", drive, TranslateDriverMode(val));
@@ -1166,7 +1168,8 @@ GCodeResult GCodes::ConfigureLocalDriverBasicParameters(GCodeBuffer& gb, const S
 				return GCodeResult::error;
 			}
 		}
-#if SUPPORT_TMC51xx
+
+# if SUPPORT_TMC51xx
 		if (gb.TryGetUIValue('H', val, seen))		// set coolStep threshold
 		{
 			if (!SmartDrivers::SetRegister(drive, SmartDriverRegister::thigh, val))
@@ -1175,7 +1178,21 @@ GCodeResult GCodes::ConfigureLocalDriverBasicParameters(GCodeBuffer& gb, const S
 				return GCodeResult::error;
 			}
 		}
-#endif
+
+		if (gb.TryGetLimitedIValue('U', ival, seen, -1, 32))
+		{
+			if (!SmartDrivers::SetCurrentScaler(drive, ival))
+			{
+				reply.printf("Bad current scaler for driver %u", drive);
+				return GCodeResult::error;
+			}
+			if (ival >= 0 && ival < 16)
+			{
+				reply.printf("Current scaler = %ld for driver %u might result in poor microstep performance. Recommended minimum is 16.", ival, drive);
+				warn = true;
+			}
+		}
+# endif
 	}
 
 	if (gb.Seen('Y'))								// set spread cycle hysteresis
@@ -1210,6 +1227,12 @@ GCodeResult GCodes::ConfigureLocalDriverBasicParameters(GCodeBuffer& gb, const S
 		}
 	}
 #endif
+
+	if (warn)
+	{
+		return GCodeResult::warning;
+	}
+
 	if (!seen)
 	{
 		// Print the basic parameters common to all types of driver
@@ -1251,7 +1274,11 @@ GCodeResult GCodes::ConfigureLocalDriverBasicParameters(GCodeBuffer& gb, const S
 				const uint32_t axis = SmartDrivers::GetAxisNumber(drive);
 				bool bdummy;
 				const float mmPerSec = (12000000.0 * SmartDrivers::GetMicrostepping(drive, bdummy))/(256 * thigh * reprap.GetMove().DriveStepsPerMm(axis));
-				reply.catf(", thigh %" PRIu32 " (%.1f mm/sec)", thigh, (double)mmPerSec);
+				const uint8_t iRun = SmartDrivers::GetIRun(drive);
+				const uint8_t iHold = SmartDrivers::GetIHold(drive);
+				const uint32_t gs = SmartDrivers::GetGlobalScaler(drive);
+				const float current = SmartDrivers::GetCalculatedCurrent(drive);
+				reply.catf(", thigh %" PRIu32 " (%.1f mm/sec), gs=%lu, iRun=%u, iHold=%u, current=%.3f", thigh, (double)mmPerSec, gs, iRun, iHold, (double)current);
 			}
 # endif
 
