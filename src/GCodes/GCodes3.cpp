@@ -1169,7 +1169,7 @@ GCodeResult GCodes::ConfigureLocalDriverBasicParameters(GCodeBuffer& gb, const S
 			}
 		}
 
-# if SUPPORT_TMC51xx
+# if SUPPORT_TMC51xx || STM32
 		if (gb.TryGetUIValue('H', val, seen))		// set coolStep threshold
 		{
 			if (!SmartDrivers::SetRegister(drive, SmartDriverRegister::thigh, val))
@@ -1268,7 +1268,7 @@ GCodeResult GCodes::ConfigureLocalDriverBasicParameters(GCodeBuffer& gb, const S
 					SmartDrivers::GetRegister(drive, SmartDriverRegister::tblank)
 				);
 
-# if SUPPORT_TMC51xx
+# if SUPPORT_TMC51xx || STM32
 			{
 				const uint32_t thigh = SmartDrivers::GetRegister(drive, SmartDriverRegister::thigh);
 				const uint32_t axis = SmartDrivers::GetAxisNumber(drive);

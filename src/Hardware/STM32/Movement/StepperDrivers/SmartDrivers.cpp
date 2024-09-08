@@ -271,6 +271,31 @@ void SmartDrivers::SetStandstillCurrentPercent(size_t drive, float percent) noex
 	}
 }
 
+bool SmartDrivers::SetCurrentScaler(size_t driver, int8_t cs) noexcept
+{
+	return (driver < numDrivers) ? driverStates[driver]->SetCurrentScaler(cs) : false;
+}
+
+uint8_t SmartDrivers::GetIRun(size_t driver) noexcept
+{
+	return (driver < numDrivers) ? driverStates[driver]->GetIRun() : 0;
+}
+
+uint8_t SmartDrivers::GetIHold(size_t driver) noexcept
+{
+	return (driver < numDrivers) ? driverStates[driver]->GetIHold() : 0;
+}
+
+uint32_t SmartDrivers::GetGlobalScaler(size_t driver) noexcept
+{
+	return (driver < numDrivers) ? driverStates[driver]->GetGlobalScaler() : 0;
+}
+
+float SmartDrivers::GetCalculatedCurrent(size_t driver) noexcept
+{
+	return (driver < numDrivers) ? driverStates[driver]->CalculateCurrent() : 0.0;
+}
+
 bool SmartDrivers::SetRegister(size_t driver, SmartDriverRegister reg, uint32_t regVal) noexcept
 {
 	return (driver < numDrivers) && driverStates[driver]->SetRegister(reg, regVal);

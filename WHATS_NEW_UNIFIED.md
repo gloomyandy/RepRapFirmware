@@ -1,3 +1,23 @@
+Version 3.6.0-alpha.5+1
+=======================
+* Duet3d 3.6.0-alpha.5+1
+* Fix TMC22xx driver default standstill current (now 100% was 75%).
+
+Version 3.6.0-alpha
+===================
+* Duet3d 3.6.0-alpha
+* Reduce memory usage
+* Improved UART driver
+* Improved hardware SPI driver
+
+Version 3.5.3-rc.1
+==================
+* Duet3d 3.5.3-rc.1
+
+Version 3.5.2
+=============
+* Duet3d 3.5.2
+
 Version 3.5.2-rc.1
 ==================
 * Duet3d rc.1

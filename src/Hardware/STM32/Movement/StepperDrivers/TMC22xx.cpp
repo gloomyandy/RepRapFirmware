@@ -429,6 +429,11 @@ public:
 
 	float GetStandstillCurrentPercent() const noexcept;
 	void SetStandstillCurrentPercent(float percent) noexcept;
+	bool SetCurrentScaler(int8_t cs) noexcept {return false;};
+	uint8_t GetIRun() const noexcept { return iRun; }
+	uint8_t GetIHold() const noexcept { return iHold; }
+	uint32_t GetGlobalScaler() const noexcept { return 0; }
+	float CalculateCurrent() const noexcept;				// calculate what current the driver is actually using based on register values
 
 	void TransferDone() noexcept __attribute__ ((hot));				// called by the ISR when the SPI transfer has completed
 	bool StartTransfer() noexcept __attribute__ ((hot));				// called to start a transfer
@@ -541,6 +546,8 @@ private:
 	volatile uint8_t specialReadRegisterNumber;				// the special register number we are reading
 	volatile uint8_t specialWriteRegisterNumber;			// the special register number we are writing
 	bool enabled;											// true if driver is enabled
+	uint8_t iRun = 0;
+	uint8_t iHold = 0;
 
 	float senseResistor;
 	float maxCurrent;
@@ -723,7 +730,7 @@ pre(!driversPowered)
 	registersToUpdate = 0;
 	specialReadRegisterNumber = specialWriteRegisterNumber = 0xFF;
 	motorCurrent = 0.0;
-	standstillCurrentFraction = (256 * 3)/4;							// default to 75%
+	standstillCurrentFraction = (uint8_t)min<uint32_t>((DefaultStandstillCurrentPercent * 256)/100, 255);
 	maxCurrent = MaximumMotorCurrent;
 	senseResistor = RSense;
 	UpdateRegister(WriteGConf, DefaultGConfReg);
@@ -985,6 +992,18 @@ void Tmc22xxDriverState::SetCurrent(float current) noexcept
 	UpdateCurrent();
 }
 
+float Tmc22xxDriverState::CalculateCurrent() const noexcept
+{
+	const float DriverFullScaleCurrent = VRefVS1/(senseResistor + RSenseExtra);	// in mA
+	const float DriverCsMultiplier = 32.0/DriverFullScaleCurrent;
+	float current = ((iRun + 1)/DriverCsMultiplier);
+	if ((configuredChopConfReg & CHOPCONF_VSENSE_HIGH) == 0)
+	{
+		current *= VRefVS0/VRefVS1;
+	}
+	return (float) current;
+}
+
 void Tmc22xxDriverState::UpdateCurrent() noexcept
 {
 
@@ -999,16 +1018,16 @@ void Tmc22xxDriverState::UpdateCurrent() noexcept
 		vsense = 0;
 		idealIRunCs *= VRefVS1/VRefVS0;
 	}
-	const uint32_t iRunCsBits = constrain<uint32_t>((unsigned int)(idealIRunCs + 0.2), 1, 32) - 1;
+	iRun = constrain<uint32_t>((unsigned int)(idealIRunCs + 0.2), 1, 32) - 1;
 	const float idealIHoldCs = idealIRunCs * standstillCurrentFraction * (1.0/256.0);
-	const uint32_t iHoldCsBits = constrain<uint32_t>((unsigned int)(idealIHoldCs + 0.2), 1, 32) - 1;
+	iHold = constrain<uint32_t>((unsigned int)(idealIHoldCs + 0.2), 1, 32) - 1;
 	if (reprap.Debug(Module::Driver))
-		debugPrintf("TMC current set I %d IH %d csBits 0x%x 0x%x vsense 0x%x\n", (int)motorCurrent, (int)idealIHoldCs, (unsigned)iRunCsBits, (unsigned)iHoldCsBits, (unsigned)vsense);
+		debugPrintf("TMC current set I %d IH %d csBits 0x%x 0x%x vsense 0x%x\n", (int)motorCurrent, (int)idealIHoldCs, (unsigned)iRun, (unsigned)iHold, (unsigned)vsense);
 
 	UpdateRegister(WriteIholdIrun,
 					(writeRegisters[WriteIholdIrun] & ~(IHOLDIRUN_IRUN_MASK | IHOLDIRUN_IHOLD_MASK))
-					| (iRunCsBits << IHOLDIRUN_IRUN_SHIFT) 
-					| (iHoldCsBits << IHOLDIRUN_IHOLD_SHIFT));
+					| (iRun << IHOLDIRUN_IRUN_SHIFT) 
+					| (iHold << IHOLDIRUN_IHOLD_SHIFT));
 	configuredChopConfReg = (configuredChopConfReg & ~CHOPCONF_VSENSE_HIGH) | vsense;
 	UpdateChopConfRegister();
 }

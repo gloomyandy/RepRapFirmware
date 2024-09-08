@@ -29,6 +29,11 @@ public:
 
 	virtual float GetStandstillCurrentPercent() const noexcept = 0;
 	virtual void SetStandstillCurrentPercent(float percent) noexcept = 0;
+	virtual bool SetCurrentScaler(int8_t cs) noexcept = 0;
+	virtual uint8_t GetIRun() const noexcept = 0;
+	virtual uint8_t GetIHold() const noexcept = 0;
+	virtual uint32_t GetGlobalScaler() const noexcept = 0;
+	virtual float CalculateCurrent() const noexcept = 0;
 
 	virtual StandardDriverStatus GetStatus(bool accumulated, bool clearAccumulated) noexcept = 0;
 
