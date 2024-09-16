@@ -1541,6 +1541,22 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 bool Tmc51xxDriverState::EnablePhaseStepping(bool enable) noexcept
 {
 	bool anyDriversUsingPhaseStepping = false;
+	bool ret = false;
+	phaseStepEnabled = enable;
+	if (enable)
+	{
+		UpdateRegister(WriteGConf, (writeRegisters[WriteGConf] & ~GCONF_STEALTHCHOP) | GCONF_DIRECT_MODE);
+		ret = true;;
+	}
+	else
+	{
+		ret = SetDriverMode((unsigned int)currentMode);
+	}
+	UpdateCurrent();		// when entering direct mode we need to update the standstill current
+	if (!ret)
+	{
+		return false;
+	}
 	if (enable)
 	{
 		anyDriversUsingPhaseStepping = true;
@@ -1559,18 +1575,6 @@ bool Tmc51xxDriverState::EnablePhaseStepping(bool enable) noexcept
 	DriversDirectSleepMicroseconds = anyDriversUsingPhaseStepping ? PhaseStepSpiSleepMicroseconds : DefaultSpiSleepMicroseconds;
 
 	tmcTask.SetPriority(anyDriversUsingPhaseStepping ? TaskPriority::TmcPhaseStepPriority : TaskPriority::TmcPriority);
-	bool ret = false;
-	phaseStepEnabled = enable;
-	if (enable)
-	{
-		UpdateRegister(WriteGConf, (writeRegisters[WriteGConf] & ~GCONF_STEALTHCHOP) | GCONF_DIRECT_MODE);
-		ret = true;;
-	}
-	else
-	{
-		ret = SetDriverMode((unsigned int)currentMode);
-	}
-	UpdateCurrent();		// when entering direct mode we need to update the standstill current
 	return ret;
 }
 #endif
