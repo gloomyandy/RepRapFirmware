@@ -4826,7 +4826,9 @@ GCodeResult Move::EutProcessM569(const CanMessageGeneric& msg, const StringRef& 
 #if HAS_SMART_DRIVERS
 	{
 		uint32_t val;
+# if SUPPORT_TMC51xx
 		int32_t ival;
+# endif
 		if (parser.GetUintParam('D', val))	// set driver mode
 		{
 			seen = true;
@@ -5091,7 +5093,7 @@ GCodeResult Move::EutProcessM569Point7(const CanMessageGeneric& msg, const Strin
 		parser.GetStringParam('C', portName.GetRef());
 		//TODO use the following instead when we track the enable state of each driver individually
 		//if (!brakePorts[drive].AssignPort(portName.c_str(), reply, PinUsedBy::gpout, (driverDisabled[drive]) ? PinAccess::write0 : PinAccess::write1)) ...
-		if (brakePorts[drive].AssignPort(portName.c_str(), reply, PinUsedBy::gpout, PinAccess::write0))
+		if (!brakePorts[drive].AssignPort(portName.c_str(), reply, PinUsedBy::gpout, PinAccess::write0))
 		{
 			return GCodeResult::error;
 		}

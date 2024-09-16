@@ -495,7 +495,7 @@ GCodeResult GCodes::DoDriveMapping(GCodeBuffer& gb, const StringRef& reply) THRO
 					const AxisWrapType wrapType = (newAxesType != AxisWrapType::undefined) ? newAxesType
 													: (c >= 'A' && c <= 'D') ? AxisWrapType::wrapAt360			// default A thru D to rotational but not continuous
 														: AxisWrapType::noWrap;									// default other axes to linear
-					const bool isNistRotational = (seenS) ? newAxesAreNistRotational : (c >= 'A' && c <= 'D');
+					const bool isNistRotational = (seenS) ? newAxesAreNistRotational : wrapType != AxisWrapType::noWrap;
 					move.SetAxisType(drive, wrapType, isNistRotational);
 					++numTotalAxes;
 					if (numTotalAxes + numExtruders > MaxAxesPlusExtruders)
@@ -1163,7 +1163,9 @@ GCodeResult GCodes::ConfigureLocalDriverBasicParameters(GCodeBuffer& gb, const S
 #if HAS_SMART_DRIVERS
 	{
 		uint32_t val;
+# if SUPPORT_TMC51xx
 		int32_t ival;
+# endif
 		if (gb.TryGetUIValue('D', val, seen))	// set driver mode
 		{
 # if SUPPORT_PHASE_STEPPING
