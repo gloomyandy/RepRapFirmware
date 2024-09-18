@@ -123,7 +123,7 @@ uint32_t sd_mmc_get_interface_speed(uint8_t slot) noexcept
     if(slot < _DRIVES && _ffs[slot])
     {
         // Get the speed of the SPI SD card interface for reporting purposes, in bytes/sec
-        return _ffs[slot]->interface_speed()/8;
+        return _ffs[slot]->interface_speed();
     }
     
     return 0;

@@ -18,6 +18,7 @@ public:
 
     void unmount() noexcept;
     void set_max_frequency(uint32_t maxFrequency) noexcept;  
+    uint32_t interface_speed() noexcept {return frequency/2;}
 
     //DiskIO
     uint8_t disk_initialize() noexcept;

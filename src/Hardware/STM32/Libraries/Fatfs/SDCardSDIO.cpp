@@ -64,12 +64,11 @@ uint8_t SDCardSDIO::disk_initialize () noexcept
         if (sdio->GetCardState() == SD_TRANSFER_OK)
         {
             HAL_SD_CardInfoTypeDef cardInfo;
-            sdio->GetCardInfo(&cardInfo);
+            frequency = sdio->GetCardInfo(&cardInfo);
 #ifdef SD_DEBUG
             debugPrintf("Card type %x ver %d class %x sectors %d\n", (unsigned int)cardInfo.CardType, (int)cardInfo.CardVersion, (unsigned int)cardInfo.Class, (int)cardInfo.LogBlockNbr);
 #endif
             // Stndard SDIO freq is 24MHz with a 4 bit wide transfer
-            frequency = 24000000*4;
             cardtype = (cardInfo.CardType == CARD_SDHC_SDXC ? CT_SD2|CT_BLOCK : (cardInfo.CardType == CARD_SDSC ? CT_SD2 : CT_SD1));
             sdcardBlockSize = cardInfo.LogBlockSize;
             sdcardSectors = cardInfo.LogBlockNbr;

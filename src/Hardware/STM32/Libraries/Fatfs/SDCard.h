@@ -30,7 +30,7 @@ class SDCard {
 public:
     virtual ~SDCard() noexcept = default;
     CARD_TYPE card_type(void) noexcept {return cardtype;};
-    uint32_t interface_speed() noexcept  { return frequency; };
+    virtual uint32_t interface_speed() noexcept = 0;
     uint32_t disk_sectors() noexcept { return sdcardSectors; };
     uint32_t disk_blocksize() noexcept { return sdcardBlockSize; };
     
