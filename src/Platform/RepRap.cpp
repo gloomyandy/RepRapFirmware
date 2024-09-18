@@ -2530,9 +2530,11 @@ void RepRap::SetName(const char* nm) noexcept
 {
 	myName.copy(nm);
 
+#if HAS_NETWORKING
 	// Set new DHCP hostname
 	network->SetHostname(myName.c_str());
 	NetworkUpdated();
+#endif
 }
 
 // Firmware update operations

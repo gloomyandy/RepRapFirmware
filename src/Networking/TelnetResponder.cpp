@@ -42,11 +42,12 @@ bool TelnetResponder::Accept(Socket *s, NetworkProtocol protocol) noexcept
 }
 
 // This is called to force termination if we implement the specified protocol
-void TelnetResponder::Terminate(NetworkProtocol protocol, NetworkInterface *interface) noexcept
+void TelnetResponder::Terminate(NetworkProtocol protocol, const NetworkInterface *interface) noexcept
 {
 	if (responderState != ResponderState::free && (protocol == TelnetProtocol || protocol == AnyProtocol) && skt != nullptr && skt->GetInterface() == interface)
 	{
-		ConnectionLost();
+		// Don't call ConnectionLost here because that releases outbuf, which may be in use by the Network task, and this is called from the Main task
+		terminateResponder = true;					// tell the responder to terminate
 	}
 }
 
@@ -112,6 +113,12 @@ bool TelnetResponder::SendGCodeReply() noexcept
 // Do some work, returning true if we did anything significant
 bool TelnetResponder::Spin() noexcept
 {
+	if (terminateResponder)
+	{
+		ConnectionLost();
+		terminateResponder = false;
+	}
+
 	switch (responderState)
 	{
 	case ResponderState::free:
