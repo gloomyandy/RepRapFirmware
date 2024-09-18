@@ -1048,6 +1048,8 @@ void Platform::Exit() noexcept
 #endif
 }
 
+#if HAS_NETWORKING
+
 void Platform::SetIPAddress(IPAddress ip) noexcept
 {
 	ipAddress = ip;
@@ -1065,6 +1067,8 @@ void Platform::SetNetMask(IPAddress nm) noexcept
 	netMask = nm;
 	reprap.GetNetwork().SetEthernetIPAddress(ipAddress, netMask, gateWay);
 }
+
+#endif
 
 // Flush messages to USB and aux, returning true if there is more to send
 bool Platform::FlushMessages() noexcept
@@ -5515,7 +5519,7 @@ GCodeResult Platform::EutProcessM569Point7(const CanMessageGeneric& msg, const S
 		parser.GetStringParam('C', portName.GetRef());
 		//TODO use the following instead when we track the enable state of each driver individually
 		//if (!brakePorts[drive].AssignPort(portName.c_str(), reply, PinUsedBy::gpout, (driverDisabled[drive]) ? PinAccess::write0 : PinAccess::write1)) ...
-		if (brakePorts[drive].AssignPort(portName.c_str(), reply, PinUsedBy::gpout, PinAccess::write0))
+		if (!brakePorts[drive].AssignPort(portName.c_str(), reply, PinUsedBy::gpout, PinAccess::write0))
 		{
 			return GCodeResult::error;
 		}
