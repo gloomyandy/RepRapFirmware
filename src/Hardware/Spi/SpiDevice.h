@@ -23,9 +23,9 @@ class SpiDevice
 {
 public:
 #if STM32
-	SpiDevice(SSPChannel chan) noexcept;
+	explicit SpiDevice(SSPChannel chan) noexcept;
 #else
-	SpiDevice(uint8_t sercomNum) noexcept;
+	explicit SpiDevice(uint8_t sercomNum) noexcept;
 #endif
 
 	void Disable() const noexcept;

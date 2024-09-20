@@ -887,19 +887,22 @@ void TmcDriverState::UpdateCurrent() noexcept
 					(writeRegisters[WriteIholdIrun] & ~(IHOLDIRUN_IRUN_MASK | IHOLDIRUN_IHOLD_MASK)) | (iRunCsBits << IHOLDIRUN_IRUN_SHIFT) | (iHoldCsBits << IHOLDIRUN_IHOLD_SHIFT));
 #elif TMC_TYPE == 5160
 	// See if we can set IRUN to 31 (or user defined value) and do the current adjustment in the global scaler
-	iRun = currentScaler < 0 ? 31 : currentScaler;
+	iRun = (currentScaler < 0) ? 31 : (uint8_t)currentScaler;
 
-	const float csRecip = iRun == 31 ? 1.0f : 32.0f / (float)(iRun + 1);
+	const float csRecip = (iRun == 31) ? 1.0f : 32.0f / (float)(iRun + 1);
 	globalScaler = lrintf(motorCurrent * 256 * RecipFullScaleCurrent * csRecip);
 	if (globalScaler >= 256)
 	{
+		const uint32_t prod = globalScaler * (iRun + 1);
 		globalScaler = 0;
+		iRun = (uint8_t)constrain<float>(rintf(float(prod) / 256u) - 1, 0, 31);		// globalscaler = 0 means 256
 	}
 	else if (globalScaler < 32)
 	{
 		// We can't regulate the current just through the global scaler because it has a minimum value of 32
-		iRun = (globalScaler == 0) ? globalScaler : globalScaler - 1;
+		const uint32_t prod = globalScaler * (iRun + 1);
 		globalScaler = 32;
+		iRun = (uint8_t)constrain<float>(rintf(float(prod) / globalScaler) - 1, 0, 31);
 	}
 
 	// At high motor currents, limit the standstill current fraction to avoid overheating particular pairs of mosfets. Avoid dividing by zero if motorCurrent is zero.
