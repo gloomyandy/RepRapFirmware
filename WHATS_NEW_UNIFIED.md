@@ -1,3 +1,10 @@
+Version 3.5.3
+=============
+* Duet3d 3.5.3
+* Added new BTT scylla board
+* Reduced SDIO bus speed for greater SD card compatibilty with some boards
+* Fixed CAN-FD pins on octopus pro h723
+
 Version 3.5.2
 =============
 * Duet3d 3.5.2
