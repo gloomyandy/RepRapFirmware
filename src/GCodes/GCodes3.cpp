@@ -650,12 +650,6 @@ void GCodes::SwitchToExpansionMode() noexcept
 	numVisibleAxes = numTotalAxes = NumDirectDrivers;
 	FilamentMonitor::DeleteAll();
 	memcpy(axisLetters, AllowedAxisLetters, sizeof(axisLetters));
-	for (size_t extr = 0; extr < MaxExtruders; ++extr)
-	{
-		DriverId driver;
-		driver.SetLocal(extr + MinAxes);
-		reprap.GetMove().SetExtruderDriver(extr, driver);
-	}
 	for (size_t axis = 0; axis < NumDirectDrivers; ++axis)
 	{
 		DriverId driver;

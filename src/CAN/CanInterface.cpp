@@ -1535,7 +1535,7 @@ void CanInterface::Diagnostics(MessageType mtype) noexcept
 
 	p.MessageF(mtype,
 				"Longest wait %" PRIu32 "ms for reply type %u, peak Tx sync delay %" PRIu32
-				" free buffers %u (min %u)"
+				", free buffers %u (min %u)"
 	//debug
 				", ts %u/%u/%u"
 	//end debug

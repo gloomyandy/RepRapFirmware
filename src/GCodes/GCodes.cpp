@@ -194,10 +194,6 @@ void GCodes::Init() noexcept
 	laserMaxPower = DefaultMaxLaserPower;
 	laserPowerSticky = false;
 
-#if SUPPORT_LED_STRIPS
-	//LedStripDriver::Init();
-#endif
-
 #if HAS_AUX_DEVICES && !STM32
 	// FIXME why don't we have this on STM32?
 	SERIAL_AUX_DEVICE.SetInterruptCallback(GCodes::CommandEmergencyStop);
