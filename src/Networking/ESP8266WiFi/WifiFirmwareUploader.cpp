@@ -849,6 +849,14 @@ void WifiFirmwareUploader::Spin() noexcept
 // Try to upload the given file at the given address
 void WifiFirmwareUploader::SendUpdateFile(const char *file, uint32_t address) noexcept
 {
+#if STM32
+	// check to see if we have a valid filename, if auto discovery has failed we may not
+	if (file == nullptr || !file[0])
+	{
+		MessageF("Firmware file not specified, check module type");
+		return;
+	}
+#endif
 	Platform& platform = reprap.GetPlatform();
 	uploadFile = platform.OpenFile(FIRMWARE_DIRECTORY, file, OpenMode::read);
 	if (uploadFile == nullptr)

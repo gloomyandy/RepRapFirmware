@@ -1595,7 +1595,7 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 			TmcDriverState::TransferTimedOut();
 			// If the transfer was interrupted then we will have written dud data to the drivers. So we should re-initialise them all.
 			// Unfortunately registers that we don't normally write to may have changed too.
-			fastDigitalWriteHigh(GlobalTmc51xxEnablePin);
+			fastDigitalWriteHigh(GlobalTmc51xxEnablePin);		// disable the drivers until we have re-initialised them
 			fastDigitalWriteHigh(GlobalTmc51xxCSPin);			// set CS high
 			driversState = DriversState::notInitialised;
 			for (size_t drive = 0; drive < numTmc51xxDrivers; ++drive)

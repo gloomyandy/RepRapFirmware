@@ -10,13 +10,18 @@ Version 3.6.0-alpha
 * Improved UART driver
 * Improved hardware SPI driver
 
-Version 3.5.3-rc.1
-==================
-* Duet3d 3.5.3-rc.1
+Version 3.5.3
+=============
+* Duet3d 3.5.3
+* Added new BTT scylla board
+* Reduced SDIO bus speed for greater SD card compatibilty with some boards
+* Fixed CAN-FD pins on octopus pro h723
 
 Version 3.5.2
 =============
 * Duet3d 3.5.2
+* Fix error message if WiFi module type is unknown
+* Added support for Fly Pro X10 STM32H723
 
 Version 3.5.2-rc.1
 ==================
