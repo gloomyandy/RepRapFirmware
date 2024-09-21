@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include "Version.h"
 #include "BoardConfig.h"
+#include "Devices.h"
 #include "RepRapFirmware.h"
 #include "SbcInterface.h"
 #include "sd_mmc.h"
