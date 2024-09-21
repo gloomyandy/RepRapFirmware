@@ -10,9 +10,14 @@
 
 #include <RepRapFirmware.h>
 #include "SpiMode.h"
+<<<<<<< HEAD
 #if STM32
 #include "SPI.h"
 #endif
+=======
+#include <RTOSIface/RTOSIface.h>
+
+>>>>>>> upstream/3.6-dev
 #if SAME5x && (defined(FMDC_V02) || defined(FMDC_V03))
 # include <DmacManager.h>
 #endif

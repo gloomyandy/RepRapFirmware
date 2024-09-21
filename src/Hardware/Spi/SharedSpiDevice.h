@@ -10,6 +10,7 @@
 
 #include "RTOSIface/RTOSIface.h"
 #include "SpiDevice.h"
+#include <RTOSIface/RTOSIface.h>
 
 class SharedSpiDevice : public SpiDevice
 {

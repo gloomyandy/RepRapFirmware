@@ -358,7 +358,7 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 			&& buf->id.MsgType() != CanMessageType::heatersStatusReport
 			&& buf->id.MsgType() != CanMessageType::boardStatusReport
 			&& buf->id.MsgType() != CanMessageType::driversStatusReport
-			&& buf->id.MsgType() != CanMessageType::filamentMonitorsStatusReportNew
+			&& buf->id.MsgType() != CanMessageType::filamentMonitorsStatusReportNew2
 		   )
 		{
 			reprap.GetPlatform().OnProcessingCanMessage();
@@ -671,8 +671,8 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				reprap.GetExpansion().ProcessAnnouncement(buf, true);
 				break;
 
-			case CanMessageType::filamentMonitorsStatusReportNew:
-				FilamentMonitor::UpdateRemoteFilamentStatus(buf->id.Src(), buf->msg.filamentMonitorsStatusNew);
+			case CanMessageType::filamentMonitorsStatusReportNew2:
+				FilamentMonitor::UpdateRemoteFilamentStatus(buf->id.Src(), buf->msg.filamentMonitorsStatusNew2);
 				break;
 
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE
