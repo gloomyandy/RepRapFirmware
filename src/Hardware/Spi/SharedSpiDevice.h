@@ -41,7 +41,7 @@ private:
 	static SharedSpiDevice *Devices[];
 	static SharedSpiDevice *invalidDevice;
 #else
-	static SharedSpiDevice *mainSharedSpiDevice;
+	static SharedSpiDevice *_ecv_null mainSharedSpiDevice;
 #endif
 };
 
