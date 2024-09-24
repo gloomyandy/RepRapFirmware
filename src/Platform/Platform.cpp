@@ -466,8 +466,6 @@ void Platform::Init() noexcept
 	usbMutex.Create("USB");
 #if SAME5x && !CORE_USES_TINYUSB
     SERIAL_MAIN_DEVICE.Start();
-#elif STM32
-	SERIAL_MAIN_DEVICE.begin();
 #else
     SERIAL_MAIN_DEVICE.Start(UsbVBusPin);
 #endif
@@ -3460,8 +3458,6 @@ void Platform::ResetChannel(size_t chan) noexcept
 		SERIAL_MAIN_DEVICE.end();
 #if SAME5x && !CORE_USES_TINYUSB
         SERIAL_MAIN_DEVICE.Start();
-#elif STM32
-		SERIAL_MAIN_DEVICE.begin();
 #else
         SERIAL_MAIN_DEVICE.Start(UsbVBusPin);
 #endif

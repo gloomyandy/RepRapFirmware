@@ -74,7 +74,7 @@ FLAGS  += -DUSE_SSP1=1 -DUSE_SSP2=1 -DUSE_SSP3=1 -DUSE_SWSPI=1
 # SDIO configuration
 FLAGS  += -DUSE_SDIO=1
 # General configuration
-FLAGS += -DRTOS -DFREERTOS_USED -DUSBCON -DUSBD_USE_CDC -DUSB_PRODUCT=\"RepRapFirmware\" -DVECT_TAB_OFFSET=0x8000
+FLAGS += -DRTOS -DFREERTOS_USED -DSUPPORT_USB=1 -DUSB_PRODUCT=\"RepRapFirmware\" -DVECT_TAB_OFFSET=0x8000
 FLAGS += -DHAL_RRF=1 -DFORCE_ESTACK=1 -DSUPPORT_CAN=1
 FLAGS +=  -Wall -c -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mfp16-format=ieee -mcpu=cortex-m4 -mthumb -fno-math-errno -ffunction-sections -fdata-sections
 FLAGS += -nostdlib -Wdouble-promotion -fsingle-precision-constant -fstack-usage

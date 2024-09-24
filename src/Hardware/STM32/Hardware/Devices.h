@@ -3,8 +3,8 @@
 
 #include <AsyncSerial.h>
 #define SUPPORT_USB		1		// needed by USBSerial.h
-#include <USBSerial.h>
-extern USBSerial serialUSB;
+#include <SerialCDC.h>
+extern SerialCDC serialUSB;
 void DeviceInit() noexcept;
 void StopAnalogTask() noexcept;
 void StopUsbTask() noexcept;

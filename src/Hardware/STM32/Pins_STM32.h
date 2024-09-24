@@ -332,7 +332,7 @@ extern Pin AuxSerialRxTxPins[NumberSerialPins];
 #endif
 
 #define SERIAL_MAIN_DEVICE  serialUSB  //USB
-
+constexpr Pin UsbVBusPin = NoPin;
 
 #if HAS_WIFI_NETWORKING
     NamedEnum(NetworkModuleType, uint8_t,

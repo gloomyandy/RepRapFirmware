@@ -5,6 +5,7 @@ BUILD_DIR ?= ./build
 FREERTOS_DIR ?= ./FreeRTOS
 REPRAPFIRMWARE_DIR ?= ./RepRapFirmware
 RRFLIBRARIES_DIR ?= ./RRFLibraries
+TINYUSB_DIR ?= ./LibTinyusb
 CORESTM_DIR ?= ./CoreN2G
 CANLIB_DIR ?= CANlib
 OUTPUT_NAME ?= base_$(VARIANT)
@@ -14,6 +15,8 @@ NETWORK ?= WIFI
 
 TMC22XX ?= true
 TMC51XX ?= true
+
+USETINYUSB ?= false
 
 GCC_PATH ?=
 
@@ -39,6 +42,9 @@ SIZE    = $(GCC_PATH)arm-none-eabi-size
 MKDIR = mkdir -p
 
 $(info - MAKE_DIR: $(MAKE_DIR))
+ifeq ($(USETINYUSB), true)
+    include $(MAKE_DIR)/TinyUSB.mk
+endif
 include $(MAKE_DIR)/Core.mk
 include $(MAKE_DIR)/FreeRTOS.mk
 include $(MAKE_DIR)/RRFLibraries.mk
@@ -46,11 +52,11 @@ include $(MAKE_DIR)/CANLib.mk
 include $(MAKE_DIR)/RepRapFirmware.mk
 
 ifeq ($(BUILD),Debug)
-	DEBUG_FLAGS = -Os -g -DSTM32_DEBUG $(STARTUP_DELAY)
-        $(info - Build: Debug) 
+    DEBUG_FLAGS = -Os -g -DSTM32_DEBUG $(STARTUP_DELAY)
+    $(info - Build: Debug) 
 else
-	DEBUG_FLAGS = -Os
-        $(info - Build: Release)
+    DEBUG_FLAGS = -Os
+    $(info - Build: Release)
 endif
 	
 
@@ -75,8 +81,8 @@ FLAGS  += -DUSE_SSP1=1 -DUSE_SSP2=1 -DUSE_SSP3=1 -DUSE_SSP4=1 -DUSE_SSP5=1 -DUSE
 # SDIO configuration
 FLAGS  += -DUSE_SDIO=1
 # General configuration
-FLAGS += -DRTOS -DFREERTOS_USED -DUSBCON -DUSBD_USE_CDC -DUSB_PRODUCT=\"RepRapFirmware\" -DVECT_TAB_OFFSET=0x20000
-#FLAGS += -DRTOS -DFREERTOS_USED -DUSBCON -DUSBD_USE_CDC -DUSB_PRODUCT=\"RepRapFirmware\" -DVECT_TAB_OFFSET=0x00000
+FLAGS += -DRTOS -DFREERTOS_USED -DUSB_PRODUCT=\"RepRapFirmware\" -DVECT_TAB_OFFSET=0x20000
+#FLAGS += -DRTOS -DFREERTOS_USED -DUSB_PRODUCT=\"RepRapFirmware\" -DVECT_TAB_OFFSET=0x00000
 FLAGS += -DHAL_RRF=1 -DFORCE_ESTACK=1 -DSUPPORT_CAN=1
 FLAGS +=  -Wall -c -mfpu=fpv5-d16 -mfloat-abi=hard -mfp16-format=ieee -mcpu=cortex-m7 -mthumb -fno-math-errno -mno-unaligned-access -ffunction-sections -fdata-sections
 FLAGS += -nostdlib -Wdouble-promotion -fsingle-precision-constant -fstack-usage
@@ -84,6 +90,13 @@ FLAGS += -nostdlib -Wdouble-promotion -fsingle-precision-constant -fstack-usage
 #FLAGS += -Wundef
 FLAGS += $(DEBUG_FLAGS)
 FLAGS += -MMD -MP 
+
+ifeq ($(USETINYUSB), true)
+    $(info - USB: TinyUSB) 
+    FLAGS += -DCORE_USES_TINYUSB=1 SUPPORT_USB=1
+#else
+    FLAGS += -DSUPPORT_USB=1
+endif
 
 ifeq ($(NETWORK), WIFI)
         $(info - Networking: WIFI + SBC) 
@@ -117,10 +130,9 @@ CXXFLAGS_CANLIB = $(FLAGS) -std=gnu++17 -fno-threadsafe-statics -fno-exceptions 
 
 
 #all Includes (RRF + Core)
-INCLUDES = $(CORE_INCLUDES) $(RRFLIBRARIES_INCLUDES) $(RRF_INCLUDES) $(RRFLIBC_INCLUDES) $(CANLIB_INCLUDES)
-
-
-DEPS = $(CORE_OBJS:.o=.d)
+INCLUDES = $(TINYUSB_INCLUDES) $(CORE_INCLUDES) $(RRFLIBRARIES_INCLUDES) $(RRF_INCLUDES) $(RRFLIBC_INCLUDES) $(CANLIB_INCLUDES)
+DEPS = $(TINYUSB_OBJS:.o=.d)
+DEPS += $(CORE_OBJS:.o=.d)
 DEPS += $(RRF_OBJS:.o=.d)
 DEPS += $(RRFLIBC_OBJS:.o=.d)
 DEPS += $(RRFLIBRARIES_OBJS:.o=.d)
@@ -136,8 +148,8 @@ firmware:  $(BUILD_DIR)/$(OUTPUT_NAME).elf
 
 coreSTM: $(BUILD_DIR)/core.a
 
-$(BUILD_DIR)/libSTMCore.a: $(CORE_OBJS)
-	$(V)$(AR) rcs $@ $(CORE_OBJS)
+$(BUILD_DIR)/libSTMCore.a: $(CORE_OBJS) $(TINYUSB_OBJS)
+	$(V)$(AR) rcs $@ $(CORE_OBJS) $(TINYUSB_OBJS)
 	@echo "\nBuilt STMCore\n"
 	
 $(BUILD_DIR)/libRRFLibraries.a: $(RRFLIBRARIES_OBJS)

@@ -1261,8 +1261,8 @@ void BoardConfig::Diagnostics(MessageType mtype) noexcept
 #endif
 
     MessageF(mtype, "\n== USB ==\n");
-    MessageF(mtype, "Read overrun %d\n", (int)USBReadOverrun);
-    USBReadOverrun = 0;
+    //MessageF(mtype, "Read overrun %d\n", (int)USBReadOverrun);
+    //USBReadOverrun = 0;
 }
 
 //Set a variable from a string using the specified data type
