@@ -1,3 +1,9 @@
+Version 3.6.0-beta.1
+=======================
+* Duet3d 3.6.0-beta.1
+* v3.5.3 changes
+* Wifi firmware v2.2.0beta2
+
 Version 3.6.0-alpha.5+1
 =======================
 * Duet3d 3.6.0-alpha.5+1
