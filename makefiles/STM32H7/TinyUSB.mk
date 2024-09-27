@@ -3,7 +3,7 @@
 #Core
 TINYUSB_SRC_DIRS  = src src/tinyusb/src src/tinyusb/src/class src/tinyusb/src/common src/tinyusb/src/device 
 TINYUSB_SRC_DIRS += src/tinyusb/src/osal src/tinyusb/src/host src/tinyusb/src/portable
-TINYUSB_SRC_DIRS += src/tinyusb/src/class/cdc src/tinyusb/src/portable/st/synopsys
+TINYUSB_SRC_DIRS += src/tinyusb/src/class/cdc src/tinyusb/src/portable/synopsys/dwc2
 
 TINYUSB_SRC = $(TINYUSB_DIR) $(addprefix $(TINYUSB_DIR)/, $(TINYUSB_SRC_DIRS))
 TINYUSB_INCLUDES = $(addprefix -I, $(TINYUSB_SRC))

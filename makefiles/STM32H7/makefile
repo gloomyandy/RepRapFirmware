@@ -16,7 +16,7 @@ NETWORK ?= WIFI
 TMC22XX ?= true
 TMC51XX ?= true
 
-USETINYUSB ?= false
+USETINYUSB ?= true
 
 GCC_PATH ?=
 
@@ -93,7 +93,7 @@ FLAGS += -MMD -MP
 
 ifeq ($(USETINYUSB), true)
     $(info - USB: TinyUSB) 
-    FLAGS += -DCORE_USES_TINYUSB=1 SUPPORT_USB=1
+    FLAGS += -DCORE_USES_TINYUSB=1 -DSUPPORT_USB=1
 #else
     FLAGS += -DSUPPORT_USB=1
 endif
