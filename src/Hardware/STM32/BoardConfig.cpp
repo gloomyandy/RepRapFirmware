@@ -444,6 +444,10 @@ static void ConfigureGPIOPins() noexcept
         pinMode(PinsSetHigh[i], OUTPUT_HIGH);
         pinMode(SpiTempSensorCsPins[i], INPUT_PULLUP);
     }
+#if HAS_SMART_DRIVERS
+    for(size_t i = 0; i < NumDirectDrivers; i++)
+        pinMode(TMC_PINS[i], OUTPUT_HIGH);
+#endif
     // Handle special cases
     //Init pins for LCD
     //make sure to init ButtonPin as input incase user presses button
@@ -452,6 +456,9 @@ static void ConfigureGPIOPins() noexcept
     pinMode(LcdBeepPin, OUTPUT_LOW);
     // Set the 12864 display CS pin low to prevent it from receiving garbage due to other SPI traffic
     pinMode(LcdCSPin, OUTPUT_LOW);
+#if SUPPORT_SPICAN
+    pinMode(CanCsPin, OUTPUT_HIGH);
+#endif
 
     //Init Diagnostcs Pin
 #if STARTUP_DELAY
