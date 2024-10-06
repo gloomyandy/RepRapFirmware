@@ -78,13 +78,14 @@ constexpr float Vfs = 325.0;										// Full scale voltage from 5160 datasheet
 // TODO use the DIAG outputs to detect stalls instead (may not be possible with some TMC driver modules)
 
 #if SUPPORT_PHASE_STEPPING
-constexpr uint32_t DriversSpiClockFrequency = 4000000;		// 4MHz SPI clock, this is the maximum rate the TMC5160/2160 support
-constexpr uint32_t DefaultSpiSleepMicroseconds = 500;		// Sleep time used for tmcTask when not phase stepping
+constexpr uint32_t DefaultDriversSpiClockFrequency = 2000000;		// 2MHz SPI clock, this is speed used in older version of RRF
+constexpr uint32_t PhaseStepDriversSpiClockFrequency = 4000000;// 4MHz SPI clock, this is the maximum rate the TMC5160/2160 support
+constexpr uint32_t DefaultSpiSleepMicroseconds = 1000;		// Sleep time used for tmcTask when not phase stepping
 constexpr uint32_t PhaseStepSpiSleepMicroseconds = 125;		// Sleep time used for tmcTask when phase stepping
 static uint32_t DriversDirectSleepMicroseconds = DefaultSpiSleepMicroseconds;	// how long the phase stepping task sleeps for in each cycle. Max SPI message frequency is ~16.7 kHz
 															// there is 1 write + 1 read/write per motor current setting.
 #else
-constexpr uint32_t DriversSpiClockFrequency = 2000000;		// 2MHz SPI clock
+constexpr uint32_t DefaultDriversSpiClockFrequency = 2000000;		// 2MHz SPI clock
 #endif
 const uint32_t TransferTimeout = 2;							// any transfer should complete within 2 ticks @ 1ms/tick
 
@@ -1461,12 +1462,11 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 		// Set the motor phase currents before we write them
 		GetMoveInstance().PhaseStepControlLoop();
 #endif
-
 		if (!spiDevice->Select(100))
 		{
 			debugPrintf("TMC51xx: Failed to select spi device\n");
 			continue;
-		}		
+		}
 		for (size_t i = 0; i < numTmc51xxDrivers; ++i)
 		{
 			Tmc51xxDriverState& drv = driverStates[i];
@@ -1523,14 +1523,22 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 		}
 		spiDevice->Deselect();
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
-		// Give other tasks a chance to run.
-		// We run the SPI bus at high speeds so that motor currents get updated as quickly as possible.
-		// If we wake up as soon as the transfer has completed then we will use too much of the available CPU time.
-		// So schedule a wakeup call instead. Try to make the wakeup interval regular.
-		lastWakeupTime += (StepClockRate * DriversDirectSleepMicroseconds)/1000000;
-		if (!tmcTimer.ScheduleCallback(lastWakeupTime))
+		if (SmartDriversSpiCsDelay)
 		{
-			TaskBase::TakeIndexed(NotifyIndices::Tmc);
+			// No point in doing fancy timing
+			delay(1);
+		}
+		else
+		{
+			// Give other tasks a chance to run.
+			// We run the SPI bus at high speeds so that motor currents get updated as quickly as possible.
+			// If we wake up as soon as the transfer has completed then we will use too much of the available CPU time.
+			// So schedule a wakeup call instead. Try to make the wakeup interval regular.
+			lastWakeupTime += (StepClockRate * DriversDirectSleepMicroseconds)/1000000;
+			if (!tmcTimer.ScheduleCallback(lastWakeupTime))
+			{
+				TaskBase::TakeIndexed(NotifyIndices::Tmc);
+			}
 		}
 		lastWakeupTime = StepTimer::GetTimerTicks();
 #else
@@ -1543,6 +1551,11 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 
 bool Tmc51xxDriverState::EnablePhaseStepping(bool enable) noexcept
 {
+	// We can't do phase stepping if we need delays on cs
+	if (SmartDriversSpiCsDelay > 0)
+	{
+		return false;
+	}
 	bool anyDriversUsingPhaseStepping = false;
 	bool ret = false;
 	phaseStepEnabled = enable;
@@ -1576,7 +1589,7 @@ bool Tmc51xxDriverState::EnablePhaseStepping(bool enable) noexcept
 	}
 
 	DriversDirectSleepMicroseconds = anyDriversUsingPhaseStepping ? PhaseStepSpiSleepMicroseconds : DefaultSpiSleepMicroseconds;
-
+	spiDevice->SetClockFrequency(anyDriversUsingPhaseStepping ? PhaseStepDriversSpiClockFrequency : DefaultDriversSpiClockFrequency);
 	tmcTask.SetPriority(anyDriversUsingPhaseStepping ? TaskPriority::TmcPhaseStepPriority : TaskPriority::TmcPriority);
 	return ret;
 }
@@ -1605,17 +1618,26 @@ void Tmc51xxDriver::Init(size_t numDrivers) noexcept
 		driversState = DriversState::ready;
 		return;
 	}
-	spiDevice = new SharedSpiClient(SharedSpiDevice::GetSharedSpiDevice(SmartDriversSpiChannel), DriversSpiClockFrequency, SPI_MODE_3, NoPin, false);
+	spiDevice = new SharedSpiClient(SharedSpiDevice::GetSharedSpiDevice(SmartDriversSpiChannel), DefaultDriversSpiClockFrequency, SPI_MODE_3, NoPin, false);
 	tmcTask.Create(TmcLoop, "TMC51xx", nullptr, TaskPriority::TmcPriority);
 }
 
 // Shut down the drivers and stop any related interrupts
 void Tmc51xxDriver::Exit() noexcept
 {
-	if (numTmc51xxDrivers > 0)
+	if (numTmc51xxDrivers > 0 && driversState != DriversState::shutDown)
 	{
 		TurnDriversOff();
-		tmcTask.TerminateAndUnlink();
+		// make sure that the task does not own the spi device when we kill it
+		if (spiDevice->Select(100))
+		{
+			tmcTask.TerminateAndUnlink();
+			spiDevice->Deselect();
+		}
+		else
+		{
+			debugPrintf("TMC51xx: Failed to select spi device on exit\n");
+		}
 	}
 	driversState = DriversState::shutDown;						// prevent Spin() calls from doing anything
 }
