@@ -1258,6 +1258,7 @@ static TASKMEM Task<TmcTaskStackWords> tmcTask;
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
 static uint32_t lastWakeupTime = 0;
 static StepTimer tmcTimer;
+static bool usePhaseStepping = false;
 #endif
 
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
@@ -1459,77 +1460,60 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 			}
 		}
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
-		// Set the motor phase currents before we write them
-		GetMoveInstance().PhaseStepControlLoop();
-#endif
-		if (!spiDevice->Select(100))
+		if (usePhaseStepping)
 		{
-			debugPrintf("TMC51xx: Failed to select spi device\n");
-			continue;
-		}
-		for (size_t i = 0; i < numTmc51xxDrivers; ++i)
-		{
-			Tmc51xxDriverState& drv = driverStates[i];
-			if (drv.IsActive())
+			// Set the motor phase currents before we write them
+			GetMoveInstance().PhaseStepControlLoop();
+			if (!spiDevice->Select(100))
 			{
-				drv.EnableChipSelect();
-				SYNC_GPIO();
-				if (SmartDriversSpiCsDelay) 
-				{
-					delay(SmartDriversSpiCsDelay);
-				}
-				bool isWrite;
-#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
-				if (drv.NeedCoilCurrentSet())
-				{
-					sendData[0] = REGNUM_5160_X_DIRECT | 0x80;
-					StoreBEU32(const_cast<uint8_t*>(sendData + 1), driverStates[i].GetPhaseToSet());
-					spiDevice->TransceivePacket(sendData, rcvData, 5);
-					drv.DisableChipSelect();
-					SYNC_GPIO();
-					isWrite = drv.GetSpiCommand(sendData);
-					drv.EnableChipSelect();
-					SYNC_GPIO();
-					spiDevice->TransceivePacket(sendData, altRcvData, 5);
-				}
-				else
-#endif
-				{
-					isWrite = drv.GetSpiCommand(sendData);
-					spiDevice->TransceivePacket(sendData, rcvData, 5);
-				}
-				drv.DisableChipSelect();
-				SYNC_GPIO();
-				drv.TransferSucceeded(rcvData);
-				// Write commands will return a copy of the write request on the next
-				// operation. However on TMC2240 devices this only seems to be the case
-				// if there is no other bus activity between requests. So for now we force
-				// a read request after a write to allow us to check it worked.
-				if (isWrite)
+				debugPrintf("TMC51xx: Failed to select spi device\n");
+				continue;
+			}
+			for (size_t i = 0; i < numTmc51xxDrivers; ++i)
+			{
+				Tmc51xxDriverState& drv = driverStates[i];
+				if (drv.IsActive())
 				{
 					drv.EnableChipSelect();
 					SYNC_GPIO();
-					drv.GetSpiCommand(sendData, true);
-					if (SmartDriversSpiCsDelay) 
+					bool isWrite;
+					if (drv.NeedCoilCurrentSet())
 					{
-						delay(SmartDriversSpiCsDelay);
+						sendData[0] = REGNUM_5160_X_DIRECT | 0x80;
+						StoreBEU32(const_cast<uint8_t*>(sendData + 1), driverStates[i].GetPhaseToSet());
+						spiDevice->TransceivePacket(sendData, rcvData, 5);
+						drv.DisableChipSelect();
+						SYNC_GPIO();
+						isWrite = drv.GetSpiCommand(sendData);
+						drv.EnableChipSelect();
+						SYNC_GPIO();
+						spiDevice->TransceivePacket(sendData, altRcvData, 5);
 					}
-					spiDevice->TransceivePacket(sendData, rcvData, 5);
+					else
+					{
+						isWrite = drv.GetSpiCommand(sendData);
+						spiDevice->TransceivePacket(sendData, rcvData, 5);
+					}
 					drv.DisableChipSelect();
 					SYNC_GPIO();
 					drv.TransferSucceeded(rcvData);
+					// Write commands will return a copy of the write request on the next
+					// operation. However on TMC2240 devices this only seems to be the case
+					// if there is no other bus activity between requests. So for now we force
+					// a read request after a write to allow us to check it worked.
+					if (isWrite)
+					{
+						drv.EnableChipSelect();
+						SYNC_GPIO();
+						drv.GetSpiCommand(sendData, true);
+						spiDevice->TransceivePacket(sendData, rcvData, 5);
+						drv.DisableChipSelect();
+						SYNC_GPIO();
+						drv.TransferSucceeded(rcvData);
+					}
 				}
 			}
-		}
-		spiDevice->Deselect();
-#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
-		if (SmartDriversSpiCsDelay)
-		{
-			// No point in doing fancy timing
-			delay(1);
-		}
-		else
-		{
+			spiDevice->Deselect();
 			// Give other tasks a chance to run.
 			// We run the SPI bus at high speeds so that motor currents get updated as quickly as possible.
 			// If we wake up as soon as the transfer has completed then we will use too much of the available CPU time.
@@ -1540,9 +1524,60 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 				TaskBase::TakeIndexed(NotifyIndices::Tmc);
 			}
 		}
+		else
+#endif
+		{
+			if (!spiDevice->Select(100))
+			{
+				debugPrintf("TMC51xx: Failed to select spi device\n");
+				continue;
+			}
+			for (size_t i = 0; i < numTmc51xxDrivers; ++i)
+			{
+				Tmc51xxDriverState& drv = driverStates[i];
+				if (drv.IsActive())
+				{
+					drv.EnableChipSelect();
+					SYNC_GPIO();
+					if (SmartDriversSpiCsDelay) 
+					{
+						delay(SmartDriversSpiCsDelay);
+					}
+					bool isWrite;
+
+					{
+						isWrite = drv.GetSpiCommand(sendData);
+						spiDevice->TransceivePacket(sendData, rcvData, 5);
+					}
+					drv.DisableChipSelect();
+					SYNC_GPIO();
+					drv.TransferSucceeded(rcvData);
+					// Write commands will return a copy of the write request on the next
+					// operation. However on TMC2240 devices this only seems to be the case
+					// if there is no other bus activity between requests. So for now we force
+					// a read request after a write to allow us to check it worked.
+					if (isWrite)
+					{
+						drv.EnableChipSelect();
+						SYNC_GPIO();
+						drv.GetSpiCommand(sendData, true);
+						if (SmartDriversSpiCsDelay) 
+						{
+							delay(SmartDriversSpiCsDelay);
+						}
+						spiDevice->TransceivePacket(sendData, rcvData, 5);
+						drv.DisableChipSelect();
+						SYNC_GPIO();
+						drv.TransferSucceeded(rcvData);
+					}
+				}
+			}
+			spiDevice->Deselect();
+
+			delay(1);
+		}
+#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
 		lastWakeupTime = StepTimer::GetTimerTicks();
-#else
-		delay(1);
 #endif
 	}
 }
@@ -1588,6 +1623,7 @@ bool Tmc51xxDriverState::EnablePhaseStepping(bool enable) noexcept
 		}
 	}
 
+	usePhaseStepping = anyDriversUsingPhaseStepping;
 	DriversDirectSleepMicroseconds = anyDriversUsingPhaseStepping ? PhaseStepSpiSleepMicroseconds : DefaultSpiSleepMicroseconds;
 	spiDevice->SetClockFrequency(anyDriversUsingPhaseStepping ? PhaseStepDriversSpiClockFrequency : DefaultDriversSpiClockFrequency);
 	tmcTask.SetPriority(anyDriversUsingPhaseStepping ? TaskPriority::TmcPhaseStepPriority : TaskPriority::TmcPriority);
