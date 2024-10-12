@@ -24,7 +24,7 @@ struct RawMove
 	float maxPrintingAcceleration;
 	float maxTravelAcceleration;
 
-	const Tool *movementTool;										// which tool (if any) is being used by this move
+	const Tool *_ecv_null movementTool;								// which tool (if any) is being used by this move
 
 	uint16_t moveType : 3,											// the H parameter from the G0 or G1 command, 0 for a normal move
 			applyM220M221 : 1,										// true if this move is affected by M220 and M221 (this could be moved to ExtendedRawMove)
@@ -135,7 +135,7 @@ public:
 	void Diagnostics(MessageType mtype) noexcept;
 
 	// These variables are currently all public, but we ought to make most of them private
-	Tool *currentTool;												// the current tool of this movement system
+	Tool *_ecv_null currentTool;									// the current tool of this movement system
 
 	// The current user position now holds the requested user position after applying workplace coordinate offsets.
 	// So we must subtract the workplace coordinate offsets when we want to display them.

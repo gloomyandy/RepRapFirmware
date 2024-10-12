@@ -284,8 +284,10 @@ constexpr uint32_t DefaultPwmConfReg = 0xC10D0024;		// this is the reset default
 constexpr uint8_t REGNUM_PWM_SCALE = 0x71;
 constexpr uint8_t REGNUM_PWM_AUTO = 0x72;
 
+#if HAS_STALL_DETECT
 static constexpr uint32_t MaxValidSgLoadRegister = 1023;
 static constexpr uint32_t InvalidSgLoadRegister = 1024;
+#endif
 
 // Send/receive data and CRC stuff
 
@@ -410,6 +412,7 @@ public:
 	void SetStallMinimumStepsPerSecond(unsigned int stepsPerSecond) noexcept;
 	void SetStallDetectFilter(bool sgFilter) noexcept {};
 	void AppendStallConfig(const StringRef& reply) const noexcept;
+	EndstopValidationResult CheckStallDetectionEnabled(float speed) noexcept;
 #endif
 	StandardDriverStatus GetStatus(bool accumulated, bool clearAccumulated) noexcept;
 	float GetSenseResistor() const noexcept;
@@ -444,6 +447,7 @@ public:
 	bool inline IsReady() noexcept {return state == DriversState::ready;}
 
 private:
+	bool IsStealthChop() const noexcept;
 	bool SetChopConf(uint32_t newVal) noexcept;
 	void UpdateRegister(size_t regIndex, uint32_t regVal) noexcept;
 	void UpdateChopConfRegister() noexcept;						// calculate the chopper control register and flag it for sending
@@ -666,11 +670,18 @@ inline bool Tmc22xxDriverState::DMAReceive(uint8_t regNum, uint8_t crc) noexcept
 	return TMCSoftUARTTransfer(TMC_PINS[driverNumber], sendData, 4, receiveData + 4, 8, TransferTimeout);
 }
 
+// Return true if this driver is operating in stealthChop mode
+bool Tmc22xxDriverState::IsStealthChop() const noexcept
+{
+	const uint32_t gconf = writeRegisters[WriteGConf];
+	return (gconf & GCONF_SPREAD_CYCLE) == 0;
+}
+
 // Update the maximum step pulse interval at which we consider open load detection to be reliable
 void Tmc22xxDriverState::UpdateMaxOpenLoadStepInterval() noexcept
 {
 	const uint32_t defaultMaxInterval = StepClockRate/MinimumOpenLoadFullStepsPerSec;
-	if ((writeRegisters[WriteGConf] & GCONF_SPREAD_CYCLE) != 0)
+	if (IsStealthChop())
 	{
 		maxOpenLoadStepInterval = defaultMaxInterval;
 	}
@@ -780,9 +791,24 @@ void Tmc22xxDriverState::SetStallMinimumStepsPerSecond(unsigned int stepsPerSeco
 
 void Tmc22xxDriverState::AppendStallConfig(const StringRef& reply) const noexcept
 {
-	const int threshold = (int)((255 - writeRegisters[WriteSgthrs]) - 128);
-	reply.catf("stall threshold %d, steps/sec %" PRIu32 ", coolstep %" PRIx32,
-				threshold, 12000000 / (256 * writeRegisters[WriteTcoolthrs]), writeRegisters[WriteCoolconf] & 0xFFFF);
+	// Map stall sensitivity value 0..255 to 128..-128
+	const int threshold = 127 - (int)writeRegisters[WriteSgthrs];
+	const uint32_t fullstepsPerSecond = (12500000/256) / writeRegisters[WriteTcoolthrs];
+	reply.catf("stall threshold %d, full steps/sec %" PRIu32 ", coolstep %" PRIx32, threshold, fullstepsPerSecond, writeRegisters[WriteCoolconf] & 0xFFFF);
+}
+
+// Check that stall detection can occur at the specified speed
+EndstopValidationResult Tmc22xxDriverState::CheckStallDetectionEnabled(float speed) noexcept
+{
+	if (!IsStealthChop())
+	{
+		return EndstopValidationResult::driverNotInStealthChopMode;
+	}
+	if (speed * (float)StepClockRate < ((12500000/256) << microstepShiftFactor) / writeRegisters[WriteTcoolthrs])
+	{
+		return EndstopValidationResult::moveTooSlow;
+	}
+	return EndstopValidationResult::ok;
 }
 
 #endif
@@ -982,7 +1008,7 @@ bool Tmc22xxDriverState::SetDriverMode(unsigned int mode) noexcept
 // Get the driver mode
 DriverMode Tmc22xxDriverState::GetDriverMode() const noexcept
 {
-	return ((writeRegisters[WriteGConf] & GCONF_SPREAD_CYCLE) != 0) ? DriverMode::spreadCycle : DriverMode::stealthChop;
+	return (IsStealthChop()) ? DriverMode::stealthChop : DriverMode::spreadCycle;
 }
 
 // Set the motor current

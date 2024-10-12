@@ -1,13 +1,13 @@
 /*
- * LinearAdcTemperatureSensor.cpp
+ * ADS131A02.cpp
  *
- *  Created on: 8 Jun 2017
+ *  Created on: 7 Oct 2024
  *      Author: David
  */
 
-#include "CurrentLoopTemperatureSensor.h"
+#include "ADS131A02.h"
 
-#if SUPPORT_SPI_SENSORS
+#if SUPPORT_SPI_SENSORS && SUPPORT_ADS131A02
 
 #include <Platform/RepRap.h>
 #include <Platform/Platform.h>
@@ -17,48 +17,44 @@
 # include <CanMessageGenericParser.h>
 #endif
 
-const uint32_t MCP3204_Frequency = 1000000;		// maximum for MCP3204 is 1MHz @ 2.7V, will be slightly higher at 3.3V
+const uint32_t ADS131_Frequency = 15000000;		// maximum for ADS131A02 is 25MHz for a single device, using 1:1 mark-space ratio
 
-// The MCP3204 samples input data on the rising edge and changes the output data on the rising edge.
-const SpiMode MCP3204_SpiMode = SPI_MODE_0;
+// The ADS131 samples input data on the falling edge and changes the output data on the rising edge.
+const SpiMode ADS131_SpiMode = SPI_MODE_1;
 
 // Define the minimum interval between readings
-const uint32_t MinimumReadInterval = 100;		// minimum interval between reads, in milliseconds
+const uint32_t MinimumReadInterval = 3;			// minimum interval between reads, in milliseconds
 
 // Sensor type descriptors
-TemperatureSensor::SensorTypeDescriptor CurrentLoopTemperatureSensor::typeDescriptor(TypeName, [](unsigned int sensorNum) noexcept -> TemperatureSensor *_ecv_from { return new CurrentLoopTemperatureSensor(sensorNum); } );
+TemperatureSensor::SensorTypeDescriptor ADS131A02::typeDescriptor(TypeName, [](unsigned int sensorNum) noexcept -> TemperatureSensor *_ecv_from { return new ADS131A02(sensorNum); } );
 
-CurrentLoopTemperatureSensor::CurrentLoopTemperatureSensor(unsigned int sensorNum) noexcept
-	: SpiTemperatureSensor(sensorNum, "Current Loop", MCP3204_SpiMode, MCP3204_Frequency),
-	  tempAt4mA(DefaultTempAt4mA), tempAt20mA(DefaultTempAt20mA), chipChannel(DefaultChipChannel), isDifferential(false)
+ADS131A02::ADS131A02(unsigned int sensorNum) noexcept
+	: SpiTemperatureSensor(sensorNum, TypeName, ADS131_SpiMode, ADS131_Frequency)
 {
-	CalcDerivedParameters();
+	// TODO Auto-generated constructor stub
 }
 
 // Configure this temperature sensor
-GCodeResult CurrentLoopTemperatureSensor::Configure(GCodeBuffer& gb, const StringRef& reply, bool& changed)
+GCodeResult ADS131A02::Configure(GCodeBuffer& gb, const StringRef& reply, bool& changed)
 {
+	gb.TryGetFValue('L', readingAtMin, changed);
+	gb.TryGetFValue('H', readingAtMax, changed);
+
 	if (!ConfigurePort(gb, reply, changed))
 	{
 		return GCodeResult::error;
 	}
 
-	gb.TryGetFValue('L', tempAt4mA, changed);
-	gb.TryGetFValue('H', tempAt20mA, changed);
-	gb.TryGetUIValue('C', chipChannel, changed);
-	gb.TryGetBValue('D', isDifferential, changed);
 	ConfigureCommonParameters(gb, changed);
 	return FinishConfiguring(changed, reply);
 }
 
 #if SUPPORT_REMOTE_COMMANDS
 
-GCodeResult CurrentLoopTemperatureSensor::Configure(const CanMessageGenericParser& parser, const StringRef& reply) noexcept
+GCodeResult ADS131A02::Configure(const CanMessageGenericParser& parser, const StringRef& reply) noexcept
 {
-	bool seen = parser.GetFloatParam('L', tempAt4mA);
-	seen = parser.GetFloatParam('H', tempAt20mA) || seen;
-	seen = parser.GetUintParam('C', chipChannel) || seen;
-	seen = parser.GetBoolParam('D', isDifferential) || seen;
+	bool seen = parser.GetFloatParam('L', readingAtMin);
+	seen = parser.GetFloatParam('H', readingAtMax) || seen;
 
 	if (!ConfigurePort(parser, reply, seen))
 	{
@@ -70,7 +66,7 @@ GCodeResult CurrentLoopTemperatureSensor::Configure(const CanMessageGenericParse
 
 #endif
 
-GCodeResult CurrentLoopTemperatureSensor::FinishConfiguring(bool changed, const StringRef& reply) noexcept
+GCodeResult ADS131A02::FinishConfiguring(bool changed, const StringRef& reply) noexcept
 {
 	if (changed)
 	{
@@ -90,7 +86,6 @@ GCodeResult CurrentLoopTemperatureSensor::FinishConfiguring(bool changed, const 
 			}
 			delay(MinimumReadInterval);
 		}
-
 		SetResult(t, rslt);
 
 		if (rslt != TemperatureError::ok)
@@ -101,27 +96,30 @@ GCodeResult CurrentLoopTemperatureSensor::FinishConfiguring(bool changed, const 
 	else
 	{
 		CopyBasicDetails(reply);
-		reply.catf(", temperature range %.1f to %.1fC", (double)tempAt4mA, (double)tempAt20mA);
+		reply.catf(", reading range %.1f to %.1fC", (double)readingAtMin, (double)readingAtMax);
 	}
 	return GCodeResult::ok;
 }
 
-void CurrentLoopTemperatureSensor::Poll() noexcept
+void ADS131A02::Poll() noexcept
 {
 	float t;
 	const TemperatureError rslt = TryGetLinearAdcTemperature(t);
 	SetResult(t, rslt);
 }
 
-void CurrentLoopTemperatureSensor::CalcDerivedParameters() noexcept
+void ADS131A02::CalcDerivedParameters() noexcept
 {
-	minLinearAdcTemp = tempAt4mA - 0.25 * (tempAt20mA - tempAt4mA);
-	linearAdcDegCPerCount = (tempAt20mA - minLinearAdcTemp) / 4096.0;
+//TODO	linearAdcDegCPerCount = (tempAt20mA - minLinearAdcTemp) / 4096.0;
 }
 
 // Try to get a temperature reading from the linear ADC by doing an SPI transaction
-TemperatureError CurrentLoopTemperatureSensor::TryGetLinearAdcTemperature(float& t) noexcept
+TemperatureError ADS131A02::TryGetLinearAdcTemperature(float& t) noexcept
 {
+#if 1
+	t = BadErrorTemperature;
+	return TemperatureError::unknownError;
+#else
 	/*
 	 * The MCP3204 waits for a high input input bit before it does anything. Call this clock 1.
 	 * The next input bit it high for single-ended operation, low for differential. This is clock 2.
@@ -146,7 +144,6 @@ TemperatureError CurrentLoopTemperatureSensor::TryGetLinearAdcTemperature(float&
 	 * These values represent clocks 1 to 5.
 	 */
 
-	const uint8_t channelByte = ((isDifferential) ? 0x80u : 0xC0u) | (chipChannel * 0x08u);
 	const uint8_t adcData[] = { channelByte, 0x00, 0x00 };
 	uint32_t rawVal;
 	TemperatureError rslt = DoSpiTransaction(adcData, 3, rawVal);
@@ -166,8 +163,9 @@ TemperatureError CurrentLoopTemperatureSensor::TryGetLinearAdcTemperature(float&
 		}
 	}
 	return rslt;
+#endif
 }
 
-#endif // SUPPORT_SPI_SENSORS
+#endif
 
 // End

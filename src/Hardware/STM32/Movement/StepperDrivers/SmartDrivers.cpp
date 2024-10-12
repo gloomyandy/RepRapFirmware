@@ -250,6 +250,17 @@ void SmartDrivers::AppendStallConfig(size_t driver, const StringRef& reply) noex
 #endif
 }
 
+EndstopValidationResult SmartDrivers::CheckStallDetectionEnabled(size_t driver, float speed) noexcept
+{
+#if HAS_STALL_DETECT
+	if (driver < numDrivers)
+	{
+		return driverStates[driver]->CheckStallDetectionEnabled(speed);
+	}
+#endif
+	return EndstopValidationResult::stallDetectionNotSupported;
+}
+
 void SmartDrivers::AppendDriverStatus(size_t drive, const StringRef& reply) noexcept
 {
 	if (drive < numDrivers)

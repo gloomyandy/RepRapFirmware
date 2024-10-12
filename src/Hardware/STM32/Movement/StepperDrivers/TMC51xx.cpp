@@ -45,7 +45,7 @@ constexpr bool DefaultStallDetectFiltered = false;
 constexpr unsigned int DefaultMinimumStepsPerSecond = 200;	// for stall detection: 1 rev per second assuming 1.8deg/step, as per the TMC5160 datasheet
 constexpr uint32_t DefaultTcoolthrs = 2000;					// max interval between 1/256 microsteps for stall detection to be enabled
 constexpr uint32_t DefaultThigh = 200;
-constexpr uint32_t DefaultTmcClockSpeed = 12000000; 		// the rate at which the TMC driver is clocked, internally or externally
+constexpr uint32_t DefaultHighestTmcClockSpeed = 12500000;	// the highest speed at which the TMC driver is clocked internally
 constexpr float Tmc2240Rref = 12.3;							// TMC2240 reference resistor on Fly boards, in Kohms
 constexpr float Tmc2240FullScaleCurrent = 36000/Tmc2240Rref;// in mA, assuming we set the range bits in the DRV_CONF register to 01b
 constexpr float Tmc2240CsMultiplier = 32.0/Tmc2240FullScaleCurrent;
@@ -319,9 +319,9 @@ static size_t numTmc51xxDrivers = 0;
 static constexpr uint32_t MaxValidSgLoadRegister = 1023;
 static constexpr uint32_t InvalidSgLoadRegister = 1024;
 
-inline uint32_t GetTmcClockSpeed() noexcept
+inline uint32_t GetHighestTmcClockSpeed() noexcept
 {
-	return DefaultTmcClockSpeed;
+	return DefaultHighestTmcClockSpeed;
 }
 
 enum class DriversState : uint8_t
@@ -378,6 +378,7 @@ public:
 	void SetStallDetectFilter(bool sgFilter) noexcept;
 	void SetStallMinimumStepsPerSecond(unsigned int stepsPerSecond) noexcept;
 	void AppendStallConfig(const StringRef& reply) const noexcept;
+	EndstopValidationResult CheckStallDetectionEnabled(float speed) noexcept;
 #endif
 
 	bool SetRegister(SmartDriverRegister reg, uint32_t regVal) noexcept;
@@ -662,6 +663,20 @@ unsigned int Tmc51xxDriverState::GetMicrostepping(bool& interpolation) const noe
 {
 	interpolation = (configuredChopConfReg & CHOPCONF_INTPOL) != 0;
 	return 1u << microstepShiftFactor;
+}
+
+// Check that stall detection can occur at the specified speed
+EndstopValidationResult Tmc51xxDriverState::CheckStallDetectionEnabled(float speed) noexcept
+{
+	if (GetDriverMode() > DriverMode::spreadCycle)			// if in stealthChop or direct mode
+	{
+		return EndstopValidationResult::driverNotInSpreadCycleMode;
+	}
+	if (speed * (float)maxStallStepInterval < (float)(1u << microstepShiftFactor))
+	{
+		return EndstopValidationResult::moveTooSlow;
+	}
+	return EndstopValidationResult::ok;
 }
 
 bool Tmc51xxDriverState::SetRegister(SmartDriverRegister reg, uint32_t regVal) noexcept
@@ -1092,7 +1107,7 @@ void Tmc51xxDriverState::SetStallMinimumStepsPerSecond(unsigned int stepsPerSeco
 {
 	//TODO use hardware facility instead
 	maxStallStepInterval = StepClockRate/max<unsigned int>(stepsPerSecond, 1u);
-	UpdateRegister(WriteTcoolthrs, (GetTmcClockSpeed() + (128 * stepsPerSecond))/(256 * stepsPerSecond));
+	UpdateRegister(WriteTcoolthrs, (GetHighestTmcClockSpeed() + (128 * stepsPerSecond))/(256 * stepsPerSecond));
 }
 
 void Tmc51xxDriverState::AppendStallConfig(const StringRef& reply) const noexcept
@@ -1108,10 +1123,11 @@ void Tmc51xxDriverState::AppendStallConfig(const StringRef& reply) const noexcep
 	const float speed1 = (float)(fullstepsPerSecond << microstepShiftFactor)/stepsPerMm;
 	const uint32_t tcoolthrs = writeRegisters[WriteTcoolthrs] & ((1ul << 20) - 1u);
 	bool bdummy;
-	const float speed2 = ((float)GetTmcClockSpeed() * GetMicrostepping(bdummy))/(256 * tcoolthrs * stepsPerMm);
-	reply.catf("stall threshold %d, filter %s, steps/sec %" PRIu32 " (%.1f mm/sec), coolstep threshold %" PRIu32 " (%.1f mm/sec)",
+	const float speed2 = ((float)GetHighestTmcClockSpeed() * GetMicrostepping(bdummy))/(256 * tcoolthrs * stepsPerMm);
+	reply.catf("stall threshold %d, filter %s, full steps/sec %" PRIu32 " (%.1f mm/sec), coolstep threshold %" PRIu32 " (%.1f mm/sec)",
 				threshold, ((filtered) ? "on" : "off"), fullstepsPerSecond, (double)speed1, tcoolthrs, (double)speed2);
 }
+
 #endif
 
 // In the following, only byte accesses to sendDataBlock are allowed, because accesses to non-cacheable memory must be aligned

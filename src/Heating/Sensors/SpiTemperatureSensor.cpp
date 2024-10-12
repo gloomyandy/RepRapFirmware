@@ -12,7 +12,7 @@
 #include <Platform/Tasks.h>
 #include <Hardware/Spi/SharedSpiDevice.h>
 
-SpiTemperatureSensor::SpiTemperatureSensor(unsigned int sensorNum, const char *name, SpiMode spiMode, uint32_t clockFrequency) noexcept
+SpiTemperatureSensor::SpiTemperatureSensor(unsigned int sensorNum, const char *_ecv_array name, SpiMode spiMode, uint32_t clockFrequency) noexcept
 	: SensorWithPort(sensorNum, name), 
 #if STM32
 	device(SharedSpiDevice::GetSharedSpiDevice(TempSensorSSPChannel),
@@ -51,7 +51,7 @@ void SpiTemperatureSensor::InitSpi() noexcept
 }
 
 // Send and receive 1 to 8 bytes of data and return the result as a single 32-bit word
-TemperatureError SpiTemperatureSensor::DoSpiTransaction(const uint8_t dataOut[], size_t nbytes, uint32_t& rslt) const noexcept
+TemperatureError SpiTemperatureSensor::DoSpiTransaction(const uint8_t *_ecv_array _ecv_null dataOut, size_t nbytes, uint32_t& rslt) const noexcept
 {
 	if (!device.Select(10))
 	{
