@@ -16,7 +16,7 @@ NETWORK ?= WIFI
 TMC22XX ?= true
 TMC51XX ?= true
 
-USETINYUSB ?= true
+USETINYUSB ?= false
 
 GCC_PATH ?=
 
