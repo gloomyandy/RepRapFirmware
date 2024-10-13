@@ -2,7 +2,7 @@
 #define SRC_STM32_HARDWARE_DEVICES_H_
 
 #include <AsyncSerial.h>
-#define SUPPORT_USB		1		// needed by USBSerial.h
+#define SUPPORT_USB		1		// needed by SerialCDC.h
 #include <SerialCDC.h>
 extern SerialCDC serialUSB;
 void DeviceInit() noexcept;
