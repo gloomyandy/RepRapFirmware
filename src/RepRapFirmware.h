@@ -32,7 +32,7 @@ Licence: GPL
 #include <ctime>
 [[deprecated("use gmtime_r instead for thread-safety")]] tm *_ecv_null gmtime(const time_t* t);
 [[deprecated("use SafeStrptime instead")]] char *_ecv_array strptime (const char *_ecv_array buf, const char *_ecv_array format, struct tm *timeptr);
-const char *_ecv_array SafeStrptime(const char *_ecv_array buf, const char *_ecv_array format, struct tm *timeptr) noexcept;
+const char *_ecv_array _ecv_null SafeStrptime(const char *_ecv_array buf, const char *_ecv_array format, struct tm *timeptr) noexcept;
 
 #include <Core.h>
 
@@ -147,7 +147,11 @@ namespace CanInterface
 #include <General/SafeVsnprintf.h>
 #include <RRF3Common.h>
 
-#define THROWS(...)				// expands to nothing, for providing exception specifications
+#ifdef __ECV__
+#define THROWS(...)		_ecv_throws(__VA_ARGS__)
+#else
+#define THROWS(...)		noexcept(false)			// best we can do is say that it throws something
+#endif
 
 // Error reporting for functions that are allowed to throw
 #define THROW_INTERNAL_ERROR	ThrowGCodeException("internal error at file " __FILE__ "(%d)", (int32_t)__LINE__)
@@ -156,7 +160,7 @@ namespace CanInterface
 #define REPORT_INTERNAL_ERROR do { reprap.ReportInternalError((__FILE__), (__func__), (__LINE__)); } while(0)
 
 // Assertion mechanism
-extern "C" [[noreturn]] void vAssertCalled(uint32_t line, const char *file) noexcept __attribute__((naked));
+extern "C" [[noreturn]] void vAssertCalled(uint32_t line, const char *_ecv_array file) noexcept __attribute__((naked));
 #define RRF_ASSERT(_expr) do { if (!(_expr)) { vAssertCalled(__LINE__, __FILE__); } } while (false)
 
 #ifdef __ECV__			// eCv doesn't understand the gcc asm syntax in these functions
@@ -341,6 +345,7 @@ class FilamentMonitor;
 class RandomProbePointSet;
 class Logger;
 class FansManager;
+class GCodeException;
 
 #if SUPPORT_IOBITS
 class PortControl;
@@ -509,7 +514,7 @@ inline constexpr ParameterLettersBitmap ParameterLettersToBitmap(const char *_ec
 }
 
 // Debugging support
-extern "C" void debugPrintf(const char* fmt, ...) noexcept __attribute__ ((format (printf, 1, 2)));
+extern "C" void debugPrintf(const char *_ecv_array fmt, ...) noexcept __attribute__ ((format (printf, 1, 2)));
 #define DEBUG_HERE do { debugPrintf("At " __FILE__ " line %d\n", __LINE__); delay(50); } while (false)
 
 // Functions and globals not part of any class

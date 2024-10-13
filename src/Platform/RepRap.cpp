@@ -1148,8 +1148,13 @@ void RepRap::Tick() noexcept
 				const TaskHandle relevantTask = (heatTaskStuck) ? Heat::GetHeatTask() : Tasks::GetMainTask();
 				if (relevantTask == RTOSIface::GetCurrentTask())
 				{
+#ifdef __ECV__
+					// eCv doesn't understand the gcc "register const... asm" line
+					const uint32_t *_ecv_array stackPtr = _ecv_undefined(const uint32_t *_ecv_array);
+#else
 					__asm volatile("mrs r2, psp");
 					register const uint32_t * stackPtr asm ("r2");				// we want the PSP not the MSP
+#endif
 					relevantStackPtr = stackPtr + 5;							// discard uninteresting registers, keep LR PC PSR
 				}
 				else
@@ -1737,8 +1742,8 @@ OutputBuffer *RepRap::GetConfigResponse() noexcept
 	response->catf(",\"idleCurrentFactor\":%.1f", (double)(move->GetIdleCurrentFactor() * 100.0));
 	response->catf(",\"idleTimeout\":%.1f,", (double)(move->IdleTimeout()));
 
-	// Minimum feedrates
-	AppendFloatArray(response, "minFeedrates", MaxAxesPlusExtruders, [this](size_t drive) noexcept { return InverseConvertSpeedToMmPerSec(move->GetInstantDv(drive)); }, 2);
+	// Maximum jerk
+	AppendFloatArray(response, "minFeedrates", MaxAxesPlusExtruders, [this](size_t drive) noexcept { return InverseConvertSpeedToMmPerSec(move->GetMaxInstantDv(drive)); }, 2);
 
 	// Maximum feedrates
 	response->cat(',');
@@ -2216,7 +2221,7 @@ GCodeResult RepRap::GetFileInfoResponse(const char *filename, OutputBuffer *&res
 		{
 			info.isValid = false;
 		}
-		else if (MassStorage::GetFileInfo(filePath.c_str(), info, quitEarly) == GCodeResult::notFinished)
+		else if (MassStorage::GetFileInfo(filePath.c_str(), info, quitEarly, nullptr) == GCodeResult::notFinished)
 		{
 			// This may take a few runs...
 			return GCodeResult::notFinished;

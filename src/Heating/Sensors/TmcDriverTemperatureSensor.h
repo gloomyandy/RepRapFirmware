@@ -30,6 +30,11 @@ public:
 	const uint8_t GetNumAdditionalOutputs() const noexcept override { return totalSmartDrivers; }
 #endif
 private:
+	static SensorTypeDescriptor primaryTmcDriverSensorDescriptor;
+#if defined(DUET_NG) || defined(PCCB_10)
+	static SensorTypeDescriptor duexTmcDriverSensorDescriptor;
+#endif
+
 	unsigned int channel;
 };
 

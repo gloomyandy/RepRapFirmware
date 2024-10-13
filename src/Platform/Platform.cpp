@@ -1409,7 +1409,7 @@ void Platform::InitialiseInterrupts() noexcept
 //extern uint32_t maxRead, maxWrite;
 extern void SPWMDiagnostics();
 
-/*static*/ const char *Platform::GetResetReasonText() noexcept
+/*static*/ const char *_ecv_array Platform::GetResetReasonText() noexcept
 {
 #if SAME5x
 	const uint8_t resetReason = RSTC->RCAUSE.reg;
@@ -1597,8 +1597,7 @@ static uint32_t TimedSqrt(uint64_t arg, uint32_t& timeAcc) noexcept
 	return ret;
 }
 
-
-GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, OutputBuffer*& buf, unsigned int d) THROWS(GCodeException)
+GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, OutputBuffer *_ecv_null & buf, unsigned int d) THROWS(GCodeException)
 {
 	switch (d)
 	{

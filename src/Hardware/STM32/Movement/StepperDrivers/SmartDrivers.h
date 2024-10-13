@@ -14,6 +14,7 @@
 #if SUPPORT_TMC51xx || SUPPORT_TMC22xx
 
 #include "StepperDrivers/DriverMode.h"
+#include <Endstops/EndstopDefs.h>
 
 namespace SmartDrivers
 {
@@ -31,11 +32,6 @@ namespace SmartDrivers
 	unsigned int GetMicrostepping(size_t drive, bool& interpolation) noexcept;
 	bool SetDriverMode(size_t driver, unsigned int mode) noexcept;
 	DriverMode GetDriverMode(size_t driver) noexcept;
-	void SetStallThreshold(size_t driver, int sgThreshold) noexcept;
-	void SetStallFilter(size_t driver, bool sgFilter) noexcept;
-	void SetStallMinimumStepsPerSecond(size_t driver, unsigned int stepsPerSecond) noexcept;
-	void AppendStallConfig(size_t driver, const StringRef& reply) noexcept;
-	void AppendDriverStatus(size_t driver, const StringRef& reply) noexcept;
 	float GetStandstillCurrentPercent(size_t driver) noexcept;
 	void SetStandstillCurrentPercent(size_t driver, float percent) noexcept;
 	bool SetCurrentScaler(size_t driver, int8_t cs) noexcept;
@@ -50,6 +46,12 @@ namespace SmartDrivers
 	StandardDriverStatus GetStatus(size_t driver, bool accumulated, bool clearAccumulated) noexcept;
 	bool IsReady() noexcept;
 #if HAS_STALL_DETECT
+	void SetStallThreshold(size_t driver, int sgThreshold) noexcept;
+	void SetStallFilter(size_t driver, bool sgFilter) noexcept;
+	void SetStallMinimumStepsPerSecond(size_t driver, unsigned int stepsPerSecond) noexcept;
+	void AppendStallConfig(size_t driver, const StringRef& reply) noexcept;
+	void AppendDriverStatus(size_t driver, const StringRef& reply) noexcept;
+	EndstopValidationResult CheckStallDetectionEnabled(size_t driver, float speed) noexcept;
 	DriversBitmap GetStalledDrivers(DriversBitmap driversOfInterest) noexcept;
 #endif
 	void SetSenseResistor(size_t driver, float value) noexcept;

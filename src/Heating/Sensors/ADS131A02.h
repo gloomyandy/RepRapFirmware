@@ -1,21 +1,21 @@
 /*
- * LinearAdcTemperatureSensor.h
+ * ADS131A02.h
  *
- *  Created on: 8 Jun 2017
+ *  Created on: 7 Oct 2024
  *      Author: David
  */
 
-#ifndef SRC_HEATING_LINEARADCTEMPERATURESENSOR_H_
-#define SRC_HEATING_LINEARADCTEMPERATURESENSOR_H_
+#ifndef SRC_HEATING_SENSORS_ADS131A02_H_
+#define SRC_HEATING_SENSORS_ADS131A02_H_
 
 #include "SpiTemperatureSensor.h"
 
-#if SUPPORT_SPI_SENSORS
+#if SUPPORT_SPI_SENSORS && SUPPORT_ADS131A02
 
-class CurrentLoopTemperatureSensor : public SpiTemperatureSensor
+class ADS131A02 : public SpiTemperatureSensor
 {
 public:
-	explicit CurrentLoopTemperatureSensor(unsigned int sensorNum) noexcept;
+	explicit ADS131A02(unsigned int sensorNum) noexcept;
 	GCodeResult Configure(GCodeBuffer& gb, const StringRef& reply, bool& changed) THROWS(GCodeException) override;
 
 #if SUPPORT_REMOTE_COMMANDS
@@ -25,7 +25,7 @@ public:
 	void Poll() noexcept override;
 	const char *_ecv_array GetShortSensorType() const noexcept override { return TypeName; }
 
-	static constexpr const char *_ecv_array TypeName = "currentloop";
+	static constexpr const char *_ecv_array TypeName = "ads131";
 
 private:
 	static SensorTypeDescriptor typeDescriptor;
@@ -35,18 +35,14 @@ private:
 	void CalcDerivedParameters() noexcept;
 
 	// Configurable parameters
-	float tempAt4mA, tempAt20mA;
-	uint32_t chipChannel;
-	bool isDifferential;
+	float readingAtMin = DefaultReadingAtMin;
+	float readingAtMax = DefaultReadingAtmax;
 
-	// Derived parameters
-	float minLinearAdcTemp, linearAdcDegCPerCount;
+	static constexpr float DefaultReadingAtMin = 0.0;
+	static constexpr float DefaultReadingAtmax = 100.0;
 
-	static constexpr float DefaultTempAt4mA = 385.0;
-	static constexpr float DefaultTempAt20mA = 1600.0;
-	static constexpr uint32_t DefaultChipChannel = 0;
 };
 
-#endif // SUPPORT_SPI_SENSORS
+#endif
 
-#endif /* SRC_HEATING_LINEARADCTEMPERATURESENSOR_H_ */
+#endif /* SRC_HEATING_SENSORS_ADS131A02_H_ */

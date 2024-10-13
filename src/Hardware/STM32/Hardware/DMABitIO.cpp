@@ -355,10 +355,6 @@ void DMABitIOInit() noexcept
     SUDma.Init.PeriphBurst         = DMA_PBURST_SINGLE;
     HAL_DMA_Init(&SUDma);
     HAL_DMA_RegisterCallback(&SUDma, HAL_DMA_XFER_CPLT_CB_ID, DmaInterrupt);
-    for(size_t i = 0; i < NumDirectDrivers; i++)
-        if (TMC_PINS[i] != NoPin)
-            pinMode(TMC_PINS[i], OUTPUT_HIGH);
-
     SUPin = NoPin;
     SUState = SUStates::idle;
     SUWaitingTask = 0;

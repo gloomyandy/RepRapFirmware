@@ -45,7 +45,7 @@ constexpr bool DefaultStallDetectFiltered = false;
 constexpr unsigned int DefaultMinimumStepsPerSecond = 200;	// for stall detection: 1 rev per second assuming 1.8deg/step, as per the TMC5160 datasheet
 constexpr uint32_t DefaultTcoolthrs = 2000;					// max interval between 1/256 microsteps for stall detection to be enabled
 constexpr uint32_t DefaultThigh = 200;
-constexpr uint32_t DefaultTmcClockSpeed = 12000000; 		// the rate at which the TMC driver is clocked, internally or externally
+constexpr uint32_t DefaultHighestTmcClockSpeed = 12500000;	// the highest speed at which the TMC driver is clocked internally
 constexpr float Tmc2240Rref = 12.3;							// TMC2240 reference resistor on Fly boards, in Kohms
 constexpr float Tmc2240FullScaleCurrent = 36000/Tmc2240Rref;// in mA, assuming we set the range bits in the DRV_CONF register to 01b
 constexpr float Tmc2240CsMultiplier = 32.0/Tmc2240FullScaleCurrent;
@@ -78,13 +78,14 @@ constexpr float Vfs = 325.0;										// Full scale voltage from 5160 datasheet
 // TODO use the DIAG outputs to detect stalls instead (may not be possible with some TMC driver modules)
 
 #if SUPPORT_PHASE_STEPPING
-constexpr uint32_t DriversSpiClockFrequency = 4000000;		// 4MHz SPI clock, this is the maximum rate the TMC5160/2160 support
-constexpr uint32_t DefaultSpiSleepMicroseconds = 500;		// Sleep time used for tmcTask when not phase stepping
+constexpr uint32_t DefaultDriversSpiClockFrequency = 2000000;		// 2MHz SPI clock, this is speed used in older version of RRF
+constexpr uint32_t PhaseStepDriversSpiClockFrequency = 4000000;// 4MHz SPI clock, this is the maximum rate the TMC5160/2160 support
+constexpr uint32_t DefaultSpiSleepMicroseconds = 1000;		// Sleep time used for tmcTask when not phase stepping
 constexpr uint32_t PhaseStepSpiSleepMicroseconds = 125;		// Sleep time used for tmcTask when phase stepping
 static uint32_t DriversDirectSleepMicroseconds = DefaultSpiSleepMicroseconds;	// how long the phase stepping task sleeps for in each cycle. Max SPI message frequency is ~16.7 kHz
 															// there is 1 write + 1 read/write per motor current setting.
 #else
-constexpr uint32_t DriversSpiClockFrequency = 2000000;		// 2MHz SPI clock
+constexpr uint32_t DefaultDriversSpiClockFrequency = 2000000;		// 2MHz SPI clock
 #endif
 const uint32_t TransferTimeout = 2;							// any transfer should complete within 2 ticks @ 1ms/tick
 
@@ -318,9 +319,9 @@ static size_t numTmc51xxDrivers = 0;
 static constexpr uint32_t MaxValidSgLoadRegister = 1023;
 static constexpr uint32_t InvalidSgLoadRegister = 1024;
 
-inline uint32_t GetTmcClockSpeed() noexcept
+inline uint32_t GetHighestTmcClockSpeed() noexcept
 {
-	return DefaultTmcClockSpeed;
+	return DefaultHighestTmcClockSpeed;
 }
 
 enum class DriversState : uint8_t
@@ -377,6 +378,7 @@ public:
 	void SetStallDetectFilter(bool sgFilter) noexcept;
 	void SetStallMinimumStepsPerSecond(unsigned int stepsPerSecond) noexcept;
 	void AppendStallConfig(const StringRef& reply) const noexcept;
+	EndstopValidationResult CheckStallDetectionEnabled(float speed) noexcept;
 #endif
 
 	bool SetRegister(SmartDriverRegister reg, uint32_t regVal) noexcept;
@@ -661,6 +663,20 @@ unsigned int Tmc51xxDriverState::GetMicrostepping(bool& interpolation) const noe
 {
 	interpolation = (configuredChopConfReg & CHOPCONF_INTPOL) != 0;
 	return 1u << microstepShiftFactor;
+}
+
+// Check that stall detection can occur at the specified speed
+EndstopValidationResult Tmc51xxDriverState::CheckStallDetectionEnabled(float speed) noexcept
+{
+	if (GetDriverMode() > DriverMode::spreadCycle)			// if in stealthChop or direct mode
+	{
+		return EndstopValidationResult::driverNotInSpreadCycleMode;
+	}
+	if (speed * (float)maxStallStepInterval < (float)(1u << microstepShiftFactor))
+	{
+		return EndstopValidationResult::moveTooSlow;
+	}
+	return EndstopValidationResult::ok;
 }
 
 bool Tmc51xxDriverState::SetRegister(SmartDriverRegister reg, uint32_t regVal) noexcept
@@ -1091,7 +1107,7 @@ void Tmc51xxDriverState::SetStallMinimumStepsPerSecond(unsigned int stepsPerSeco
 {
 	//TODO use hardware facility instead
 	maxStallStepInterval = StepClockRate/max<unsigned int>(stepsPerSecond, 1u);
-	UpdateRegister(WriteTcoolthrs, (GetTmcClockSpeed() + (128 * stepsPerSecond))/(256 * stepsPerSecond));
+	UpdateRegister(WriteTcoolthrs, (GetHighestTmcClockSpeed() + (128 * stepsPerSecond))/(256 * stepsPerSecond));
 }
 
 void Tmc51xxDriverState::AppendStallConfig(const StringRef& reply) const noexcept
@@ -1107,10 +1123,11 @@ void Tmc51xxDriverState::AppendStallConfig(const StringRef& reply) const noexcep
 	const float speed1 = (float)(fullstepsPerSecond << microstepShiftFactor)/stepsPerMm;
 	const uint32_t tcoolthrs = writeRegisters[WriteTcoolthrs] & ((1ul << 20) - 1u);
 	bool bdummy;
-	const float speed2 = ((float)GetTmcClockSpeed() * GetMicrostepping(bdummy))/(256 * tcoolthrs * stepsPerMm);
-	reply.catf("stall threshold %d, filter %s, steps/sec %" PRIu32 " (%.1f mm/sec), coolstep threshold %" PRIu32 " (%.1f mm/sec)",
+	const float speed2 = ((float)GetHighestTmcClockSpeed() * GetMicrostepping(bdummy))/(256 * tcoolthrs * stepsPerMm);
+	reply.catf("stall threshold %d, filter %s, full steps/sec %" PRIu32 " (%.1f mm/sec), coolstep threshold %" PRIu32 " (%.1f mm/sec)",
 				threshold, ((filtered) ? "on" : "off"), fullstepsPerSecond, (double)speed1, tcoolthrs, (double)speed2);
 }
+
 #endif
 
 // In the following, only byte accesses to sendDataBlock are allowed, because accesses to non-cacheable memory must be aligned
@@ -1257,6 +1274,7 @@ static TASKMEM Task<TmcTaskStackWords> tmcTask;
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
 static uint32_t lastWakeupTime = 0;
 static StepTimer tmcTimer;
+static bool usePhaseStepping = false;
 #endif
 
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
@@ -1458,83 +1476,124 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 			}
 		}
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
-		// Set the motor phase currents before we write them
-		GetMoveInstance().PhaseStepControlLoop();
-#endif
-
-		if (!spiDevice->Select(100))
+		if (usePhaseStepping)
 		{
-			debugPrintf("TMC51xx: Failed to select spi device\n");
-			continue;
-		}		
-		for (size_t i = 0; i < numTmc51xxDrivers; ++i)
-		{
-			Tmc51xxDriverState& drv = driverStates[i];
-			if (drv.IsActive())
+			// Set the motor phase currents before we write them
+			GetMoveInstance().PhaseStepControlLoop();
+			if (!spiDevice->Select(100))
 			{
-				drv.EnableChipSelect();
-				SYNC_GPIO();
-				if (SmartDriversSpiCsDelay) 
+				debugPrintf("TMC51xx: Failed to select spi device\n");
+				continue;
+			}
+			for (size_t i = 0; i < numTmc51xxDrivers; ++i)
+			{
+				Tmc51xxDriverState& drv = driverStates[i];
+				if (drv.IsActive())
 				{
-					delay(SmartDriversSpiCsDelay);
-				}
-				bool isWrite;
-#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
-				if (drv.NeedCoilCurrentSet())
-				{
-					sendData[0] = REGNUM_5160_X_DIRECT | 0x80;
-					StoreBEU32(const_cast<uint8_t*>(sendData + 1), driverStates[i].GetPhaseToSet());
-					spiDevice->TransceivePacket(sendData, rcvData, 5);
+					drv.EnableChipSelect();
+					SYNC_GPIO();
+					bool isWrite;
+					if (drv.NeedCoilCurrentSet())
+					{
+						sendData[0] = REGNUM_5160_X_DIRECT | 0x80;
+						StoreBEU32(const_cast<uint8_t*>(sendData + 1), driverStates[i].GetPhaseToSet());
+						spiDevice->TransceivePacket(sendData, rcvData, 5);
+						drv.DisableChipSelect();
+						SYNC_GPIO();
+						isWrite = drv.GetSpiCommand(sendData);
+						drv.EnableChipSelect();
+						SYNC_GPIO();
+						spiDevice->TransceivePacket(sendData, altRcvData, 5);
+					}
+					else
+					{
+						isWrite = drv.GetSpiCommand(sendData);
+						spiDevice->TransceivePacket(sendData, rcvData, 5);
+					}
 					drv.DisableChipSelect();
 					SYNC_GPIO();
-					isWrite = drv.GetSpiCommand(sendData);
-					drv.EnableChipSelect();
-					SYNC_GPIO();
-					spiDevice->TransceivePacket(sendData, altRcvData, 5);
+					drv.TransferSucceeded(rcvData);
+					// Write commands will return a copy of the write request on the next
+					// operation. However on TMC2240 devices this only seems to be the case
+					// if there is no other bus activity between requests. So for now we force
+					// a read request after a write to allow us to check it worked.
+					if (isWrite)
+					{
+						drv.EnableChipSelect();
+						SYNC_GPIO();
+						drv.GetSpiCommand(sendData, true);
+						spiDevice->TransceivePacket(sendData, rcvData, 5);
+						drv.DisableChipSelect();
+						SYNC_GPIO();
+						drv.TransferSucceeded(rcvData);
+					}
 				}
-				else
+			}
+			spiDevice->Deselect();
+			// Give other tasks a chance to run.
+			// We run the SPI bus at high speeds so that motor currents get updated as quickly as possible.
+			// If we wake up as soon as the transfer has completed then we will use too much of the available CPU time.
+			// So schedule a wakeup call instead. Try to make the wakeup interval regular.
+			lastWakeupTime += (StepClockRate * DriversDirectSleepMicroseconds)/1000000;
+			if (!tmcTimer.ScheduleCallback(lastWakeupTime))
+			{
+				TaskBase::TakeIndexed(NotifyIndices::Tmc);
+			}
+		}
+		else
 #endif
-				{
-					isWrite = drv.GetSpiCommand(sendData);
-					spiDevice->TransceivePacket(sendData, rcvData, 5);
-				}
-				drv.DisableChipSelect();
-				SYNC_GPIO();
-				drv.TransferSucceeded(rcvData);
-				// Write commands will return a copy of the write request on the next
-				// operation. However on TMC2240 devices this only seems to be the case
-				// if there is no other bus activity between requests. So for now we force
-				// a read request after a write to allow us to check it worked.
-				if (isWrite)
+		{
+			if (!spiDevice->Select(100))
+			{
+				debugPrintf("TMC51xx: Failed to select spi device\n");
+				continue;
+			}
+			for (size_t i = 0; i < numTmc51xxDrivers; ++i)
+			{
+				Tmc51xxDriverState& drv = driverStates[i];
+				if (drv.IsActive())
 				{
 					drv.EnableChipSelect();
 					SYNC_GPIO();
-					drv.GetSpiCommand(sendData, true);
 					if (SmartDriversSpiCsDelay) 
 					{
 						delay(SmartDriversSpiCsDelay);
 					}
-					spiDevice->TransceivePacket(sendData, rcvData, 5);
+					bool isWrite;
+
+					{
+						isWrite = drv.GetSpiCommand(sendData);
+						spiDevice->TransceivePacket(sendData, rcvData, 5);
+					}
 					drv.DisableChipSelect();
 					SYNC_GPIO();
 					drv.TransferSucceeded(rcvData);
+					// Write commands will return a copy of the write request on the next
+					// operation. However on TMC2240 devices this only seems to be the case
+					// if there is no other bus activity between requests. So for now we force
+					// a read request after a write to allow us to check it worked.
+					if (isWrite)
+					{
+						drv.EnableChipSelect();
+						SYNC_GPIO();
+						drv.GetSpiCommand(sendData, true);
+						if (SmartDriversSpiCsDelay) 
+						{
+							delay(SmartDriversSpiCsDelay);
+						}
+						spiDevice->TransceivePacket(sendData, rcvData, 5);
+						drv.DisableChipSelect();
+						SYNC_GPIO();
+						drv.TransferSucceeded(rcvData);
+					}
 				}
 			}
+			spiDevice->Deselect();
+
+			delay(1);
 		}
-		spiDevice->Deselect();
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
-		// Give other tasks a chance to run.
-		// We run the SPI bus at high speeds so that motor currents get updated as quickly as possible.
-		// If we wake up as soon as the transfer has completed then we will use too much of the available CPU time.
-		// So schedule a wakeup call instead. Try to make the wakeup interval regular.
-		lastWakeupTime += (StepClockRate * DriversDirectSleepMicroseconds)/1000000;
-		if (!tmcTimer.ScheduleCallback(lastWakeupTime))
-		{
-			TaskBase::TakeIndexed(NotifyIndices::Tmc);
-		}
 		lastWakeupTime = StepTimer::GetTimerTicks();
-#else
-		delay(1);
 #endif
 	}
 }
@@ -1543,6 +1602,11 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 
 bool Tmc51xxDriverState::EnablePhaseStepping(bool enable) noexcept
 {
+	// We can't do phase stepping if we need delays on cs
+	if (SmartDriversSpiCsDelay > 0)
+	{
+		return false;
+	}
 	bool anyDriversUsingPhaseStepping = false;
 	bool ret = false;
 	phaseStepEnabled = enable;
@@ -1575,8 +1639,9 @@ bool Tmc51xxDriverState::EnablePhaseStepping(bool enable) noexcept
 		}
 	}
 
+	usePhaseStepping = anyDriversUsingPhaseStepping;
 	DriversDirectSleepMicroseconds = anyDriversUsingPhaseStepping ? PhaseStepSpiSleepMicroseconds : DefaultSpiSleepMicroseconds;
-
+	spiDevice->SetClockFrequency(anyDriversUsingPhaseStepping ? PhaseStepDriversSpiClockFrequency : DefaultDriversSpiClockFrequency);
 	tmcTask.SetPriority(anyDriversUsingPhaseStepping ? TaskPriority::TmcPhaseStepPriority : TaskPriority::TmcPriority);
 	return ret;
 }
@@ -1605,17 +1670,26 @@ void Tmc51xxDriver::Init(size_t numDrivers) noexcept
 		driversState = DriversState::ready;
 		return;
 	}
-	spiDevice = new SharedSpiClient(SharedSpiDevice::GetSharedSpiDevice(SmartDriversSpiChannel), DriversSpiClockFrequency, SPI_MODE_3, NoPin, false);
+	spiDevice = new SharedSpiClient(SharedSpiDevice::GetSharedSpiDevice(SmartDriversSpiChannel), DefaultDriversSpiClockFrequency, SPI_MODE_3, NoPin, false);
 	tmcTask.Create(TmcLoop, "TMC51xx", nullptr, TaskPriority::TmcPriority);
 }
 
 // Shut down the drivers and stop any related interrupts
 void Tmc51xxDriver::Exit() noexcept
 {
-	if (numTmc51xxDrivers > 0)
+	if (numTmc51xxDrivers > 0 && driversState != DriversState::shutDown)
 	{
 		TurnDriversOff();
-		tmcTask.TerminateAndUnlink();
+		// make sure that the task does not own the spi device when we kill it
+		if (spiDevice->Select(100))
+		{
+			tmcTask.TerminateAndUnlink();
+			spiDevice->Deselect();
+		}
+		else
+		{
+			debugPrintf("TMC51xx: Failed to select spi device on exit\n");
+		}
 	}
 	driversState = DriversState::shutDown;						// prevent Spin() calls from doing anything
 }

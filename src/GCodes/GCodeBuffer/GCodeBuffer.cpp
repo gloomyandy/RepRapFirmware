@@ -82,7 +82,7 @@ constexpr uint8_t GCodeBuffer::objectModelTableDescriptor[] = { 1, 16 };
 
 DEFINE_GET_OBJECT_MODEL_TABLE(GCodeBuffer)
 
-const char *GCodeBuffer::GetStateText() const noexcept
+const char *_ecv_array GCodeBuffer::GetStateText() const noexcept
 {
 	if (machineState->waitingForAcknowledgement)
 	{
@@ -101,7 +101,7 @@ const char *GCodeBuffer::GetStateText() const noexcept
 #endif
 
 // Create a default GCodeBuffer
-GCodeBuffer::GCodeBuffer(GCodeChannel::RawType channel, GCodeInput *normalIn, FileGCodeInput *fileIn, MessageType mt, Compatibility::RawType c) noexcept
+GCodeBuffer::GCodeBuffer(GCodeChannel::RawType channel, GCodeInput *_ecv_from normalIn, FileGCodeInput *_ecv_null fileIn, MessageType mt, Compatibility::RawType c) noexcept
 	:
 	  printFilePositionAtMacroStart(0),
 	  normalInput(normalIn),
@@ -285,7 +285,7 @@ void GCodeBuffer::DecodeCommand() noexcept
 }
 
 // Check whether the current command is a meta command, or we are skipping a block. Return true if we are and the current line no longer needs to be processed.
-bool GCodeBuffer::CheckMetaCommand(const StringRef& reply)
+bool GCodeBuffer::CheckMetaCommand(const StringRef& reply) THROWS(GCodeException)
 {
 	return NOT_BINARY_AND(stringParser.CheckMetaCommand(reply));
 }
@@ -305,7 +305,7 @@ void GCodeBuffer::PutBinary(const uint32_t *data, size_t len) noexcept
 #endif
 
 // Add an entire G-Code, overwriting any existing content
-void GCodeBuffer::PutAndDecode(const char *str, size_t len) noexcept
+void GCodeBuffer::PutAndDecode(const char *_ecv_array str, size_t len) noexcept
 {
 #if HAS_SBC_INTERFACE
 	machineState->lastCodeFromSbc = false;
@@ -315,7 +315,7 @@ void GCodeBuffer::PutAndDecode(const char *str, size_t len) noexcept
 }
 
 // Add a null-terminated string, overwriting any existing content
-void GCodeBuffer::PutAndDecode(const char *str) noexcept
+void GCodeBuffer::PutAndDecode(const char *_ecv_array str) noexcept
 {
 #if HAS_SBC_INTERFACE
 	machineState->lastCodeFromSbc = false;
@@ -973,7 +973,7 @@ float GCodeBuffer::InverseConvertSpeed(float speed) const noexcept
 	return speed * ((UsingInches()) ? (StepClockRate * iMinutesToSeconds)/InchToMm : (float)(StepClockRate * iMinutesToSeconds));
 }
 
-const char *GCodeBuffer::GetDistanceUnits() const noexcept
+const char *_ecv_array GCodeBuffer::GetDistanceUnits() const noexcept
 {
 	return (UsingInches()) ? "in" : "mm";
 }
@@ -1029,7 +1029,7 @@ bool GCodeBuffer::PopState(bool withinSameFile) noexcept
 
 // Abort execution of any files or macros being executed
 // We now avoid popping the state if we were not executing from a file, so that if DWC or PanelDue is used to jog the axes before they are homed, we don't report stack underflow.
-void GCodeBuffer::AbortFile(bool abortAll, bool requestAbort) noexcept
+void GCodeBuffer::AbortFile(bool abortAll, bool sbcRequestAbort) noexcept
 {
 	if (machineState->DoingFile())
 	{
@@ -1050,10 +1050,10 @@ void GCodeBuffer::AbortFile(bool abortAll, bool requestAbort) noexcept
 		} while (PopState(false) && abortAll);
 
 #if HAS_SBC_INTERFACE
-		abortFile = requestAbort;
-		abortAllFiles = requestAbort && abortAll;
+		abortFile = sbcRequestAbort;
+		abortAllFiles = sbcRequestAbort && abortAll;
 	}
-	else if (!requestAbort)
+	else if (!sbcRequestAbort)
 	{
 		abortFile = abortAllFiles = false;
 #endif
@@ -1290,7 +1290,7 @@ void GCodeBuffer::WaitForAcknowledgement(uint32_t seq) noexcept
 
 #if HAS_MASS_STORAGE
 
-bool GCodeBuffer::OpenFileToWrite(const char* directory, const char* fileName, const FilePosition size, const bool binaryWrite, const uint32_t fileCRC32) noexcept
+bool GCodeBuffer::OpenFileToWrite(const char *_ecv_array directory, const char *_ecv_array fileName, const FilePosition size, const bool binaryWrite, const uint32_t fileCRC32) noexcept
 {
 	return NOT_BINARY_AND(stringParser.OpenFileToWrite(directory, fileName, size, binaryWrite, fileCRC32));
 }
@@ -1334,7 +1334,7 @@ void GCodeBuffer::RestartFrom(FilePosition pos) noexcept
 	Init();											// clear the next move
 }
 
-const char* GCodeBuffer::DataStart() const noexcept
+const char *_ecv_array GCodeBuffer::DataStart() const noexcept
 {
 	return PARSER_OPERATION(DataStart());
 }
@@ -1371,7 +1371,7 @@ VariableSet& GCodeBuffer::GetVariables() const noexcept
 	return mc->variables;
 }
 
-void GCodeBuffer::ThrowGCodeException(const char *msg) const THROWS(GCodeException)
+void GCodeBuffer::ThrowGCodeException(const char *_ecv_array msg) const THROWS(GCodeException)
 {
 	const int column =
 #if HAS_SBC_INTERFACE
@@ -1381,7 +1381,7 @@ void GCodeBuffer::ThrowGCodeException(const char *msg) const THROWS(GCodeExcepti
 	throw GCodeException(this, column, msg);
 }
 
-void GCodeBuffer::ThrowGCodeException(const char *msg, uint32_t param) const THROWS(GCodeException)
+void GCodeBuffer::ThrowGCodeException(const char *_ecv_array msg, uint32_t param) const THROWS(GCodeException)
 {
 	const int column =
 #if HAS_SBC_INTERFACE
