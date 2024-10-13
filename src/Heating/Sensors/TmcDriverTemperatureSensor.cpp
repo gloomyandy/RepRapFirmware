@@ -20,7 +20,9 @@ TemperatureSensor::SensorTypeDescriptor TmcDriverTemperatureSensor::primaryTmcDr
 #if defined(DUET_NG) || defined(PCCB_10)
 TemperatureSensor:: SensorTypeDescriptor TmcDriverTemperatureSensor::duexTmcDriverSensorDescriptor(DuexTypeName, [](unsigned int sensorNum) noexcept -> TemperatureSensor *_ecv_from { return new TmcDriverTemperatureSensor(sensorNum, 1); } );
 #endif
-
+#if STM32
+TemperatureSensor::SensorTypeDescriptor TmcDriverActualTemperatureSensor::typeDescriptor(TypeName, [](unsigned int sensorNum) noexcept -> TemperatureSensor *_ecv_from { return new TmcDriverActualTemperatureSensor(sensorNum); } );
+#endif
 TmcDriverTemperatureSensor::TmcDriverTemperatureSensor(unsigned int sensorNum, unsigned int chan) noexcept
 	: TemperatureSensor(sensorNum, "Stepper driver temperature warnings"), channel(chan)
 {

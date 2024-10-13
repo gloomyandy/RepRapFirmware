@@ -50,6 +50,8 @@ public:
 	const char *_ecv_array GetShortSensorType() const noexcept override { return TypeName; }
 	void Poll() noexcept override;
 	static constexpr const char *_ecv_array TypeName = "drivertemp";
+private:
+	static SensorTypeDescriptor typeDescriptor;
 };
 #endif
 
