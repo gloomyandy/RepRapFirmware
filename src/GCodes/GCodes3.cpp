@@ -1462,7 +1462,11 @@ void GCodes::DeployZProbe(GCodeBuffer& gb) noexcept
 		if (!DoFileMacro(gb, fileName.c_str(), false, SystemHelperMacroCode))
 		{
 			VariableSet vars;
-			vars.InsertNewParameter("K", ExpressionValue((int32_t)currentZProbeNumber));
+			try
+			{
+				vars.InsertNewParameter("K", ExpressionValue((int32_t)currentZProbeNumber));
+			}
+			catch (const GCodeException&) { }
 			DoFileMacro(gb, DEPLOYPROBE ".g", false, SystemHelperMacroCode, vars);
 		}
 	}
@@ -1480,7 +1484,11 @@ void GCodes::RetractZProbe(GCodeBuffer& gb) noexcept
 		if (!DoFileMacro(gb, fileName.c_str(), false, SystemHelperMacroCode))
 		{
 			VariableSet vars;
-			vars.InsertNewParameter("K", ExpressionValue((int32_t)currentZProbeNumber));
+			try
+			{
+				vars.InsertNewParameter("K", ExpressionValue((int32_t)currentZProbeNumber));
+			}
+			catch (const GCodeException&) { }
 			DoFileMacro(gb, RETRACTPROBE ".g", false, SystemHelperMacroCode, vars);
 		}
 	}
@@ -1661,7 +1669,11 @@ void GCodes::ProcessEvent(GCodeBuffer& gb) noexcept
 		// Set up the macro parameters
 		VariableSet vars;
 		Event::GetParameters(vars);
-		vars.InsertNewParameter("S", ExpressionValue(StringHandle(eventText.c_str())));
+		try
+		{
+			vars.InsertNewParameter("S", ExpressionValue(StringHandle(eventText.c_str())));
+		}
+		catch (const GCodeException&) { }
 
 		// Run the macro
 		gb.SetState(GCodeState::finishedProcessingEvent);				// cancel the event when we have finished processing it

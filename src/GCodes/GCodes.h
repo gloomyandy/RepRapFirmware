@@ -222,7 +222,7 @@ public:
 	GCodeBuffer *GetGCodeBuffer(GCodeChannel channel) const noexcept { return gcodeSources[channel.ToBaseType()]; }
 
 #if HAS_MASS_STORAGE
-	GCodeResult StartSDTiming(GCodeBuffer& gb, const StringRef& reply) noexcept;	// Start timing SD card file writing
+	GCodeResult StartSDTiming(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);	// Start timing SD card file writing
 #endif
 
 	void SavePosition(const GCodeBuffer& gb, unsigned int restorePointNumber) noexcept
@@ -364,7 +364,7 @@ private:
 	bool SpinGCodeBuffer(GCodeBuffer& gb) noexcept;								// Do some work on an input channel
 	bool StartNextGCode(GCodeBuffer& gb, const StringRef& reply) noexcept;		// Fetch a new or old GCode and process it
 	void RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept;		// Execute a step of the state machine
-	void DoStraightManualProbe(GCodeBuffer& gb, const StraightProbeSettings& sps);
+	void DoStraightManualProbe(GCodeBuffer& gb, const StraightProbeSettings& sps) noexcept;
 
 	void StartPrinting(bool fromStart) noexcept;								// Start printing the file already selected
 	void StopPrint(GCodeBuffer *_ecv_null gbp, StopPrintReason reason) noexcept;	// Stop the current print
@@ -531,17 +531,17 @@ private:
 #endif
 
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE
-	GCodeResult WriteConfigOverrideFile(GCodeBuffer& gb, const StringRef& reply) const noexcept; // Write the config-override file
+	GCodeResult WriteConfigOverrideFile(GCodeBuffer& gb, const StringRef& reply) const  THROWS(GCodeException); // Write the config-override file
 	bool WriteConfigOverrideHeader(FileStore *f) const noexcept;				// Write the config-override header
 #endif
 
 	void CheckFinishedRunningConfigFile(GCodeBuffer& gb) noexcept;				// Copy the feed rate etc. from the daemon to the input channels
 
-	MessageType GetMessageBoxDevice(GCodeBuffer& gb) const;						// Decide which device to display a message box on
+	MessageType GetMessageBoxDevice(GCodeBuffer& gb) const noexcept;			// Decide which device to display a message box on
 
 	// Z probe
-	void DoManualProbe(GCodeBuffer&, const char *_ecv_array message, const char *_ecv_array title, const AxesBitmap); // Do manual probe in arbitrary direction
-	void DoManualBedProbe(GCodeBuffer& gb);										// Do a manual bed probe
+	void DoManualProbe(GCodeBuffer&, const char *_ecv_array message, const char *_ecv_array title, const AxesBitmap) noexcept; // Do manual probe in arbitrary direction
+	void DoManualBedProbe(GCodeBuffer& gb) noexcept;							// Do a manual bed probe
 	void DeployZProbe(GCodeBuffer& gb) noexcept;
 	void RetractZProbe(GCodeBuffer& gb) noexcept;
 	void CheckIfMoreTapsNeeded(GCodeBuffer& gb, const ZProbe& zp) noexcept;		// Decide whether we have probed the current point sufficient times
