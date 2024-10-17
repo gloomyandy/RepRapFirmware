@@ -1448,7 +1448,7 @@ bool IsValidChar(char c)
 
 bool BoardConfig::GetConfigKeys(FileStore * const configFile) noexcept
 {
-    constexpr size_t maxLineLength = 120;
+    constexpr size_t maxLineLength = 256;
     char line[maxLineLength];
 
     int readLen = configFile->ReadLine(line, maxLineLength);
