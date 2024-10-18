@@ -12,7 +12,7 @@
 unsigned UploadingNetworkResponder::numUploads = 0;
 unsigned UploadingNetworkResponder::numUploadErrors = 0;
 
-UploadingNetworkResponder::UploadingNetworkResponder(NetworkResponder *n) noexcept : NetworkResponder(n)
+UploadingNetworkResponder::UploadingNetworkResponder(NetworkResponder *_ecv_from _ecv_null n) noexcept : NetworkResponder(n)
 #if HAS_MASS_STORAGE
 	, uploadError(false), dummyUpload(false)
 #endif
@@ -45,7 +45,7 @@ void UploadingNetworkResponder::CancelUpload() noexcept
 #if HAS_MASS_STORAGE
 
 // Start writing to a new file, returning true if successful
-bool UploadingNetworkResponder::StartUpload(const char* folder, const char *fileName, const OpenMode mode, const uint32_t preAllocSize) noexcept
+bool UploadingNetworkResponder::StartUpload(const char *_ecv_array folder, const char *_ecv_array fileName, const OpenMode mode, const uint32_t preAllocSize) noexcept
 {
 	if (fileName[0] == 0 || StringEndsWithIgnoreCase(fileName, ".dummy"))
 	{
@@ -64,7 +64,7 @@ bool UploadingNetworkResponder::StartUpload(const char* folder, const char *file
 			filenameBeingProcessed.Clear();
 			return false;
 		}
-		FileStore * const file = GetPlatform().OpenFile(folder, filenameBeingProcessed.c_str(), mode, preAllocSize);
+		FileStore *_ecv_null const file = GetPlatform().OpenFile(folder, filenameBeingProcessed.c_str(), mode, preAllocSize);
 		if (file == nullptr)
 		{
 			filenameBeingProcessed.Clear();

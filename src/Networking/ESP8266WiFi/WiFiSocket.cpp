@@ -315,7 +315,7 @@ void WiFiSocket::ReceiveData(int32_t bytesAvailable) noexcept
 				{
 					bytesAvailable -= ret;
 					buf->dataLength = (size_t)ret;
-					NetworkBuffer::AppendToList(&receivedData, buf);
+					NetworkBuffer::AppendToList(receivedData, buf);
 					if (reprap.Debug(Module::Network))
 					{
 						debugPrintf("Received %u bytes\n", (unsigned int)ret);
