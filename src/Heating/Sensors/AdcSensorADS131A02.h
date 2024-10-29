@@ -12,30 +12,42 @@
 
 #if SUPPORT_SPI_SENSORS && SUPPORT_ADS131A02
 
-class AdcSensorADS131A02 : public SpiTemperatureSensor
+#include "AdditionalOutputSensor.h"
+
+#define FOUR_CHANNELS	(0)			// set to 1 if we use the ADS131A04, 0 for the ADS131A02
+
+class AdcSensorADS131A02Chan0 : public SpiTemperatureSensor
 {
 public:
-	explicit AdcSensorADS131A02(unsigned int sensorNum, bool p_24bit) noexcept;
+	explicit AdcSensorADS131A02Chan0(unsigned int sensorNum, bool p_bipolar) noexcept;
 	GCodeResult Configure(GCodeBuffer& gb, const StringRef& reply, bool& changed) THROWS(GCodeException) override;
 
 #if SUPPORT_REMOTE_COMMANDS
 	GCodeResult Configure(const CanMessageGenericParser& parser, const StringRef& reply) noexcept override;		// configure the sensor from M308 parameters
 #endif
 
+	const uint8_t GetNumAdditionalOutputs() const noexcept override { return 1; }
+	TemperatureError GetAdditionalOutput(float& t, uint8_t outputNumber) noexcept override;
 	void Poll() noexcept override;
-	const char *_ecv_array GetShortSensorType() const noexcept override { return (use24bitFrames) ? TypeName_24bit : TypeName_16bit; }
+	const char *_ecv_array GetShortSensorType() const noexcept override { return (bipolar) ? TypeName_chan0_bipolar : TypeName_chan0_unipolar; }
 
-	static constexpr const char *_ecv_array TypeName_16bit = "ads131.16b";
-	static constexpr const char *_ecv_array TypeName_24bit = "ads131.24b";
+	static constexpr const char *_ecv_array TypeName_chan0_unipolar = "ads131.chan0.u";
+	static constexpr const char *_ecv_array TypeName_chan0_bipolar = "ads131.chan0.b";
 
 private:
-	static SensorTypeDescriptor typeDescriptor_16bit;
-	static SensorTypeDescriptor typeDescriptor_24bit;
+	static SensorTypeDescriptor typeDescriptor_chan0_unipolar;
+	static SensorTypeDescriptor typeDescriptor_chan0_bipolar;
 
-	TemperatureError TryGetLinearAdcTemperature(float& t) noexcept;
+#if FOUR_CHANNELS
+	static constexpr unsigned int NumChannels = 4;
+#else
+	static constexpr unsigned int NumChannels = 2;
+#endif
+
+	TemperatureError TakeReading() noexcept;
 	GCodeResult FinishConfiguring(bool changed, const StringRef& reply) noexcept;
 	void CalcDerivedParameters() noexcept;
-	TemperatureError TryInitAdc() const noexcept;
+	TemperatureError TryInitAdc() noexcept;
 
 	// Commands that can be sent to the ADC
 	enum ADS131Command : uint16_t
@@ -68,32 +80,66 @@ private:
 		CLK2 = 0x0E,
 		ADC_ENA = 0x0F,
 
-		ADC1 = 0x11,
-		ADC2 = 0x12
+		ADC1_GAIN = 0x11,
+		ADC2_GAIN = 0x12,
+#if FOUR_CHANNELS
+		ADC3_GAIN = 0x13,
+		ADC4_GAIN = 0x14,
+#endif
 	};
 
-	// Send a command and receive the response
-	TemperatureError DoTransaction(ADS131Command command, ADS131Register regNum, uint8_t data, uint16_t &status, uint32_t readings[2]) const noexcept;
-
-	// Wait for the device to become ready after a reset returning TemperatureError::ok if successful
-	TemperatureError WaitReady() const noexcept;
-
-	// Configurable parameters
-	float readingAtMin = DefaultReadingAtMin;
-	float readingAtMax = DefaultReadingAtmax;
-
-	bool use24bitFrames;
+	// STAT_1 status register bits
+	enum ADS131Status : uint8_t
+	{
+		f_check = 1u << 0,			// uncorrectable Hamming or CRC error on data in
+		f_drdy = 1u << 1,			// data ready fault
+		f_resync = 1u << 2,			// resync fault, only applies to sync slave mode
+		f_wdt = 1u << 3,			// watchdog timed out
+		f_adcin = 1u << 4,			// ADC range fault, read STAT_P and STAT_N to identify and clear it
+		f_spi = 1u << 5,			// SPI fault, read STAT_S to identify and clear it
+		f_opc = 1u << 6,			// invalid command, or command sent before unlocked
+	};
 
 	static constexpr float DefaultReadingAtMin = 0.0;
-	static constexpr float DefaultReadingAtmax = 100.0;
+	static constexpr float DefaultReadingAtMax = 100.0;
+
+	// Send a command and receive the response
+	TemperatureError DoTransaction(ADS131Command command, ADS131Register regNum, uint8_t data, uint16_t &status, uint32_t readings[NumChannels], bool checkResponse) noexcept;
+
+	// Wait for the device to become ready after a reset returning TemperatureError::ok if successful
+	TemperatureError WaitReady() noexcept;
+
+	// Configurable parameters
+	float readingAtMin[NumChannels];
+	float readingAtMax [NumChannels];
+
+	float lastReadings[NumChannels];
+	uint16_t lastCommand;
+	TemperatureError lastResult = TemperatureError::notInitialised;
+
+	bool bipolar;
 
 	struct InitTableEntry
 	{
 		ADS131Register regNum;
-		uint8_t val;
+		uint8_t valUnipolar;
+		uint8_t valBipolar;
 	};
 
 	static const InitTableEntry initTable[];
+};
+
+class AdcSensorADS131A02Chan1 : public AdditionalOutputSensor
+{
+public:
+	explicit AdcSensorADS131A02Chan1(unsigned int sensorNum) noexcept;
+
+	const char *_ecv_array GetShortSensorType() const noexcept override { return TypeName_chan1; }
+
+	static constexpr const char *_ecv_array TypeName_chan1 = "ads131.chan1";
+
+private:
+	static SensorTypeDescriptor typeDescriptor_chan1;
 };
 
 #endif

@@ -576,7 +576,9 @@ bool HttpResponder::GetJsonResponse(const char *_ecv_array request, OutputBuffer
 		OutputBuffer::ReleaseAll(response);
 		const char *_ecv_array _ecv_null const firstVal = GetKeyValue("first");
 		const unsigned int startAt = (firstVal == nullptr) ? 0 : StrToU32(firstVal);
-		response = reprap.GetFilelistResponse(parameter, startAt);		// this may return nullptr
+		const char *_ecv_array _ecv_null const maxVal = GetKeyValue("max");
+		const int maxItems = (maxVal == nullptr) ? -1 : StrToI32(maxVal, nullptr);
+		response = reprap.GetFilelistResponse(parameter, startAt, maxItems);			// this may return nullptr
 	}
 	else if (StringEqualsIgnoreCase(request, "files"))
 	{
@@ -590,7 +592,9 @@ bool HttpResponder::GetJsonResponse(const char *_ecv_array request, OutputBuffer
 		const unsigned int startAt = (firstVal == nullptr) ? 0 : StrToU32(firstVal);
 		const char *_ecv_array _ecv_null const flagDirsVal = GetKeyValue("flagDirs");
 		const bool flagDirs = flagDirsVal != nullptr && StrToU32(flagDirsVal) == 1;
-		response = reprap.GetFilesResponse(dir, startAt, flagDirs);				// this may return nullptr
+		const char *_ecv_array _ecv_null const maxVal = GetKeyValue("max");
+		const int maxItems = (maxVal == nullptr) ? -1 : StrToI32(maxVal, nullptr);
+		response = reprap.GetFilesResponse(dir, startAt, maxItems, flagDirs);			// this may return nullptr
 	}
 	else if (StringEqualsIgnoreCase(request, "upload"))
 	{
@@ -670,7 +674,7 @@ bool HttpResponder::GetJsonResponse(const char *_ecv_array request, OutputBuffer
 			}
 
 			OutputBuffer::ReleaseAll(response);
-			response = reprap.GetStatusResponse(type, ResponseSource::HTTP);		// this may return nullptr
+			response = reprap.GetStatusResponse(type, ResponseSource::HTTP);			// this may return nullptr
 		}
 		else
 		{

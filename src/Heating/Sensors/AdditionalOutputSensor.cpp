@@ -24,7 +24,7 @@ AdditionalOutputSensor::~AdditionalOutputSensor() noexcept
 {
 }
 
-GCodeResult AdditionalOutputSensor::Configure(GCodeBuffer& gb, const StringRef& reply, bool& changed)
+GCodeResult AdditionalOutputSensor::Configure(GCodeBuffer& gb, const StringRef& reply, bool& changed) THROWS(GCodeException)
 {
 	GCodeResult rslt = GCodeResult::ok;
 	if (gb.Seen('P'))
@@ -126,7 +126,12 @@ GCodeResult AdditionalOutputSensor::ConfigurePort(const char *_ecv_array portNam
 		// Parse output number
 		outputNumber = StrToU32(portName, &portName);
 
-		if (outputNumber > parent->GetNumAdditionalOutputs())
+		if (outputNumber == 0)
+		{
+			reply.copy("Additional output numbers start at 1");
+			return GCodeResult::error;
+		}
+		else if (outputNumber > parent->GetNumAdditionalOutputs())
 		{
 			reply.printf("Parent sensor only has %d additional outputs", parent->GetNumAdditionalOutputs());
 			return GCodeResult::error;
