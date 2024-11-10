@@ -674,12 +674,16 @@ void Platform::Init() noexcept
 	vInMonitorAdcChannel = PinToAdcChannel(PowerMonitorVinDetectPin);
 	pinMode(PowerMonitorVinDetectPin, AIN);
 	AnalogInEnableChannel(vInMonitorAdcChannel, true);
-	currentVin = highestVin = 0;
+	currentVin = 0;
+	highestVin = 0;
 	lowestVin = 9999;
-	numVinUnderVoltageEvents = previousVinUnderVoltageEvents = numVinOverVoltageEvents = previousVinOverVoltageEvents = 0;
 # if STM32
 	dummyVoltageAdcReading = PowerVoltageToAdcReading(VInDummyReading);
 # endif
+	numVinUnderVoltageEvents = 0;
+	previousVinUnderVoltageEvents = 0;
+	numVinOverVoltageEvents = 0;
+	previousVinOverVoltageEvents = 0;
 #endif
 
 #if HAS_12V_MONITOR
@@ -710,7 +714,8 @@ void Platform::Init() noexcept
 // Reset the min and max recorded voltages to the current values
 void Platform::ResetVoltageMonitors() noexcept
 {
-	lowestVin = highestVin = currentVin;
+	lowestVin = currentVin;
+	highestVin = currentVin;
 
 #if HAS_12V_MONITOR
 	lowestV12 = highestV12 = currentV12;
@@ -2380,25 +2385,6 @@ static inline void ConvertHexToAsciiHex(uint8_t hex, uint8_t asciiHex[2])
 	}
 }
 
-static inline void ConvertAsciiHexToHex(uint8_t asciiHex[2], uint8_t &hex)
-{
-	uint8_t hexSplit[2] = {0};
-	for (size_t i = 0; i < 2; i++)
-	{
-		uint8_t ah = asciiHex[i];
-		if (ah >= 0x30 && ah <= 0x39)
-		{
-			hexSplit[i] = ah - 0x30;
-		}
-		else if (ah >= 0x41 && ah <= 0x46)
-		{
-			hexSplit[i] = ah - 0x41 + 0x0A;
-		}
-
-		hex = hexSplit[0] << 4 | (hexSplit[1] & 0x0F);
-	}
-}
-
 static inline void CalculateNordsonUltimusVCheckSum(uint8_t* data, size_t len, uint8_t checksum[2])
 {
 	uint16_t sum = 0;
@@ -3986,8 +3972,8 @@ GCodeResult Platform::ConfigurePort(GCodeBuffer& gb, const StringRef& reply) THR
 		}
 	case 32:	// R
 		{
-			const uint32_t slot = gb.GetLimitedUIValue('R', MaxSpindles);
-			return spindles[slot].Configure(gb, reply);
+			const uint32_t spindleNumber = gb.GetLimitedUIValue('R', MaxSpindles);
+			return spindles[spindleNumber].Configure(spindleNumber, gb, reply);
 		}
 
 #if SUPPORT_LED_STRIPS

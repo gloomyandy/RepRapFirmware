@@ -60,7 +60,7 @@ int32_t RequestFirmwareBlock(uint32_t fileOffset, uint32_t numBytes, uint8_t *bu
 		debugPrintf("No Message buffer available\n");
         return -1;
 	}
-    CanMessageFirmwareUpdateRequest * const msg = buf->SetupRequestMessage<CanMessageFirmwareUpdateRequest>(0, CanInterface::GetCanAddress(), CanId::MasterAddress);
+    CanMessageFirmwareUpdateRequest * const msg = buf->SetupRequestMessageNoRid<CanMessageFirmwareUpdateRequest>(CanInterface::GetCanAddress(), CanId::MasterAddress);
 	SafeStrncpy(msg->boardType, BOARD_SHORT_NAME, sizeof(msg->boardType));
 	msg->boardVersion = 0;
 	msg->bootloaderVersion = CanMessageFirmwareUpdateRequest::BootloaderVersion0;

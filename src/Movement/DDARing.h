@@ -67,7 +67,7 @@ public:
 	uint32_t ManageLaserPower() noexcept;												// Manage the laser power
 #endif
 #if SUPPORT_IOBITS
-	uint32_t ManageIOBits() noexcept;													// Manage the IOBITS (G1 P parameter)
+	uint32_t ManageIOBitsAndFeedForward() noexcept;										// Manage the IOBITS (G1 P parameter) and extruder heater feedforward
 #endif
 
 	void RecordLookaheadError() noexcept { ++numLookaheadErrors; }						// Record a lookahead error
@@ -96,6 +96,8 @@ private:
 
 	unsigned int numDdasInRing;													// The number of DDAs that this ring contains
 	uint32_t gracePeriod;														// The minimum idle time in milliseconds, before we should start a move. Better to have a few moves in the queue so that we can do lookahead
+
+	const Tool *_ecv_null lastFeedForwardTool;									// the tool we last applied heater feedforward to
 
 	uint32_t scheduledMoves;													// Number of moves scheduled in this ring
 	uint32_t completedMoves;													// Number of moves completed in this ring

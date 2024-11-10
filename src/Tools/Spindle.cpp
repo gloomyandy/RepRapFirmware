@@ -23,19 +23,20 @@ constexpr ObjectModelTableEntry Spindle::objectModelTable[] =
 {
 	// Within each group, these entries must be in alphabetical order
 	// 0. Spindle members
-	{ "active",			OBJECT_MODEL_FUNC((int32_t)self->configuredRpm),			ObjectModelEntryFlags::none },
-	{ "canReverse",		OBJECT_MODEL_FUNC(self->reverseNotForwardPort.IsValid()),	ObjectModelEntryFlags::none },
-	{ "current",		OBJECT_MODEL_FUNC((int32_t)self->currentRpm),				ObjectModelEntryFlags::live },
-	{ "frequency",		OBJECT_MODEL_FUNC((int32_t)self->frequency),				ObjectModelEntryFlags::verbose },
-	{ "idlePwm",		OBJECT_MODEL_FUNC(self->idlePwm, 2),						ObjectModelEntryFlags::verbose },
-	{ "max",			OBJECT_MODEL_FUNC((int32_t)self->maxRpm),					ObjectModelEntryFlags::verbose },
-	{ "maxPwm",			OBJECT_MODEL_FUNC(self->maxPwm, 2),							ObjectModelEntryFlags::verbose },
-	{ "min",			OBJECT_MODEL_FUNC((int32_t)self->minRpm),					ObjectModelEntryFlags::verbose },
-	{ "minPwm",			OBJECT_MODEL_FUNC(self->minPwm, 2),							ObjectModelEntryFlags::verbose },
-	{ "state",			OBJECT_MODEL_FUNC(self->state.ToString()),					ObjectModelEntryFlags::live },
+	{ "active",			OBJECT_MODEL_FUNC_IF(self->IsConfigured(), (int32_t)self->configuredRpm),			ObjectModelEntryFlags::none },
+	{ "canReverse",		OBJECT_MODEL_FUNC_IF(self->IsConfigured(), self->reverseNotForwardPort.IsValid()),	ObjectModelEntryFlags::none },
+	{ "current",		OBJECT_MODEL_FUNC_IF(self->IsConfigured(), (int32_t)self->currentRpm),				ObjectModelEntryFlags::live },
+	{ "frequency",		OBJECT_MODEL_FUNC_IF(self->IsConfigured(), (int32_t)self->frequency),				ObjectModelEntryFlags::verbose },
+	{ "idlePwm",		OBJECT_MODEL_FUNC_IF(self->IsConfigured(), self->idlePwm, 2),						ObjectModelEntryFlags::verbose },
+	{ "max",			OBJECT_MODEL_FUNC_IF(self->IsConfigured(), (int32_t)self->maxRpm),					ObjectModelEntryFlags::verbose },
+	{ "maxPwm",			OBJECT_MODEL_FUNC_IF(self->IsConfigured(), self->maxPwm, 2),						ObjectModelEntryFlags::verbose },
+	{ "min",			OBJECT_MODEL_FUNC_IF(self->IsConfigured(), (int32_t)self->minRpm),					ObjectModelEntryFlags::verbose },
+	{ "minPwm",			OBJECT_MODEL_FUNC_IF(self->IsConfigured(), self->minPwm, 2),						ObjectModelEntryFlags::verbose },
+	{ "state",			OBJECT_MODEL_FUNC(self->state.ToString()),											ObjectModelEntryFlags::live },
+	{ "type", 			OBJECT_MODEL_FUNC_IF(self->IsConfigured(), self->type.ToString()),					ObjectModelEntryFlags::verbose },
 };
 
-constexpr uint8_t Spindle::objectModelTableDescriptor[] = { 1, 10 };
+constexpr uint8_t Spindle::objectModelTableDescriptor[] = { 1, 11 };
 
 DEFINE_GET_OBJECT_MODEL_TABLE(Spindle)
 
@@ -44,11 +45,11 @@ DEFINE_GET_OBJECT_MODEL_TABLE(Spindle)
 Spindle::Spindle() noexcept
 	: minPwm(DefaultMinSpindlePwm), maxPwm(DefaultMaxSpindlePwm), idlePwm(DefaultIdleSpindlePwm),
 	  currentRpm(0), configuredRpm(0), minRpm(DefaultMinSpindleRpm), maxRpm(DefaultMaxSpindleRpm),
-	  frequency(0), state(SpindleState::unconfigured)
+	  frequency(0), type(DefaultSpindleType), state(SpindleState::unconfigured)
 {
 }
 
-GCodeResult Spindle::Configure(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
+GCodeResult Spindle::Configure(uint32_t spindleNumber, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {
 	bool seen = false;
 	if (gb.Seen('C'))
@@ -106,10 +107,59 @@ GCodeResult Spindle::Configure(GCodeBuffer& gb, const StringRef& reply) THROWS(G
 		}
 	}
 
+	if (gb.Seen('T'))
+	{
+		seen = true;
+		type = (SpindleType)gb.GetLimitedUIValue('T', 2);
+	}
+
 	if (seen)
 	{
 		state = SpindleState::stopped;
 		reprap.SpindlesUpdated();
+		return GCodeResult::ok;
+	}
+
+	// If we get here then we are reporting on a spindle
+	reply.printf("Spindle %" PRIu32, spindleNumber);
+	if (state == SpindleState::unconfigured)
+	{
+		reply.cat(" is not configured");
+	}
+	else
+	{
+		reply.cat(": ");
+
+		if (state == SpindleState::forward || state == SpindleState::reverse)
+		{
+			reply.catf("running %s at %" PRIu32 " rpm, ", state.ToString(), GetCurrentRpm());
+		}
+
+		reply.catf("type %s", type.ToString());
+
+		const bool isEnaDir = (type == SpindleType::enaDir);
+
+		if (onOffPort.IsValid())
+		{
+			reply.cat(", ");
+			reply.catf(isEnaDir ? "enable" : "forward");
+			onOffPort.AppendBasicDetails(reply);
+		}
+
+		if (reverseNotForwardPort.IsValid())
+		{
+			reply.cat(", ");
+			reply.catf(isEnaDir? "direction" : "reverse");
+			reverseNotForwardPort.AppendBasicDetails(reply);
+		}
+
+		if (pwmPort.IsValid())
+		{
+			reply.cat(", rpm");
+			pwmPort.AppendFullDetails(reply);
+		}
+
+		reply.catf(", rpm min %" PRIu32 ", max %" PRIu32, minRpm, maxRpm);
 	}
 	return GCodeResult::ok;
 }
@@ -126,9 +176,20 @@ void Spindle::SetConfiguredRpm(uint32_t rpm, bool updateCurrentRpm) noexcept
 
 void Spindle::SetRpm(uint32_t rpm) noexcept
 {
+	// Normal mode:
+	//   Forward: onOffPort=1, reverseNotForwardPort=0
+	//   Reverse: onOffPort=1, reverseNotForwardPort=1
+	//   Stopped: onOffPort=0, reverseNotForwardPort=0
+	// Alternate mode:
+	//   Forward: onOffPort=1, reverseNotForwardPort=0
+	//   Reverse: onOffPort=0, reverseNotForwardPort=1
+	//   Stopped: onOffPort=0, reverseNotForwardPort=0
+
 	if (state == SpindleState::stopped || rpm == 0)
 	{
 		onOffPort.WriteDigital(false);
+		// Make sure reverse port is set correctly in stopped state.
+		reverseNotForwardPort.WriteDigital(false);
 		pwmPort.WriteAnalog(idlePwm);
 		currentRpm = 0;						// current rpm is flagged live, so no need to change seqs.spindles
 	}
@@ -145,7 +206,7 @@ void Spindle::SetRpm(uint32_t rpm) noexcept
 		rpm = constrain<uint32_t>(rpm, minRpm, maxRpm);
 		reverseNotForwardPort.WriteDigital(true);
 		pwmPort.WriteAnalog(((float)(rpm - minRpm) / (float)(maxRpm - minRpm)) * (maxPwm - minPwm) + minPwm);
-		onOffPort.WriteDigital(true);
+		onOffPort.WriteDigital(type != SpindleType::fwdRev);
 		currentRpm = rpm;					// current rpm is flagged live, so no need to change seqs.spindles
 	}
 }

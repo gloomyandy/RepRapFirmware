@@ -118,6 +118,7 @@ Heater::Heater(unsigned int num) noexcept
 	  isBedOrChamber(false),
 	  active(false), modelSetByUser(false), monitorsSetByUser(false)
 {
+	Heater::ResetHeater();
 }
 
 Heater::~Heater() noexcept
@@ -126,6 +127,19 @@ Heater::~Heater() noexcept
 	{
 		h.Disable();
 	}
+}
+
+void Heater::ResetHeater() noexcept
+{
+	lastExtrusionPwmBoost = 0.0;
+	extrusionTemperatureBoost = 0.0;
+	lastFanPwm = 0.0;
+}
+
+void Heater::SwitchOff() noexcept
+{
+	lastExtrusionPwmBoost = 0.0;
+	extrusionTemperatureBoost = 0.0;
 }
 
 void Heater::SetSensorNumber(int sn) noexcept

@@ -100,6 +100,7 @@ TemperatureSensor::SensorTypeDescriptor AdcSensorADS131A02Chan1::typeDescriptor_
 
 AdcSensorADS131A02Chan0::AdcSensorADS131A02Chan0(unsigned int sensorNum, bool p_bipolar) noexcept
 	: SpiTemperatureSensor(sensorNum, (p_bipolar) ? TypeName_chan0_bipolar : TypeName_chan0_unipolar, ADS131_SpiMode, ADS131_Frequency),
+	  configured(false),
 	  bipolar(p_bipolar)
 {
 	for (float& f : readingAtMin) { f = DefaultReadingAtMin; }
@@ -139,6 +140,11 @@ GCodeResult AdcSensorADS131A02Chan0::Configure(const CanMessageGenericParser& pa
 		seen = true;
 	}
 
+	if (seen)
+	{
+		configured = false;
+	}
+
 	if (!ConfigurePort(parser, reply, seen))
 	{
 		return GCodeResult::error;
@@ -176,6 +182,11 @@ GCodeResult AdcSensorADS131A02Chan0::FinishConfiguring(bool changed, const Strin
 		{
 			reprap.GetPlatform().MessageF(ErrorMessage, "Failed to initialise daughter board ADC: %s\n", rslt.ToString());
 		}
+		else
+		{
+			configured = true;
+		}
+
 	}
 	else
 	{
@@ -202,6 +213,11 @@ TemperatureError AdcSensorADS131A02Chan0::GetAdditionalOutput(float &t, uint8_t 
 
 void AdcSensorADS131A02Chan0::Poll() noexcept
 {
+	if (!configured)
+	{
+		SetResult(BadErrorTemperature, TemperatureError::notInitialised);
+		return;
+	}
 	const TemperatureError rslt = TakeReading();
 	SetResult(lastReadings[0], rslt);
 }

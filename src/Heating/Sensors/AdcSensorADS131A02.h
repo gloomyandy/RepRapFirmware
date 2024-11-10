@@ -109,6 +109,8 @@ private:
 	// Wait for the device to become ready after a reset returning TemperatureError::ok if successful
 	TemperatureError WaitReady() noexcept;
 
+	bool configured;
+
 	// Configurable parameters
 	float readingAtMin[NumChannels];
 	float readingAtMax [NumChannels];

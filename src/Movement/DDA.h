@@ -88,6 +88,7 @@ public:
 #endif
 
 	DDAState GetState() const noexcept { return state; }
+	bool IsCommitted() const noexcept { return state == DDA::committed; }
 	DDA* GetNext() const noexcept { return next; }
 	DDA* GetPrevious() const noexcept { return prev; }
 	uint32_t GetTimeLeft() const noexcept;
@@ -131,6 +132,11 @@ public:
 	uint32_t GetMoveFinishTime() const noexcept { return afterPrepare.moveStartTime + clocksNeeded; }
 
 	float GetMotorTopSpeed(uint8_t axis) const noexcept;							// Return the top speed in microsteps/sec for the specified motor
+	float GetAverageExtrusionSpeed() const noexcept pre(IsCommitted()) { return afterPrepare.averageExtrusionSpeed; }
+	bool HaveDoneIoBits() const noexcept { return flags.doneIoBits; }
+	bool HaveDoneFeedForward() const noexcept { return flags.doneFeedForward; }
+	void SetDoneIoBits() noexcept { flags.doneIoBits = true; }
+	void SetDoneFeedForward() noexcept { flags.doneFeedForward = true; }
 
 #if SUPPORT_LASER || SUPPORT_IOBITS
 	LaserPwmOrIoBits GetLaserPwmOrIoBits() const noexcept { return laserPwmOrIoBits; }
@@ -204,13 +210,11 @@ private:
 					 continuousRotationShortcut : 1, // True if continuous rotation axes take shortcuts
 					 checkEndstops : 1,				// True if this move monitors endstops or Z probe
 					 controlLaser : 1,				// True if this move controls the laser or iobits
-					 wasAccelOnlyMove : 1,			// set by Prepare if this was an acceleration-only move, for the next move to look at
-					 isolatedMove : 1				// set if we disable input shaping for this move and wait for it to finish e.g. for a G1 H2 move
+					 isolatedMove : 1,				// set if we disable input shaping for this move and wait for it to finish e.g. for a G1 H2 move
+					 doneIoBits : 1,				// set if we have written the IOBITS ports for this move
+					 doneFeedForward : 1			// set if we have commanded feedforward for this move
 #if SUPPORT_SCANNING_PROBES
 					 , scanningProbeMove : 1 	 	// True if this is a scanning Z probe move
-#endif
-#if SUPPORT_REMOTE_COMMANDS
-					 , isRemote : 1					// True if this move was commanded from a remote
 #endif
 					 ;
 		};

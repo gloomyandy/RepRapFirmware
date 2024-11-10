@@ -1,5 +1,9 @@
 Version 3.6.0-beta.1+2
 ======================
+* Duet3d 3.6.0-beta.1+3
+
+Version 3.6.0-beta.1+2
+======================
 * Duet3d 3.6.0-beta.1+2
 * Added support for FYSETCSB2040V2
 * WiFi Firmware v2.2.0
