@@ -98,6 +98,7 @@ private:
 	uint32_t gracePeriod;														// The minimum idle time in milliseconds, before we should start a move. Better to have a few moves in the queue so that we can do lookahead
 
 	const Tool *_ecv_null lastFeedForwardTool;									// the tool we last applied heater feedforward to
+	float lastAverageExtrusionSpeed;											// the extrusion speed we last set heater feedforward for
 
 	uint32_t scheduledMoves;													// Number of moves scheduled in this ring
 	uint32_t completedMoves;													// Number of moves completed in this ring

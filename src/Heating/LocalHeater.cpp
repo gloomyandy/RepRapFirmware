@@ -287,64 +287,64 @@ void LocalHeater::Spin() noexcept
 		{
 			// Get the target temperature and the error
 			const float targetTemperature = min<float>(GetTargetTemperature() + extrusionTemperatureBoost, GetHighestTemperatureLimit());
-			const float error = targetTemperature - temperature;
 
-			if (extrusionTemperatureBoost != 0.0 || lastExtrusionTemperatureBoost != extrusionTemperatureBoost)
+			if (IsPidMode(mode) && extrusionTemperatureBoost != lastExtrusionTemperatureBoost)
 			{
 				// Calculate new heater mode to prevent heater fault due to exceededAllowedExcursion
-				String<1> dummy;
-				(void)SwitchOn(dummy.GetRef());
+				mode = (temperature + TemperatureCloseEnough < targetTemperature) ? HeaterMode::heating
+						: (temperature > targetTemperature + TemperatureCloseEnough) ? HeaterMode::cooling
+							: HeaterMode::stable;
+				lastExtrusionTemperatureBoost = extrusionTemperatureBoost;
 			}
-			lastExtrusionTemperatureBoost = extrusionTemperatureBoost;
+
+			const float error = targetTemperature - temperature;
 
 			// Do the heating checks
-			switch(mode)
+			switch (mode)
 			{
 			case HeaterMode::heating:
+				if (error <= TemperatureCloseEnough)
 				{
-					if (error <= TemperatureCloseEnough)
+					mode = HeaterMode::stable;
+					heatingFaultCount = 0;
+				}
+				else
+				{
+					const uint32_t now = millis();
+					if ((float)(now - timeSetHeating) < GetModel().GetDeadTime() * SecondsToMillis * 2)		// wait for twice the dead time before we start looking at the temperature rise
 					{
-						mode = HeaterMode::stable;
-						heatingFaultCount = 0;
+						// Record the temperature for when we are past the dead time
+						lastTemperatureValue = temperature;
+						lastTemperatureMillis = now;
 					}
-					else
+					else if (gotDerivative)												// this is a check in case we just had a temperature spike
 					{
-						const uint32_t now = millis();
-						if ((float)(now - timeSetHeating) < GetModel().GetDeadTime() * SecondsToMillis * 2)		// wait for twice the dead time before we start looking at the temperature rise
+						const float expectedRate = GetExpectedHeatingRate();
+						const float minSamplingInterval = 3.0/expectedRate;				// only check the temperature when we expect at least 3C rise since last time
+						const float actualInterval = (float)(now - lastTemperatureMillis) * MillisToSeconds;
+						if (actualInterval >= minSamplingInterval)
 						{
-							// Record the temperature for when we are past the dead time
-							lastTemperatureValue = temperature;
-							lastTemperatureMillis = now;
-						}
-						else if (gotDerivative)												// this is a check in case we just had a temperature spike
-						{
-							const float expectedRate = GetExpectedHeatingRate();
-							const float minSamplingInterval = 3.0/expectedRate;				// only check the temperature when we expect at least 3C rise since last time
-							const float actualInterval = (float)(now - lastTemperatureMillis) * MillisToSeconds;
-							if (actualInterval >= minSamplingInterval)
+							// Check that we are heating fast enough, and if so, take another sample
+							const float expectedTemperatureRise = expectedRate * actualInterval;
+							const float actualTemperatureRise = temperature - lastTemperatureValue;
+							// Bed heaters sometimes have much slower long term heating rates than their short term heating rates, so allow them a lower measured heating rate
+							if (actualTemperatureRise < expectedTemperatureRise * ((IsBedOrChamber()) ? MinBedTemperatureRiseFactor : MinToolTemperatureRiseFactor))
 							{
-								// Check that we are heating fast enough, and if so, take another sample
-								const float expectedTemperatureRise = expectedRate * actualInterval;
-								const float actualTemperatureRise = temperature - lastTemperatureValue;
-								// Bed heaters sometimes have much slower long term heating rates than their short term heating rates, so allow them a lower measured heating rate
-								if (actualTemperatureRise < expectedTemperatureRise * ((IsBedOrChamber()) ? MinBedTemperatureRiseFactor : MinToolTemperatureRiseFactor))
+								++heatingFaultCount;
+								if (heatingFaultCount * HeatSampleIntervalMillis > GetMaxHeatingFaultTime() * SecondsToMillis)
 								{
-									++heatingFaultCount;
-									if (heatingFaultCount * HeatSampleIntervalMillis > GetMaxHeatingFaultTime() * SecondsToMillis)
-									{
-										RaiseHeaterFault(HeaterFaultType::temperatureRisingTooSlowly,
-															"expected %.2f" DEGREE_SYMBOL "C/sec measured %.2f" DEGREE_SYMBOL "C/sec",
-																(double)expectedRate, (double)(actualTemperatureRise/actualInterval));
-									}
+									RaiseHeaterFault(HeaterFaultType::temperatureRisingTooSlowly,
+														"expected %.2f" DEGREE_SYMBOL "C/sec measured %.2f" DEGREE_SYMBOL "C/sec",
+															(double)expectedRate, (double)(actualTemperatureRise/actualInterval));
 								}
-								else
+							}
+							else
+							{
+								lastTemperatureValue = temperature;
+								lastTemperatureMillis = now;
+								if (heatingFaultCount != 0)
 								{
-									lastTemperatureValue = temperature;
-									lastTemperatureMillis = now;
-									if (heatingFaultCount != 0)
-									{
-										--heatingFaultCount;
-									}
+									--heatingFaultCount;
 								}
 							}
 						}
@@ -586,10 +586,9 @@ void LocalHeater::SetExtrusionFeedForward(float pwmBoost, float tempBoost) noexc
 	if (mode == HeaterMode::stable)
 	{
 		const float pwmChange = pwmBoost - lastExtrusionPwmBoost;
-		lastFanPwm = 0.0;
-		const float boost = GetModel().GetPwmCorrectionForFan(GetTargetTemperature() - NormalAmbientTemperature, pwmChange) * FanFeedForwardMultiplier;
+		lastExtrusionPwmBoost = pwmBoost;
 		InterruptCriticalSectionLocker lock;
-		iAccumulator += boost;
+		iAccumulator += pwmChange;
 	}
 	extrusionTemperatureBoost = tempBoost;
 }

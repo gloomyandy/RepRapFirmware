@@ -1267,9 +1267,9 @@ void DDA::Prepare(DDARing& ring, SimulationMode simMode) noexcept
 					{
 						move.EnableDrivers(drive, false);
 
-						if (directionVector[drive] > 0.0)
+						if (flags.isPrintingMove && directionVector[drive] > 0.0)
 						{
-							extrusionFraction += directionVector[drive];			// accumulate the total extrusion fraction
+							extrusionFraction += directionVector[drive];					// accumulate the total extrusion fraction
 						}
 
 #if SUPPORT_NONLINEAR_EXTRUSION

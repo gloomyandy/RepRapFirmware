@@ -84,6 +84,7 @@ void DDARing::Init1(unsigned int numDdas) noexcept
 
 	getPointer = addPointer;
 	lastFeedForwardTool = nullptr;
+	lastAverageExtrusionSpeed = 0.0;
 }
 
 // This must be called from Move::Init, not from the Move constructor, because it indirectly refers to the GCodes module which must therefore be initialised first
@@ -730,6 +731,8 @@ uint32_t DDARing::ManageIOBitsAndFeedForward() noexcept
 	SetBasePriority(NvicPriorityStep);
 	DDA *cdda = getPointer;
 	const uint32_t now = StepTimer::GetMovementTimerTicks();
+	const Tool *_ecv_null feedForwardTool;
+	float feedForwardAverageExtrusionSpeed = 0.0;
 
 	while (cdda->IsCommitted())
 	{
@@ -751,22 +754,25 @@ uint32_t DDARing::ManageIOBitsAndFeedForward() noexcept
 			}
 		}
 
-		const Tool *_ecv_null t;
-		if (!doneFeedForward && (t = cdda->GetTool()) != nullptr && timeToMoveStart < (int32_t)t->GetFeedForwardAdvanceClocks() && timeToMoveEnd > (int32_t)t->GetFeedForwardAdvanceClocks())
+		if (!doneFeedForward)
 		{
-			// This move is current from the perspective of feedforward
-			if (!cdda->HaveDoneFeedForward())
+			feedForwardTool = cdda->GetTool();
+			if (feedForwardTool != nullptr && timeToMoveStart < (int32_t)feedForwardTool->GetFeedForwardAdvanceClocks() && timeToMoveEnd > (int32_t)feedForwardTool->GetFeedForwardAdvanceClocks())
 			{
-				// Don't set feedforward here because we have set a very high base priority and we may need to send CAN messages. Just record that we need to set it.
-				setFeedForward = true;
-				lastFeedForwardTool = t;
-				cdda->SetDoneFeedForward();
-			}
-			nextWakeupDelay = min<uint32_t>(nextWakeupDelay, (uint32_t)timeToMoveEnd > t->GetFeedForwardAdvanceClocks());
-			doneFeedForward = true;
-			if (doneIoBits)
-			{
-				break;
+				// This move is current from the perspective of feedforward
+				if (!cdda->HaveDoneFeedForward())
+				{
+					// Don't set feedforward here because we have set a very high base priority and we may need to send CAN messages. Just record that we need to set it.
+					cdda->SetDoneFeedForward();
+					feedForwardAverageExtrusionSpeed = cdda->GetAverageExtrusionSpeed();
+					setFeedForward = true;
+				}
+				nextWakeupDelay = min<uint32_t>(nextWakeupDelay, (uint32_t)timeToMoveEnd > feedForwardTool->GetFeedForwardAdvanceClocks());
+				doneFeedForward = true;
+				if (doneIoBits)
+				{
+					break;
+				}
 			}
 		}
 		cdda = cdda->GetNext();
@@ -781,12 +787,18 @@ uint32_t DDARing::ManageIOBitsAndFeedForward() noexcept
 
 	if (setFeedForward)
 	{
-		lastFeedForwardTool->ApplyExtrusionFeedForward(cdda->GetAverageExtrusionSpeed());
+		if (feedForwardTool != lastFeedForwardTool || fabsf(feedForwardAverageExtrusionSpeed - lastAverageExtrusionSpeed) > lastAverageExtrusionSpeed * 0.05)
+		{
+			feedForwardTool->ApplyExtrusionFeedForward(feedForwardAverageExtrusionSpeed);
+			lastFeedForwardTool = feedForwardTool;
+			lastAverageExtrusionSpeed = feedForwardAverageExtrusionSpeed;
+		}
 	}
-	else if (!doneFeedForward && lastFeedForwardTool != nullptr)
+	else if (!doneFeedForward && lastFeedForwardTool != nullptr && lastAverageExtrusionSpeed != 0.0)
 	{
 		lastFeedForwardTool->StopExtrusionFeedForward();							// no move with a tool active so cancel the last feedforward we commanded
 		lastFeedForwardTool = nullptr;
+		lastAverageExtrusionSpeed = 0.0;
 	}
 
 	return (nextWakeupDelay + StepClockRate/1000 - 1)/(StepClockRate/1000);			// convert step clocks to milliseconds, rounding up
