@@ -484,12 +484,14 @@ float DDARing::GetTopSpeedMmPerSec() const noexcept
 	return (cdda != nullptr) ? cdda->GetTopSpeedMmPerSec() : 0.0;
 }
 
+// Get the (peak) acceleration for reporting in the object model
 float DDARing::GetAccelerationMmPerSecSquared() const noexcept
 {
 	const DDA* const cdda = GetCurrentDDA();
 	return (cdda != nullptr) ? cdda->GetAccelerationMmPerSecSquared() : 0.0;
 }
 
+// Get the (peak) deceleration for reporting in the object model
 float DDARing::GetDecelerationMmPerSecSquared() const noexcept
 {
 	const DDA* const cdda = GetCurrentDDA();
@@ -697,7 +699,7 @@ void DDARing::Diagnostics(MessageType mtype, unsigned int ringNumber) noexcept
 
 #if SUPPORT_LASER
 
-// Manage the laser power. Return the number of ticks until we should be called again, or 0 to be called at the start of the next move.
+// Manage the laser power. Return the number of ticks until we should be called again, or portMAX_DELAY to be called at the start of the next move.
 uint32_t DDARing::ManageLaserPower() noexcept
 {
 	SetBasePriority(NvicPriorityStep);							// lock out step interrupts
@@ -712,18 +714,18 @@ uint32_t DDARing::ManageLaserPower() noexcept
 	// If we get here then there is no active laser move
 	SetBasePriority(0);
 	reprap.GetPlatform().SetLaserPwm(0);						// turn off the laser
-	return 0;
+	return portMAX_DELAY;
 }
 
 #endif
 
-#if SUPPORT_IOBITS
-
-// Manage the IOBITS (G1 P parameter) and extruder heater feedforward. Called by the Laser task.
+// Manage the IOBITS (G1 P parameter) and extruder heater feedforward. Called by the Laser task. Return the number of ticks until we should be called again, up to portMAX_DELAY.
 uint32_t DDARing::ManageIOBitsAndFeedForward() noexcept
 {
+#if SUPPORT_IOBITS
 	PortControl& pc = reprap.GetPortControl();
 	bool doneIoBits = !pc.IsConfigured();
+#endif
 	bool doneFeedForward = false;
 	bool setFeedForward = false;
 	uint32_t nextWakeupDelay = StepClockRate;
@@ -738,6 +740,7 @@ uint32_t DDARing::ManageIOBitsAndFeedForward() noexcept
 	{
 		const int32_t timeToMoveStart = (int32_t)(cdda->GetMoveStartTime() - now);				// get the time to the start of the move, negative if the move has started
 		const int32_t timeToMoveEnd = timeToMoveStart + (int32_t)cdda->GetClocksNeeded();		// get the time to the move ended, negative if the move has ended
+#if SUPPORT_IOBITS
 		if (!doneIoBits && timeToMoveStart < (int32_t)pc.GetAdvanceClocks() && timeToMoveEnd > (int32_t)pc.GetAdvanceClocks())
 		{
 			// This move is current from the perspective of IOBits
@@ -753,8 +756,8 @@ uint32_t DDARing::ManageIOBitsAndFeedForward() noexcept
 				break;
 			}
 		}
-
 		if (!doneFeedForward)
+#endif
 		{
 			feedForwardTool = cdda->GetTool();
 			if (feedForwardTool != nullptr && timeToMoveStart < (int32_t)feedForwardTool->GetFeedForwardAdvanceClocks() && timeToMoveEnd > (int32_t)feedForwardTool->GetFeedForwardAdvanceClocks())
@@ -769,7 +772,9 @@ uint32_t DDARing::ManageIOBitsAndFeedForward() noexcept
 				}
 				nextWakeupDelay = min<uint32_t>(nextWakeupDelay, (uint32_t)timeToMoveEnd > feedForwardTool->GetFeedForwardAdvanceClocks());
 				doneFeedForward = true;
+#if SUPPORT_IOBITS
 				if (doneIoBits)
+#endif
 				{
 					break;
 				}
@@ -778,10 +783,12 @@ uint32_t DDARing::ManageIOBitsAndFeedForward() noexcept
 		cdda = cdda->GetNext();
 	}
 
+#if SUPPORT_IOBITS
 	if (!doneIoBits)
 	{
 		pc.UpdatePorts(0);															// no move active so turn off all IOBITS ports
 	}
+#endif
 
 	SetBasePriority(0);
 
@@ -803,8 +810,6 @@ uint32_t DDARing::ManageIOBitsAndFeedForward() noexcept
 
 	return (nextWakeupDelay + StepClockRate/1000 - 1)/(StepClockRate/1000);			// convert step clocks to milliseconds, rounding up
 }
-
-#endif
 
 #if SUPPORT_REMOTE_COMMANDS
 

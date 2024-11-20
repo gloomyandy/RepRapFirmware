@@ -109,8 +109,18 @@ public:
 	float GetRequestedSpeedMmPerClock() const noexcept { return requestedSpeed; }
 	float GetRequestedSpeedMmPerSec() const noexcept { return InverseConvertSpeedToMmPerSec(requestedSpeed); }
 	float GetTopSpeedMmPerSec() const noexcept { return InverseConvertSpeedToMmPerSec(topSpeed); }
-	float GetAccelerationMmPerSecSquared() const noexcept { return InverseConvertAcceleration(acceleration); }
-	float GetDecelerationMmPerSecSquared() const noexcept { return InverseConvertAcceleration(deceleration); }
+	float GetAccelerationMmPerSecSquared() const noexcept							// Get the (peak) acceleration for reporting in the object model
+#if SUPPORT_S_CURVE
+		{ return InverseConvertAcceleration(peakAcceleration); }
+#else
+		{ return InverseConvertAcceleration(acceleration); }
+#endif
+	float GetDecelerationMmPerSecSquared() const noexcept							// Get the (peak) acceleration for reporting in the object model
+#if SUPPORT_S_CURVE
+		{ return InverseConvertAcceleration(peakDeceleration); }
+#else
+		{ return InverseConvertAcceleration(deceleration); }
+#endif
 	float GetVirtualExtruderPosition() const noexcept { return virtualExtruderPosition; }
 	float GetTotalExtrusionRate() const noexcept;
 
@@ -124,7 +134,7 @@ public:
 	float GetInitialUserC1() const noexcept { return initialUserC1; }
 
 	uint32_t GetClocksNeeded() const noexcept { return clocksNeeded; }
-	bool HasExpired() const noexcept pre(state == committed);
+	bool HasExpired() const noexcept pre(IsCommitted());
 	bool IsGoodToPrepare() const noexcept;
 	bool IsNonPrintingExtruderMove() const noexcept { return flags.isNonPrintingExtruderMove; }
 	void UpdateMovementAccumulators(volatile int32_t *accumulators) const noexcept;
@@ -233,8 +243,18 @@ private:
 	float endCoordinates[MaxAxesPlusExtruders];		// The Cartesian coordinates at the end of the move plus extrusion amounts
 	float directionVector[MaxAxesPlusExtruders];	// The normalised direction vector - first 3 are XYZ Cartesian coordinates even on a delta
     float totalDistance;							// How long is the move in hypercuboid space
+#if SUPPORT_S_CURVE
+    float initialAcceleration;
+    float peakAcceleration;
+    float finalAcceleration;
+    float initialDeceleration;
+    float peakDeceleration;
+    float finalDeceleration;
+	float jerk;										// The magnitude of the rate of change of acceleration or deceleration, always positive
+#else
 	float acceleration;								// The acceleration to use, always positive
 	float deceleration;								// The deceleration to use, always positive
+#endif
     float requestedSpeed;							// The speed that the user asked for
     float virtualExtruderPosition;					// the virtual extruder position at the end of this move, used for pause/resume
 

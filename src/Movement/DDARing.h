@@ -46,8 +46,8 @@ public:
 
 	float GetRequestedSpeedMmPerSec() const noexcept;
 	float GetTopSpeedMmPerSec() const noexcept;
-	float GetAccelerationMmPerSecSquared() const noexcept;
-	float GetDecelerationMmPerSecSquared() const noexcept;
+	float GetAccelerationMmPerSecSquared() const noexcept;								// Get the (peak) acceleration for reporting in the object model
+	float GetDecelerationMmPerSecSquared() const noexcept;								// Get the (peak) deceleration for reporting in the object model
 	float GetTotalExtrusionRate() const noexcept;
 
 	void GetCurrentMachinePosition(float m[MaxAxes], bool disableMotorMapping) const noexcept; // Get the position at the end of the last queued move in untransformed coords
@@ -66,9 +66,7 @@ public:
 #if SUPPORT_LASER
 	uint32_t ManageLaserPower() noexcept;												// Manage the laser power
 #endif
-#if SUPPORT_IOBITS
 	uint32_t ManageIOBitsAndFeedForward() noexcept;										// Manage the IOBITS (G1 P parameter) and extruder heater feedforward
-#endif
 
 	void RecordLookaheadError() noexcept { ++numLookaheadErrors; }						// Record a lookahead error
 	void Diagnostics(MessageType mtype, unsigned int ringNumber) noexcept;
