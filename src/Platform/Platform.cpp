@@ -1602,154 +1602,157 @@ static uint32_t TimedSqrt(uint64_t arg, uint32_t& timeAcc) noexcept
 	return ret;
 }
 
+GCodeResult Platform::PrintTestReport(GCodeBuffer& gb, const StringRef& reply, OutputBuffer *_ecv_null & buf) const THROWS(GCodeException)
+{
+	if (!OutputBuffer::Allocate(buf))
+	{
+		reply.copy("No output buffer");
+		return GCodeResult::error;
+	}
+
+	bool testFailed = false;
+#if HAS_MASS_STORAGE
+	// Check the SD card detect and speed
+	if (!MassStorage::IsCardDetected(0))
+	{
+		buf->copy("SD card 0 not detected");
+		testFailed = true;
+	}
+# if HAS_HIGH_SPEED_SD
+	else if (sd_mmc_get_interface_speed(0) != ExpectedSdCardSpeed)
+	{
+		buf->printf("SD card speed %.2fMbytes/sec is unexpected", (double)((float)sd_mmc_get_interface_speed(0) * 0.000001));
+		testFailed = true;
+	}
+# endif
+	else
+	{
+		buf->copy("SD card interface OK");
+	}
+#endif
+
+#if HAS_CPU_TEMP_SENSOR
+	// Check the MCU temperature
+	{
+		gb.MustSee('T');
+		float tempMinMax[2];
+		size_t numTemps = 2;
+		gb.GetFloatArray(tempMinMax, numTemps, false);
+		const float currentMcuTemperature = GetCpuTemperature();
+		if (currentMcuTemperature < tempMinMax[0])
+		{
+			buf->lcatf("MCU temperature %.1f is lower than expected", (double)currentMcuTemperature);
+			testFailed = true;
+		}
+		else if (currentMcuTemperature > tempMinMax[1])
+		{
+			buf->lcatf("MCU temperature %.1f is higher than expected", (double)currentMcuTemperature);
+			testFailed = true;
+		}
+		else
+		{
+			buf->lcat("MCU temperature reading OK");
+		}
+	}
+#endif
+
+#if HAS_VOLTAGE_MONITOR
+	// Check the supply voltage
+	{
+		gb.MustSee('V');
+		float voltageMinMax[2];
+		size_t numVoltages = 2;
+		gb.GetFloatArray(voltageMinMax, numVoltages, false);
+		const float voltage = AdcReadingToPowerVoltage(currentVin);
+		if (voltage < voltageMinMax[0])
+		{
+			buf->lcatf("VIN voltage reading %.1f is lower than expected", (double)voltage);
+			testFailed = true;
+		}
+		else if (voltage > voltageMinMax[1])
+		{
+			buf->lcatf("VIN voltage reading %.1f is higher than expected", (double)voltage);
+			testFailed = true;
+		}
+		else
+		{
+			buf->lcat("VIN voltage reading OK");
+		}
+	}
+#endif
+
+#if HAS_12V_MONITOR
+	// Check the 12V rail voltage
+	{
+		gb.MustSee('W');
+		float voltageMinMax[2];
+		size_t numVoltages = 2;
+		gb.GetFloatArray(voltageMinMax, numVoltages, false);
+
+		const float voltage = AdcReadingToV12Voltage(currentV12);
+		if (voltage < voltageMinMax[0])
+		{
+			buf->lcatf("12V voltage reading %.1f is lower than expected", (double)voltage);
+			testFailed = true;
+		}
+		else if (voltage > voltageMinMax[1])
+		{
+			buf->lcatf("12V voltage reading %.1f is higher than expected", (double)voltage);
+			testFailed = true;
+		}
+		else
+		{
+			buf->lcat("12V voltage reading OK");
+		}
+	}
+#endif
+
+#if HAS_SMART_DRIVERS
+	// Check the stepper driver status
+	bool driversOK = true;
+	for (size_t driver = 0; driver < reprap.GetMove().GetNumSmartDrivers(); ++driver)
+	{
+		const StandardDriverStatus stat = Move::GetSmartDriverStatus(driver, true, false);
+		if (stat.ot || stat.otpw)
+		{
+			buf->lcatf("Driver %u reports over temperature", driver);
+			driversOK = false;
+		}
+		if (stat.s2ga || stat.s2gb || stat.s2vsa || stat.s2vsb)
+		{
+			buf->lcatf("Driver %u reports short-to-ground", driver);
+			driversOK = false;
+		}
+	}
+	if (driversOK)
+	{
+		buf->lcat("Driver status OK");
+	}
+	else
+	{
+		testFailed = true;
+	}
+#endif
+	buf->lcat((testFailed) ? "***** ONE OR MORE CHECKS FAILED *****" : "All checks passed");
+
+#if MCU_HAS_UNIQUE_ID
+	if (!testFailed)
+	{
+		buf->lcat("Board ID: ");
+		uniqueId.AppendCharsToBuffer(buf);
+	}
+#endif
+	return GCodeResult::ok;
+}
+
 GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, OutputBuffer *_ecv_null & buf, unsigned int d) THROWS(GCodeException)
 {
 	switch (d)
 	{
 	case (unsigned int)DiagnosticTestType::PrintTestReport:
-		{
-			bool testFailed = false;
-			if (!OutputBuffer::Allocate(buf))
-			{
-				reply.copy("No output buffer");
-				return GCodeResult::error;
-			}
+		return PrintTestReport(gb, reply, buf);
 
-#if HAS_MASS_STORAGE
-			// Check the SD card detect and speed
-			if (!MassStorage::IsCardDetected(0))
-			{
-				buf->copy("SD card 0 not detected");
-				testFailed = true;
-			}
-# if HAS_HIGH_SPEED_SD
-			else if (sd_mmc_get_interface_speed(0) != ExpectedSdCardSpeed)
-			{
-				buf->printf("SD card speed %.2fMbytes/sec is unexpected", (double)((float)sd_mmc_get_interface_speed(0) * 0.000001));
-				testFailed = true;
-			}
-# endif
-			else
-			{
-				buf->copy("SD card interface OK");
-			}
-#endif
-
-#if HAS_CPU_TEMP_SENSOR
-			// Check the MCU temperature
-			{
-				gb.MustSee('T');
-				float tempMinMax[2];
-				size_t numTemps = 2;
-				gb.GetFloatArray(tempMinMax, numTemps, false);
-				const float currentMcuTemperature = GetCpuTemperature();
-				if (currentMcuTemperature < tempMinMax[0])
-				{
-					buf->lcatf("MCU temperature %.1f is lower than expected", (double)currentMcuTemperature);
-					testFailed = true;
-				}
-				else if (currentMcuTemperature > tempMinMax[1])
-				{
-					buf->lcatf("MCU temperature %.1f is higher than expected", (double)currentMcuTemperature);
-					testFailed = true;
-				}
-				else
-				{
-					buf->lcat("MCU temperature reading OK");
-				}
-			}
-#endif
-
-#if HAS_VOLTAGE_MONITOR
-			// Check the supply voltage
-			{
-				gb.MustSee('V');
-				float voltageMinMax[2];
-				size_t numVoltages = 2;
-				gb.GetFloatArray(voltageMinMax, numVoltages, false);
-				const float voltage = AdcReadingToPowerVoltage(currentVin);
-				if (voltage < voltageMinMax[0])
-				{
-					buf->lcatf("VIN voltage reading %.1f is lower than expected", (double)voltage);
-					testFailed = true;
-				}
-				else if (voltage > voltageMinMax[1])
-				{
-					buf->lcatf("VIN voltage reading %.1f is higher than expected", (double)voltage);
-					testFailed = true;
-				}
-				else
-				{
-					buf->lcat("VIN voltage reading OK");
-				}
-			}
-#endif
-
-#if HAS_12V_MONITOR
-			// Check the 12V rail voltage
-			{
-				gb.MustSee('W');
-				float voltageMinMax[2];
-				size_t numVoltages = 2;
-				gb.GetFloatArray(voltageMinMax, numVoltages, false);
-
-				const float voltage = AdcReadingToV12Voltage(currentV12);
-				if (voltage < voltageMinMax[0])
-				{
-					buf->lcatf("12V voltage reading %.1f is lower than expected", (double)voltage);
-					testFailed = true;
-				}
-				else if (voltage > voltageMinMax[1])
-				{
-					buf->lcatf("12V voltage reading %.1f is higher than expected", (double)voltage);
-					testFailed = true;
-				}
-				else
-				{
-					buf->lcat("12V voltage reading OK");
-				}
-			}
-#endif
-
-#if HAS_SMART_DRIVERS
-			// Check the stepper driver status
-			bool driversOK = true;
-			for (size_t driver = 0; driver < reprap.GetMove().GetNumSmartDrivers(); ++driver)
-			{
-				const StandardDriverStatus stat = Move::GetSmartDriverStatus(driver, true, false);
-				if (stat.ot || stat.otpw)
-				{
-					buf->lcatf("Driver %u reports over temperature", driver);
-					driversOK = false;
-				}
-				if (stat.s2ga || stat.s2gb || stat.s2vsa || stat.s2vsb)
-				{
-					buf->lcatf("Driver %u reports short-to-ground", driver);
-					driversOK = false;
-				}
-			}
-			if (driversOK)
-			{
-				buf->lcat("Driver status OK");
-			}
-			else
-			{
-				testFailed = true;
-			}
-#endif
-			buf->lcat((testFailed) ? "***** ONE OR MORE CHECKS FAILED *****" : "All checks passed");
-
-#if MCU_HAS_UNIQUE_ID
-			if (!testFailed)
-			{
-				buf->lcat("Board ID: ");
-				uniqueId.AppendCharsToBuffer(buf);
-			}
-#endif
-		}
-		break;
-
-	case (int)DiagnosticTestType::OutputBufferStarvation:
+	case (unsigned int)DiagnosticTestType::OutputBufferStarvation:
 		{
 			OutputBuffer *buf;
 			while (OutputBuffer::Allocate(buf)) { }
@@ -1757,7 +1760,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 		}
 		break;
 
-	case (int)DiagnosticTestType::SetWriteBuffer:
+	case (unsigned int)DiagnosticTestType::SetWriteBuffer:
 #if SAME70 || STM32H7
 		//TODO set cache to write-back instead
 		reply.copy("Write buffer not supported on this processor");
@@ -1996,6 +1999,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 					"\nGCodes %08" PRIx32 "-%08" PRIx32
 					"\nMove %08" PRIx32 "-%08" PRIx32
 					"\nHeat %08" PRIx32 "-%08" PRIx32
+					"\n"
 					, reinterpret_cast<uint32_t>(this), reinterpret_cast<uint32_t>(this) + sizeof(Platform) - 1
 #if HAS_SBC_INTERFACE
 					, reinterpret_cast<uint32_t>(&reprap.GetSbcInterface())
@@ -2008,7 +2012,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 				);
 
 		MessageF(MessageType::GenericMessage,
-					"\nPrintMonitor %08" PRIx32 "-%08" PRIx32
+					"PrintMonitor %08" PRIx32 "-%08" PRIx32
 					"\nFansManager %08" PRIx32 "-%08" PRIx32
 #if SUPPORT_IOBITS
 					"\nPortControl %08" PRIx32 "-%08" PRIx32
@@ -2019,7 +2023,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 #if SUPPORT_CAN_EXPANSION
 					"\nExpansionManager %08" PRIx32 "-%08" PRIx32
 #endif
-
+					"\n"
 					, reinterpret_cast<uint32_t>(&reprap.GetPrintMonitor()), reinterpret_cast<uint32_t>(&reprap.GetPrintMonitor()) + sizeof(PrintMonitor) - 1
 					, reinterpret_cast<uint32_t>(&reprap.GetFansManager()), reinterpret_cast<uint32_t>(&reprap.GetFansManager()) + sizeof(FansManager) - 1
 #if SUPPORT_IOBITS
@@ -2344,17 +2348,6 @@ bool Platform::IsAuxRaw(size_t auxNumber) const noexcept
 #endif
 }
 
-static inline uint32_t GetAddress(GCodeBuffer& gb)
-{
-	uint32_t address = 0;
-	if (gb.GetCommandFraction() < 2)
-	{
-		gb.MustSee('A');
-		address = gb.GetUIValue();
-	}
-	return address;
-}
-
 /**
  * Converts a single byte of hex value to its ASCII hex representation.
  *
@@ -2396,22 +2389,40 @@ static inline void CalculateNordsonUltimusVCheckSum(uint8_t* data, size_t len, u
 	ConvertHexToAsciiHex(sum & 0xFF, checksum); // take last byte of sum and convert to ascii hex
 }
 
+static Variable *_ecv_null GetResultVariable(GCodeBuffer& gb) THROWS(GCodeException)
+{
+	String<MaxVariableNameLength> varName;
+	bool seenV = false;
+	gb.TryGetQuotedString('V', varName.GetRef(), seenV, false);
+	Variable *_ecv_null resultVar = nullptr;
+	if (seenV)
+	{
+		if (!Variable::IsValidVariableName(varName.c_str()))
+		{
+			gb.ThrowGCodeException("variable '%s' is not a valid name", varName.c_str());
+		}
+		auto vset = WriteLockedPointer<VariableSet>(nullptr, &gb.GetVariables());
+		Variable *_ecv_null const v = vset->Lookup(varName.c_str(), false);
+		if (v != nullptr)
+		{
+			gb.ThrowGCodeException("variable '%s' already exists", varName.c_str());
+		}
+		resultVar = vset->InsertNew(varName.c_str(), ExpressionValue(), gb.CurrentFileMachineState().GetBlockNesting());
+	}
+	return resultVar;
+}
+
 // Handle M260 and M260.1 - send and possibly receive via I2C, or send via Modbus
 GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) THROWS(GCodeException)
 {
 	// Get the slave address and bytes or words to send
-
-# if defined(I2C_IFACE) || SUPPORT_MODBUS_RTU
-	const uint32_t address = GetAddress(gb);
-#endif
-
-	int32_t values[MaxI2cOrModbusValues] = {0};
+	int32_t valuesToSend[MaxI2cOrModbusValues] = { 0 };
 	size_t numToSend = 0;
 
 	if (gb.Seen('B'))
 	{
 		numToSend = MaxI2cOrModbusValues;
-		gb.GetIntArray(values, numToSend, false);
+		gb.GetIntArray(valuesToSend, numToSend, false);
 	}
 	else if (gb.Seen('S'))
 	{
@@ -2427,7 +2438,7 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 
 		for (size_t i = 0; i < numToSend; i++)
 		{
-			values[i] = (int32_t)str[i];
+			valuesToSend[i] = (int32_t)str[i];
 		}
 	}
 	else if (gb.GetCommandFraction() > 0)
@@ -2436,24 +2447,37 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 		return GCodeResult::error;
 	}
 
+	size_t auxChannel = 0;
+	if (gb.GetCommandFraction() > 0)
+	{
+		auxChannel = gb.GetLimitedUIValue('P', 1, NumSerialChannels) - 1;
+		if (auxDevices[auxChannel].GetMode() != AuxMode::device)
+		{
+			reply.copy("Port has not been set to device mode");
+			return GCodeResult::error;
+		}
+	}
+
 	switch (gb.GetCommandFraction())
 	{
 # if defined(I2C_IFACE)
 	case 0:		// I2C
 	case -1:
 		{
+			const uint32_t address = gb.GetLimitedUIValue('A', 1u << 10);
 			uint32_t numToReceive = 0;
 			bool seenR;
 			gb.TryGetUIValue('R', numToReceive, seenR);
+			Variable *_ecv_null const resultVar = GetResultVariable(gb);
 
 			if (numToSend + numToReceive > MaxI2cOrModbusValues)
 			{
 				numToReceive = MaxI2cOrModbusValues - numToSend;
 			}
-			uint8_t bValues[MaxI2cOrModbusValues] = {0};
+			uint8_t bValues[MaxI2cOrModbusValues] = { 0 };
 			for (size_t i = 0; i < numToSend; ++i)
 			{
-				bValues[i] = (uint8_t)values[i];
+				bValues[i] = (uint8_t)valuesToSend[i];
 			}
 
 			I2C::Init();
@@ -2466,16 +2490,28 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 			}
 			else if (numToReceive != 0)
 			{
-				reply.copy("Received");
-				if (bytesTransferred == numToSend)
+				if (resultVar != nullptr)
 				{
-					reply.cat(" nothing");
+					resultVar->AssignArray(bytesTransferred - numToSend,
+											[bValues, numToSend](size_t index)->ExpressionValue
+											{
+												return ExpressionValue((int32_t)bValues[index + numToSend]);
+											}
+										  );
 				}
 				else
 				{
-					for (size_t i = numToSend; i < bytesTransferred; ++i)
+					reply.copy("Received");
+					if (bytesTransferred == numToSend)
 					{
-						reply.catf(" %02x", bValues[i]);
+						reply.cat(" nothing");
+					}
+					else
+					{
+						for (size_t i = numToSend; i < bytesTransferred; ++i)
+						{
+							reply.catf(" %02x", bValues[i]);
+						}
 					}
 				}
 			}
@@ -2486,13 +2522,7 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 # if SUPPORT_MODBUS_RTU
 	case 1:		// Modbus
 		{
-			const size_t auxChannel = gb.GetLimitedUIValue('P', 1, NumSerialChannels) - 1;
-			if (auxDevices[auxChannel].GetMode() != AuxMode::device)
-			{
-				reply.copy("Port has not been set to device mode");
-				return GCodeResult::error;
-			}
-
+			const uint32_t address = gb.GetLimitedUIValue('A', 256);
 			const uint16_t firstRegister = gb.GetLimitedUIValue('R', 1u << 16);
 			const uint8_t function = (gb.Seen('F')) ? gb.GetLimitedUIValue('F', 5, 17) : 16;	// default to Modbus function Write Multiple Registers but also allow Write Coils, Write Single Coil
 			uint16_t registersToSend[MaxI2cOrModbusValues];
@@ -2504,7 +2534,7 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 					reply.copy("Invalid Modbus data");
 					return GCodeResult::error;
 				}
-				registersToSend[0] = (values[0] == 0) ? 0 : 0xFF00;
+				registersToSend[0] = (valuesToSend[0] == 0) ? 0 : 0xFF00;
 				break;
 
 			case (uint8_t)ModbusFunction::writeSingleRegister:
@@ -2513,14 +2543,14 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 					reply.copy("Invalid Modbus data");
 					return GCodeResult::error;
 				}
-				registersToSend[0] = (uint16_t)values[0];
+				registersToSend[0] = (uint16_t)valuesToSend[0];
 				break;
 
 			case (uint8_t)ModbusFunction::writeMultipleCoils:
 				memset(registersToSend, 0, sizeof(registersToSend));
 				for (size_t i = 0; i < numToSend; ++i)
 				{
-					if (values[i] != 0)
+					if (valuesToSend[i] != 0)
 					{
 						registersToSend[i/16] |= 1u << (i % 16);
 					}
@@ -2530,7 +2560,7 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 			case (uint8_t)ModbusFunction::writeMultipleRegisters:
 				for (size_t i = 0; i < numToSend; ++i)
 				{
-					registersToSend[i] = (uint16_t)values[i];
+					registersToSend[i] = (uint16_t)valuesToSend[i];
 				}
 				break;
 
@@ -2558,23 +2588,67 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 			}
 			return rslt;
 		}
+
+	case 4:					// generic Modbus send/receive
+		{
+			const uint32_t address = gb.GetLimitedUIValue('A', 256);
+			Variable *_ecv_null const resultVar = GetResultVariable(gb);
+			uint8_t bValues[MaxI2cOrModbusValues] = { 0 };
+			for (size_t i = 0; i < numToSend; ++i)
+			{
+				bValues[i] = (uint8_t)valuesToSend[i];
+			}
+			const uint32_t numToReceive = gb.GetLimitedUIValue('R', 1, MaxI2cOrModbusValues + 1);
+			uint8_t dataIn[MaxI2cOrModbusValues];
+			GCodeResult rslt = auxDevices[auxChannel].ModbusRawTransaction(address, bValues, numToSend, dataIn, numToReceive);
+			if (rslt == GCodeResult::ok)
+			{
+				do
+				{
+					delay(2);
+					rslt = auxDevices[auxChannel].CheckModbusResult();
+				} while (rslt == GCodeResult::notFinished);
+
+				if (rslt == GCodeResult::ok)
+				{
+					if (resultVar != nullptr)
+					{
+						resultVar->AssignArray(numToReceive, [dataIn](size_t index)->ExpressionValue
+												{
+													return ExpressionValue((int32_t)dataIn[index]);
+												}
+											  );
+					}
+					else
+					{
+						reply.copy("Received");
+						for (size_t i = 0; i < numToReceive; ++i)
+						{
+							reply.catf(" %02x", dataIn[i]);
+						}
+					}
+				}
+				else
+				{
+					reply.copy("no or bad response from Modbus device");
+				}
+			}
+			else
+			{
+				reply.copy("couldn't initiate Modbus transaction");
+			}
+			return rslt;
+		}
 # endif
 
 # if HAS_AUX_DEVICES
 	case 2:
 	{
-		const size_t auxChannel = gb.GetLimitedUIValue('P', 1, NumSerialChannels) - 1;
-		if (auxDevices[auxChannel].GetMode() != AuxMode::device)
-		{
-			reply.copy("Port has not been set to device mode");
-			return GCodeResult::error;
-		}
-
 		uint8_t data[MaxI2cOrModbusValues] = {0};
 
 		for (size_t i = 0; i < numToSend; i++)
 		{
-			data[i] = (uint8_t)values[i];
+			data[i] = (uint8_t)valuesToSend[i];
 		}
 
 		GCodeResult rslt = auxDevices[auxChannel].SendUartData(data, numToSend);
@@ -2585,15 +2659,9 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 		return rslt;
 	}
 
+# if !defined(DUET_NG)			// don't support this on Duet 2 because we are running low on flash memory space
 	case 3: // Nordson Ultimus V https://www.manualslib.com/manual/2917329/Nordson-Ultimus-V.html?page=46#manual
 	{
-		const size_t auxChannel = gb.GetLimitedUIValue('P', 1, NumSerialChannels) - 1;
-		if (auxDevices[auxChannel].GetMode() != AuxMode::device)
-		{
-			reply.copy("Port has not been set to device mode");
-			return GCodeResult::error;
-		}
-
 		AuxDevice& dev = auxDevices[auxChannel];
 
 		// Send `ENQ`
@@ -2629,7 +2697,7 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 
 		for (size_t i = 0; i < numToSend; i++)
 		{
-			data[i + 3] = (uint8_t)values[i];
+			data[i + 3] = (uint8_t)valuesToSend[i];
 		}
 
 		uint8_t checksum[2] = {0};
@@ -2688,6 +2756,7 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 
 		return rslt;
 	}
+# endif
 #endif
 
 	default:
@@ -2698,30 +2767,18 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 // Handle M261 and M261.1
 GCodeResult Platform::ReceiveI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) THROWS(GCodeException)
 {
-# if defined(I2C_IFACE) || SUPPORT_MODBUS_RTU
-	const uint32_t address = GetAddress(gb);
-#endif
-
 	const uint32_t numValues = gb.GetLimitedUIValue('B', 0, MaxI2cOrModbusValues + 1);
-	String<MaxVariableNameLength> varName;
-	bool seenV = false;
-	gb.TryGetQuotedString('V', varName.GetRef(), seenV, false);
-	Variable *_ecv_null resultVar = nullptr;
-	if (seenV)
+	Variable *_ecv_null const resultVar = GetResultVariable(gb);
+
+	size_t auxChannel = 0;
+	if (gb.GetCommandFraction() > 0)
 	{
-		if (!Variable::IsValidVariableName(varName.c_str()))
+		auxChannel = gb.GetLimitedUIValue('P', 1, NumSerialChannels) - 1;
+		if (auxDevices[auxChannel].GetMode() != AuxMode::device)
 		{
-			reply.printf("variable '%s' is not a valid name", varName.c_str());
+			reply.copy("Port has not been set to device mode");
 			return GCodeResult::error;
 		}
-		auto vset = WriteLockedPointer<VariableSet>(nullptr, &gb.GetVariables());
-		Variable *_ecv_null const v = vset->Lookup(varName.c_str(), false);
-		if (v != nullptr)
-		{
-			reply.printf("variable '%s' already exists", varName.c_str());
-			return GCodeResult::error;
-		}
-		resultVar = vset->InsertNew(varName.c_str(), ExpressionValue(), gb.CurrentFileMachineState().GetBlockNesting());
 	}
 
 	switch (gb.GetCommandFraction())
@@ -2730,6 +2787,7 @@ GCodeResult Platform::ReceiveI2cOrModbus(GCodeBuffer& gb, const StringRef &reply
 	case 0:		// I2C
 	case -1:
 		{
+			const uint32_t address = gb.GetLimitedUIValue('A', 1u << 10);
 			I2C::Init();
 			uint8_t bValues[MaxI2cOrModbusValues];
 			const size_t bytesRead = I2C::Transfer(address, bValues, 0, numValues);
@@ -2768,13 +2826,7 @@ GCodeResult Platform::ReceiveI2cOrModbus(GCodeBuffer& gb, const StringRef &reply
 #if SUPPORT_MODBUS_RTU
 	case 1:		// Modbus
 		{
-			const size_t auxChannel = gb.GetLimitedUIValue('P', 1, NumSerialChannels) - 1;
-			if (auxDevices[auxChannel].GetMode() != AuxMode::device)
-			{
-				reply.copy("Port has not been set to device mode");
-				return GCodeResult::error;
-			}
-
+			const uint32_t address = gb.GetLimitedUIValue('A', 256);
 			const uint16_t firstRegister = gb.GetLimitedUIValue('R', 1u << 16);
 			const uint8_t function = (gb.Seen('F')) ? gb.GetLimitedUIValue('F', 1, 5) : 4;			// default to Modbus function Read Input Registers but also allow Read Holding Registers, Read Coils, Read Inputs
 			uint16_t registersToReceive[MaxI2cOrModbusValues];
@@ -2849,13 +2901,6 @@ GCodeResult Platform::ReceiveI2cOrModbus(GCodeBuffer& gb, const StringRef &reply
 #if HAS_AUX_DEVICES
 	case 2:		// Uart
 		{
-			const size_t auxChannel = gb.GetLimitedUIValue('P', 1, NumSerialChannels) - 1;
-			if (auxDevices[auxChannel].GetMode() != AuxMode::device)
-			{
-				reply.copy("Port has not been set to device mode");
-				return GCodeResult::error;
-			}
-
 			uint8_t dataReceived[MaxI2cOrModbusValues];
 			GCodeResult rslt = auxDevices[auxChannel].ReadUartData(dataReceived, numValues);
 			if (rslt == GCodeResult::ok)
@@ -2886,6 +2931,8 @@ GCodeResult Platform::ReceiveI2cOrModbus(GCodeBuffer& gb, const StringRef &reply
 		}
 #endif
 
+	case 3:				// Nordson Ultimus V, use M260.3
+	case 4:				// Modbus generic, use M260.4
 	default:
 		return GCodeResult::errorNotSupported;
 	}

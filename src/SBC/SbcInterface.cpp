@@ -1367,7 +1367,7 @@ void SbcInterface::InvalidateResources() noexcept
 		}
 		gb->AbortFile(true);
 		gb->FileAbortSent();	// don't notify the SBC
-		gb->MessageAcknowledged(true, 0, ExpressionValue());
+		gb->MessageAcknowledged(true, true, 0, ExpressionValue());
 	}
 
 	// Abort the print (if applicable)

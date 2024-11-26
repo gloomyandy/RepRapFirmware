@@ -576,7 +576,7 @@ uint32_t GCodeBuffer::GetUIValue() THROWS(GCodeException)
 	return PARSER_OPERATION(GetUIValue());
 }
 
-// Get an unsigned integer value, throw if >= limit
+// Get an unsigned integer value, throw if >= limit or the parameter letter is not seen
 uint32_t GCodeBuffer::GetLimitedUIValue(char c, uint32_t minValue, uint32_t maxValuePlusOne) THROWS(GCodeException)
 {
 	MustSee(c);
@@ -1207,7 +1207,7 @@ void GCodeBuffer::MacroFileClosed() noexcept
 
 // Tell this input source that any message it sent and is waiting on has been acknowledged
 // Allow for the possibility that the source may have started running a macro since it started waiting
-void GCodeBuffer::MessageAcknowledged(bool cancelled, uint32_t seq, ExpressionValue rslt) noexcept
+void GCodeBuffer::MessageAcknowledged(bool cancelled, bool shouldAbort, uint32_t seq, ExpressionValue rslt) noexcept
 {
 	for (GCodeMachineState *_ecv_null ms = machineState; ms != nullptr; ms = ms->GetPrevious())
 	{
@@ -1215,14 +1215,14 @@ void GCodeBuffer::MessageAcknowledged(bool cancelled, uint32_t seq, ExpressionVa
 		{
 			ms->waitingForAcknowledgement = false;
 			ms->messageAcknowledged = true;
-			ms->messageCancelled = cancelled;
+			ms->messageShouldAbort = cancelled && shouldAbort;
 			m291Result = rslt;
 			if (cancelled)
 			{
 				lastResult = GCodeResult::m291Cancelled;
 			}
 #if HAS_SBC_INTERFACE
-			messageAcknowledged = !cancelled || !ms->DoingFile();
+			messageAcknowledged = !(cancelled && shouldAbort) || !ms->DoingFile();
 			reprap.GetSbcInterface().EventOccurred();
 #endif
 		}
@@ -1382,6 +1382,16 @@ void GCodeBuffer::ThrowGCodeException(const char *_ecv_array msg) const THROWS(G
 }
 
 void GCodeBuffer::ThrowGCodeException(const char *_ecv_array msg, uint32_t param) const THROWS(GCodeException)
+{
+	const int column =
+#if HAS_SBC_INTERFACE
+						(isBinaryBuffer) ? -1 :
+#endif
+							stringParser.GetColumn();
+	throw GCodeException(this, column, msg, param);
+}
+
+[[noreturn]] void GCodeBuffer::ThrowGCodeException(const char *_ecv_array msg, const char *_ecv_array param) const THROWS(GCodeException)
 {
 	const int column =
 #if HAS_SBC_INTERFACE
