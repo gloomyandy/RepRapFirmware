@@ -3065,7 +3065,9 @@ bool GCodes::ReadMove(MovementSystemNumber queueNumber, RawMove& m) noexcept
 				}
 				axisMap0 = Tool::GetAxisMapping(ms.movementTool, ms.arcAxis0);
 				axisMap1 = Tool::GetAxisMapping(ms.movementTool, ms.arcAxis1);
+#if 0	// we don't use this yet
 				ms.cosXyAngle = (ms.xyPlane) ? ms.angleIncrementCosine : 1.0;
+#endif
 			}
 
 			for (size_t drive = 0; drive < numVisibleAxes; ++drive)

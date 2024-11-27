@@ -164,21 +164,12 @@ Licence: GPL
 
 RepRap reprap;
 
-// Get the format string to use for printing a floating point number to the specified number of decimal digits. Zero means the maximum sensible number.
+// Get the format string to use for printing a floating point number to the specified number of significant digits. Zero means the maximum sensible number.
 const char *_ecv_array GetFloatFormatString(float val, unsigned int numDigitsAfterPoint) noexcept
 {
-	static constexpr const char *_ecv_array FormatStrings[] = { "%.7f", "%.1f", "%.2f", "%.3f", "%.4f", "%.5f", "%.6f", "%.7f" };
+	static constexpr const char *_ecv_array FormatStrings[] = { "%.7g", "%.1g", "%.2g", "%.3g", "%.4g", "%.5g", "%.6g", "%.7g" };
 	static_assert(ARRAY_SIZE(FormatStrings) == MaxFloatDigitsDisplayedAfterPoint + 1);
-
-	float f = 1.0;
-	unsigned int maxDigitsAfterPoint = MaxFloatDigitsDisplayedAfterPoint;
-	while (maxDigitsAfterPoint > 1 && val >= f)
-	{
-		f *= 10.0;
-		--maxDigitsAfterPoint;
-	}
-
-	return FormatStrings[min<unsigned int>(numDigitsAfterPoint, maxDigitsAfterPoint)];
+	return FormatStrings[min<unsigned int>(numDigitsAfterPoint, MaxFloatDigitsDisplayedAfterPoint)];
 }
 
 //*************************************************************************************************

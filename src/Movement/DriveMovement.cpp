@@ -320,7 +320,7 @@ bool DriveMovement::LogStepError(uint8_t type) noexcept
 		DebugPrint();
 		MoveSegment::DebugPrintList(segments);
 	}
-	reprap.GetMove().LogStepError(type);
+	reprap.GetMove().LogStepError(type, drive);
 	return false;
 }
 

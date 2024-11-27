@@ -107,6 +107,7 @@ struct StepErrorDetails
 	uint32_t newSegmentStartTime;
 	uint32_t timeNow;
 	uint8_t stepErrorType;
+	uint8_t drive;
 };
 
 // This is the master movement class.  It controls all movement in the machine.
@@ -481,7 +482,7 @@ public:
 #endif
 
 	// Movement error handling
-	void LogStepError(uint8_t type) noexcept;												// stop all movement because of a step error
+	void LogStepError(uint8_t type, uint8_t drive) noexcept;								// stop all movement because of a step error
 	StepErrorDetails GetStepErrorDetails() const noexcept { return stepErrorDetails; }
 	bool HasMovementError() const noexcept;
 	void ResetAfterError() noexcept;
@@ -1002,9 +1003,10 @@ inline void Move::InsertDM(DriveMovement *dm) noexcept
 	*dmp = dm;
 }
 
-inline void Move::LogStepError(uint8_t type) noexcept
+inline void Move::LogStepError(uint8_t type, uint8_t drive) noexcept
 {
 	stepErrorDetails.stepErrorType = type;
+	stepErrorDetails.drive = drive;
 	stepErrorState = StepErrorState::haveError;
 }
 

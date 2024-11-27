@@ -577,7 +577,7 @@ private:
 	Mutex usbMutex;
 
 #if HAS_AUX_DEVICES
-	AuxDevice auxDevices[NumSerialChannels - 1];
+	AuxDevice auxDevices[NumAuxChannels];
 #endif
 #if SUPPORT_PANELDUE_FLASH
 	PanelDueUpdater* panelDueUpdater;

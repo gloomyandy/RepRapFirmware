@@ -38,7 +38,9 @@ void MovementState::SetDefaults(size_t firstDriveToZero) noexcept
 	filePos = noFilePosition;
 	movementTool = nullptr;
 	moveFractionToSkip = 0.0;
+#if 0	// we don't use this yet
 	cosXyAngle = 1.0;
+#endif
 	for (size_t drive = firstDriveToZero; drive < MaxAxesPlusExtruders; ++drive)
 	{
 		coords[drive] = 0.0;					// clear extrusion

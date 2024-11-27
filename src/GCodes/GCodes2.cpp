@@ -28,14 +28,11 @@
 #include <Movement/StepperDrivers/DriverMode.h>
 #include <Hardware/SoftwareReset.h>
 #include <Hardware/ExceptionHandlers.h>
+#include <Networking/Network.h>
 #include <Version.h>
 
 #if SUPPORT_IOBITS
 # include <Platform/PortControl.h>
-#endif
-
-#if HAS_NETWORKING
-# include <Networking/Network.h>
 #endif
 
 #if SUPPORT_MQTT

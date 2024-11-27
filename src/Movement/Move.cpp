@@ -1794,7 +1794,7 @@ finished:
 }
 
 // Add some linear segments to be executed by a driver, taking account of possible input shaping. This is used by linear axes and by extruders.
-// We never add a segment that starts earlier than any existing segments, but we may add segments when there are none already.
+// We never add a segment that starts earlier than the earliest existing segment (if any).
 void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t startTime, const PrepParams& params, motioncalc_t steps, MovementFlags moveFlags) noexcept
 {
 	if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::Segments))
@@ -1830,7 +1830,7 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 					stepErrorDetails.newSegmentStartTime = startTime;
 					stepErrorDetails.timeNow = StepTimer::GetMovementTimerTicks();
 #endif
-					LogStepError(3);
+					LogStepError(3, logicalDrive);
 					RestoreBasePriority(oldPrio);
 					if (reprap.Debug(Module::Move))
 					{

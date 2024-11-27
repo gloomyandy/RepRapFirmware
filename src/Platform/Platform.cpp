@@ -897,7 +897,7 @@ void Platform::Spin() noexcept
 	if (move.HasMovementError())
 	{
 		const StepErrorDetails details = move.GetStepErrorDetails();
-		MessageF(AddError(MessageType::GenericMessage), "Movement halted because a step timing error occurred (code %u). Please reset the controller.\n", details.stepErrorType);
+		MessageF(AddError(MessageType::GenericMessage), "Movement halted because a step timing error occurred on drive %u (code %u). Please reset the controller.\n", details.drive, details.stepErrorType);
 		if (details.stepErrorType == 3)
 		{
 			MessageF(AddError(MessageType::GenericMessage), "Existing: start=%" PRIu32 " length=%" PRIu32 ", new: start=%" PRIu32 ", overlap=%" PRIu32 " time now=%" PRIu32 "\n",
@@ -2231,7 +2231,7 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 #if HAS_AUX_DEVICES
 		if (chan != 0)
 		{
-			AuxDevice& dev = auxDevices[chan - 1];
+			AuxDevice& dev = auxDevices[chan - FirstAuxChannel];
 			if (newMode == AuxMode::device)
 			{
 # if SUPPORT_MODBUS_RTU
@@ -2276,7 +2276,7 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 	{
 		if (chan != 0)
 		{
-			auxDevices[chan - 1].SetBaudRate(baudRate);
+			auxDevices[chan - FirstAuxChannel].SetBaudRate(baudRate);
 			ResetChannel(chan);
 		}
 	}
@@ -2292,14 +2292,14 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 		if (chan != 0)
 		{
 			if (!IsAuxEnabled(chan - 1)
-				&& (chan >= NumSerialChannels || auxDevices[chan - 1].GetMode() != AuxMode::device)
+				&& (chan >= NumSerialChannels || auxDevices[chan - FirstAuxChannel].GetMode() != AuxMode::device)
 			   )
 			{
 				reply.printf("Channel %u is disabled", chan);
 			}
 			else
 			{
-				const AuxDevice& dev = auxDevices[chan - 1];
+				const AuxDevice& dev = auxDevices[chan - FirstAuxChannel];
 				const char *modeString = (dev.GetMode() == AuxMode::device) ? "Device / modbus RTU" :
 											(IsAuxRaw(chan - 1)) ? "raw"
 												: "PanelDue";
@@ -3463,7 +3463,7 @@ void Platform::SetBaudRate(size_t chan, uint32_t br) noexcept
 #if HAS_AUX_DEVICES
 	if (chan != 0 && chan < NumSerialChannels)
 	{
-		auxDevices[chan - 1].SetBaudRate(br);
+		auxDevices[chan - FirstAuxChannel].SetBaudRate(br);
 	}
 #endif
 }
@@ -3472,7 +3472,7 @@ uint32_t Platform::GetBaudRate(size_t chan) const noexcept
 {
 	return
 #if HAS_AUX_DEVICES
-		(chan != 0 && chan < NumSerialChannels) ? auxDevices[chan - 1].GetBaudRate() :
+		(chan != 0 && chan < NumSerialChannels) ? auxDevices[chan - FirstAuxChannel].GetBaudRate() :
 #endif
 		0;
 }
@@ -3505,7 +3505,7 @@ void Platform::ResetChannel(size_t chan) noexcept
 #if HAS_AUX_DEVICES
 	else if (chan < NumSerialChannels)
 	{
-		AuxDevice& device = auxDevices[chan - 1];
+		AuxDevice& device = auxDevices[chan - FirstAuxChannel];
 		AuxMode mode = device.GetMode();
 		device.Disable();
 		device.SetMode(mode);

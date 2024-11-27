@@ -223,6 +223,7 @@ void DDA::DebugPrint(const char *tag) const noexcept
 bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorMapping) noexcept
 {
 	// 0. If there are more total axes than visible axes, then we must ignore any movement data in nextMove for the invisible axes.
+	// Likewise we must ignore any movement data in nextMove for unowned axes.
 	// The call to CartesianToMotorSteps may adjust the invisible axis endpoints for architectures such as CoreXYU and delta with >3 towers, so set them up here.
 	const size_t numTotalAxes = reprap.GetGCodes().GetTotalAxes();
 	const size_t numVisibleAxes = reprap.GetGCodes().GetVisibleAxes();
@@ -256,47 +257,66 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 
 		if (drive < numVisibleAxes)
 		{
-			if (doMotorMapping)
+#if SUPPORT_ASYNC_MOVES
+			if (nextMove.axesAndExtrudersOwned.IsBitSet(drive))
+#endif
 			{
-				endCoordinates[drive] = nextMove.coords[drive];
-				const float positionDelta = endCoordinates[drive] - prev->GetEndCoordinate(drive, false);
-				directionVector[drive] = positionDelta;
-				if (positionDelta != 0.0)
+				if (doMotorMapping)
 				{
-					if (reprap.GetMove().IsAxisRotational(drive) && nextMove.rotationalAxesMentioned)
+					endCoordinates[drive] = nextMove.coords[drive];
+					const float positionDelta = endCoordinates[drive] - prev->GetEndCoordinate(drive, false);
+					directionVector[drive] = positionDelta;
+					if (positionDelta != 0.0)
 					{
-						rotationalAxesMoving = true;
+						if (reprap.GetMove().IsAxisRotational(drive) && nextMove.rotationalAxesMentioned)
+						{
+							rotationalAxesMoving = true;
+						}
+						else if (nextMove.linearAxesMentioned)
+						{
+							linearAxesMoving = true;
+						}
+						if (Tool::GetXAxes(nextMove.movementTool).IsBitSet(drive) || Tool::GetYAxes(nextMove.movementTool).IsBitSet(drive))
+						{
+							flags.xyMoving = true;				// this move has XY movement in user space, before axis were mapped
+						}
 					}
-					else if (nextMove.linearAxesMentioned)
+				}
+				else
+				{
+					// Raw motor move on a visible axis
+					endPoint[drive] = move.MotorMovementToSteps(drive, nextMove.coords[drive]);
+					const int32_t delta = endPoint[drive] - positionNow[drive];
+					directionVector[drive] = (float)delta/move.DriveStepsPerMm(drive);
+					if (delta != 0)
 					{
-						linearAxesMoving = true;
-					}
-					if (Tool::GetXAxes(nextMove.movementTool).IsBitSet(drive) || Tool::GetYAxes(nextMove.movementTool).IsBitSet(drive))
-					{
-						flags.xyMoving = true;				// this move has XY movement in user space, before axis were mapped
+						if (reprap.GetMove().IsAxisRotational(drive))
+						{
+							rotationalAxesMoving = true;
+						}
+						else
+						{
+							linearAxesMoving = true;
+						}
 					}
 				}
 			}
+#if SUPPORT_ASYNC_MOVES
 			else
 			{
-				// Raw motor move on a visible axis
-				endPoint[drive] = move.MotorMovementToSteps(drive, nextMove.coords[drive]);
-				const int32_t delta = endPoint[drive] - positionNow[drive];
-				directionVector[drive] = (float)delta/move.DriveStepsPerMm(drive);
-				if (delta != 0)
-				{
-					if (reprap.GetMove().IsAxisRotational(drive))
-					{
-						rotationalAxesMoving = true;
-					}
-					else
-					{
-						linearAxesMoving = true;
-					}
-				}
+				// This is an axis we don't own, so make sure we don't move it
+				directionVector[drive] = 0.0;
+				prev->endCoordinates[drive] = nextMove.coords[drive];
+				endPoint[drive] = positionNow[drive];
 			}
+#endif
 		}
-		else if (LogicalDriveToExtruder(drive) < reprap.GetGCodes().GetNumExtruders())
+		else if (
+#if SUPPORT_ASYNC_MOVES
+					nextMove.axesAndExtrudersOwned.IsBitSet(drive) &&
+#endif
+					LogicalDriveToExtruder(drive) < reprap.GetGCodes().GetNumExtruders()
+				)
 		{
 			// It's an extruder drive. We defer calculating the steps because they may be affected by nonlinear extrusion, which we can't calculate until we
 			// know the speed of the move, and because extruder movement is relative so we need to accumulate fractions of a whole step between moves.

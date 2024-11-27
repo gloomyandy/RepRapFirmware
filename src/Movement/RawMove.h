@@ -20,11 +20,17 @@ struct RawMove
 	float moveStartVirtualExtruderPosition;							// the virtual extruder position at the start of this move, for normal moves
 	FilePosition filePos;											// offset in the file being printed at the start of reading this move
 	float proportionDone;											// what proportion of the entire move has been done when this segment is complete
+#if 0	// we don't use this yet
 	float cosXyAngle;												// the cosine of the change in XY angle between the previous move and this move
+#endif
 	float maxPrintingAcceleration;
 	float maxTravelAcceleration;
 
 	const Tool *_ecv_null movementTool;								// which tool (if any) is being used by this move
+
+#if SUPPORT_ASYNC_MOVES
+	AxesBitmap axesAndExtrudersOwned;								// axes and extruders that this movement system has moved since the last sync, or owns for other reasons
+#endif
 
 	uint16_t moveType : 3,											// the H parameter from the G0 or G1 command, 0 for a normal move
 			applyM220M221 : 1,										// true if this move is affected by M220 and M221 (this could be moved to ExtendedRawMove)
@@ -210,7 +216,6 @@ private:
 	MovementSystemNumber msNumber;
 
 #if SUPPORT_ASYNC_MOVES
-	AxesBitmap axesAndExtrudersOwned;								// axes and extruders that this movement system has moved since the last sync
 	ParameterLettersBitmap ownedAxisLetters;						// cache of letters denoting user axes for which the corresponding machine axes for the current tool are definitely owned
 
 	static AxesBitmap axesAndExtrudersMoved;						// axes and extruders that are owned by any movement system
