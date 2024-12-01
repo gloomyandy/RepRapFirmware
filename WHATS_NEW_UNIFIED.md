@@ -1,3 +1,9 @@
+Version 3.5.4
+=============
+* Duet3d 3.5.4
+* Fix prox10 pins
+* Fix scylla spi driver device
+
 Version 3.5.3
 =============
 * Duet3d 3.5.3
