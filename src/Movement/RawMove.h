@@ -138,6 +138,9 @@ public:
 	void StopPrinting(GCodeBuffer& gb) noexcept;
 	void ResumePrinting(GCodeBuffer& gb) noexcept;
 
+	// Reporting
+	float LiveMachineCoordinate(unsigned int axisOrExtruder) const noexcept;				// Get a single coordinate for reporting e.g.in the OM
+	void ForceLiveCoordinatesUpdate() noexcept { forceLiveCoordinatesUpdate = true; }		// Force the stored coordinates to be updated next time LiveMachineCoordinate is called
 	void Diagnostics(MessageType mtype) noexcept;
 
 	// These variables are currently all public, but we ought to make most of them private
@@ -214,6 +217,9 @@ public:
 
 private:
 	MovementSystemNumber msNumber;
+	mutable bool forceLiveCoordinatesUpdate = true;					// true if we want to force latestLiveCoordinates to be updated
+	mutable float latestLiveCoordinates[MaxAxesPlusExtruders];		// the most recent set of live coordinates that we fetched
+	mutable uint32_t latestLiveCoordinatesFetchedAt = 0;			// when we fetched the live coordinates
 
 #if SUPPORT_ASYNC_MOVES
 	ParameterLettersBitmap ownedAxisLetters;						// cache of letters denoting user axes for which the corresponding machine axes for the current tool are definitely owned

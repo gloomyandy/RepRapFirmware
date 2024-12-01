@@ -288,9 +288,9 @@ public:
 	bool IsXYCompensated() const;											// Check if XY axis compensation applies to the X or Y axis
 	void SetXYCompensation(bool xyCompensation);							// Define whether XY compensation applies to X (default) or to Y
 	void SetIdentityTransform() noexcept;									// Cancel the bed equation; does not reset axis angle compensation
-	void AxisAndBedTransform(float move[], const Tool *tool, bool useBedCompensation) const noexcept;
+	void AxisAndBedTransform(float move[], const Tool *_ecv_null tool, bool useBedCompensation) const noexcept;
 																			// Take a position and apply the bed and the axis-angle compensations
-	void InverseAxisAndBedTransform(float move[], const Tool *tool) const noexcept;
+	void InverseAxisAndBedTransform(float move[], const Tool *_ecv_null tool) const noexcept;
 																			// Go from a transformed point back to user coordinates
 	void SetZeroHeightError(const float coords[MaxAxes]) noexcept;			// Set zero height error at these bed coordinates
 	float GetTaperHeight() const noexcept { return (useTaper) ? taperHeight : 0.0; }
@@ -412,10 +412,7 @@ public:
 	float GetDecelerationMmPerSecSquared() const noexcept { return rings[0].GetDecelerationMmPerSecSquared(); }		// Get the (peak) deceleration for reporting in the object model
 	float GetTotalExtrusionRate() const noexcept { return rings[0].GetTotalExtrusionRate(); }
 
-	float LiveMachineCoordinate(unsigned int axisOrExtruder) const noexcept;				// Get a single coordinate for reporting e.g.in the OM
-	void ForceLiveCoordinatesUpdate() noexcept { forceLiveCoordinatesUpdate = true; }		// Force the stored coordinates to be updated next time LiveMachineCoordinate is called
-
-	bool GetLiveMachineCoordinates(float coords[MaxAxes]) const noexcept;					// Get the current machine coordinates, independently of the above functions, so not affected by other tasks calling them
+	void UpdateLiveMachineCoordinates(float coords[MaxAxes], const Tool *_ecv_null tool) const noexcept;		// Force an update of the live machine coordinates
 
 	void AdjustLeadscrews(const floatc_t corrections[]) noexcept;							// Called by some Kinematics classes to adjust the leadscrews
 
@@ -435,8 +432,6 @@ public:
 	void PrepareScanningProbeDataCollection(const DDA& dda, const PrepParams& params) noexcept;
 	void ScanningProbeTimerCallback() noexcept;
 #endif
-
-	int32_t GetStepsTaken(size_t logicalDrive) const noexcept;
 
 #if HAS_SMART_DRIVERS
 	uint32_t GetStepInterval(size_t drive, uint32_t microstepShift) const noexcept;			// Get the current step interval for this axis or extruder
@@ -541,13 +536,13 @@ private:
 
 	MoveSegment *AddSegment(MoveSegment *list, uint32_t startTime, uint32_t duration, motioncalc_t distance, motioncalc_t a J_FORMAL_PARAMETER(j), MovementFlags moveFlags, motioncalc_t pressureAdvance) noexcept;
 
-	void BedTransform(float xyzPoint[MaxAxes], const Tool *tool) const noexcept;				// Take a position and apply the bed compensations
-	void InverseBedTransform(float xyzPoint[MaxAxes], const Tool *tool) const noexcept;			// Go from a bed-transformed point back to user coordinates
-	void AxisTransform(float xyzPoint[MaxAxes], const Tool *tool) const noexcept;				// Take a position and apply the axis-angle compensations
-	void InverseAxisTransform(float xyzPoint[MaxAxes], const Tool *tool) const noexcept;		// Go from an axis transformed point back to user coordinates
-	float ComputeHeightCorrection(float xyzPoint[MaxAxes], const Tool *tool) const noexcept;	// Compute the height correction needed at a point, ignoring taper
-	void UpdateLiveMachineCoordinates() const noexcept;											// force an update of the live machine coordinates
+	void BedTransform(float xyzPoint[MaxAxes], const Tool *_ecv_null tool) const noexcept;						// Take a position and apply the bed compensations
+	void InverseBedTransform(float xyzPoint[MaxAxes], const Tool *_ecv_null tool) const noexcept;				// Go from a bed-transformed point back to user coordinates
+	void AxisTransform(float xyzPoint[MaxAxes], const Tool *_ecv_null tool) const noexcept;						// Take a position and apply the axis-angle compensations
+	void InverseAxisTransform(float xyzPoint[MaxAxes], const Tool *_ecv_null tool) const noexcept;				// Go from an axis transformed point back to user coordinates
+	float ComputeHeightCorrection(float xyzPoint[MaxAxes], const Tool *_ecv_null tool) const noexcept;			// Compute the height correction needed at a point, ignoring taper
 	void SetNewPositionOfSomeAxes(const MovementState& ms, bool doBedCompensation, AxesBitmap axes) noexcept;	// Set the current position to be this
+	void GetLiveMachineCoordinates(float coords[MaxAxes]) const noexcept;										// Get the current machine coordinates, independently of the above functions, so not affected by other tasks calling them
 
 	const char *_ecv_array GetCompensationTypeString() const noexcept;
 
@@ -613,12 +608,6 @@ private:
 
 	float driveStepsPerMm[MaxAxesPlusExtruders];
 	uint16_t microstepping[MaxAxesPlusExtruders];					// the microstepping used for each axis or extruder, top bit is set if interpolation enabled
-
-	mutable float latestLiveCoordinates[MaxAxesPlusExtruders];		// the most recent set of live coordinates that we fetched
-	mutable uint32_t latestLiveCoordinatesFetchedAt = 0;			// when we fetched the live coordinates
-	mutable bool forceLiveCoordinatesUpdate = true;					// true if we want to force latestLiveCoordinates to be updated
-	mutable bool liveCoordinatesValid = false;						// true if the latestLiveCoordinates should be valid
-	mutable volatile bool motionAdded = false;						// set when any move segments are added
 
 #ifdef DUET3_MB6XD
 	volatile uint32_t lastStepHighTime;								// when we last started a step pulse
@@ -942,7 +931,6 @@ inline void Move::GetPartialMachinePosition(float m[MaxAxes], MovementSystemNumb
 inline void Move::SetRawPosition(const float positions[MaxAxes], MovementSystemNumber msNumber, AxesBitmap axes) noexcept
 {
 	rings[msNumber].SetPositions(*this, positions, axes);
-	liveCoordinatesValid = false;											// force the live XYZ position to be recalculated
 }
 
 // Adjust the motor endpoints without moving the motors. Called after auto-calibrating a linear delta or rotary delta machine.
@@ -950,7 +938,6 @@ inline void Move::SetRawPosition(const float positions[MaxAxes], MovementSystemN
 inline void Move::AdjustMotorPositions(const float adjustment[], size_t numMotors) noexcept
 {
 	rings[0].AdjustMotorPositions(*this, adjustment, numMotors);
-	liveCoordinatesValid = false;											// force the live XYZ position to be recalculated
 }
 
 inline int32_t Move::GetLiveMotorPosition(size_t driver) const noexcept

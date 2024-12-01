@@ -242,7 +242,7 @@ constexpr ObjectModelTableEntry Move::objectModelTable[] =
 	{ "homed",				OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().IsAxisHomed(context.GetLastIndex())),								ObjectModelEntryFlags::none },
 	{ "jerk",				OBJECT_MODEL_FUNC(InverseConvertSpeedToMmPerMin(self->GetMaxInstantDv(context.GetLastIndex())), 1),				ObjectModelEntryFlags::none },
 	{ "letter",				OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetAxisLetters()[context.GetLastIndex()]),							ObjectModelEntryFlags::none },
-	{ "machinePosition",	OBJECT_MODEL_FUNC(self->LiveMachineCoordinate(context.GetLastIndex()), 3),										ObjectModelEntryFlags::live },
+	{ "machinePosition",	OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetCurrentMovementState(context).LiveMachineCoordinate(context.GetLastIndex()), 3),	ObjectModelEntryFlags::live },
 	{ "max",				OBJECT_MODEL_FUNC(self->AxisMaximum(context.GetLastIndex()), 2),												ObjectModelEntryFlags::none },
 	{ "maxProbed",			OBJECT_MODEL_FUNC(self->axisMaximaProbed.IsBitSet(context.GetLastIndex())),										ObjectModelEntryFlags::none },
 	{ "microstepping",		OBJECT_MODEL_FUNC(self, 12),																					ObjectModelEntryFlags::none },
@@ -274,7 +274,7 @@ constexpr ObjectModelTableEntry Move::objectModelTable[] =
 #ifndef DUET_NG
 	{ "percentStstCurrent",	OBJECT_MODEL_FUNC((int32_t)(self->GetMotorCurrent(context.GetLastIndex(), 917))),													ObjectModelEntryFlags::none },
 #endif
-	{ "position",			OBJECT_MODEL_FUNC(self->LiveMachineCoordinate(ExtruderToLogicalDrive(context.GetLastIndex())), 1),									ObjectModelEntryFlags::live },
+	{ "position",			OBJECT_MODEL_FUNC_NOSELF(ExpressionValue(reprap.GetGCodes().GetCurrentMovementState(context).LiveMachineCoordinate(ExtruderToLogicalDrive(context.GetLastIndex())), 1)),	ObjectModelEntryFlags::live },
 	{ "pressureAdvance",	OBJECT_MODEL_FUNC(self->GetPressureAdvanceClocksForExtruder(context.GetLastIndex())/StepClockRate, 3),								ObjectModelEntryFlags::none },
 	{ "printingJerk",		OBJECT_MODEL_FUNC(InverseConvertSpeedToMmPerMin(self->GetPrintingInstantDv(ExtruderToLogicalDrive(context.GetLastIndex()))), 1),	ObjectModelEntryFlags::none },
 	{ "rawPosition",		OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetRawExtruderTotalByDrive(context.GetLastIndex()), 1), 								ObjectModelEntryFlags::live },
@@ -1339,71 +1339,34 @@ void Move::RevertPosition(const CanMessageRevertPosition& msg) noexcept
 
 #endif
 
-// Return the current machine axis and extruder coordinates. They are needed only to service status requests from DWC, PanelDue, M114.
-// Return the current machine axis and extruder coordinates. They are needed only to service status requests from DWC, PanelDue, M114.
-// Transforming the machine motor coordinates to Cartesian coordinates is quite expensive, and a status request or object model request will call this for each axis.
-// So we cache the latest coordinates and only update them if it is some time since we last did, or if we have just waited for movement to stop.
-// Interrupts are assumed enabled on entry
-// Note, this no longer applies inverse mesh bed compensation or axis skew compensation to the returned machine coordinates, so they are the compensated coordinates!
-float Move::LiveMachineCoordinate(unsigned int axisOrExtruder) const noexcept
-{
-	if (forceLiveCoordinatesUpdate || (millis() - latestLiveCoordinatesFetchedAt > MoveTiming::MachineCoordinateUpdateInterval && !liveCoordinatesValid))
-	{
-		UpdateLiveMachineCoordinates();
-		forceLiveCoordinatesUpdate = false;
-		latestLiveCoordinatesFetchedAt = millis();
-	}
-	return latestLiveCoordinates[axisOrExtruder];
-}
-
 // Get the current machine coordinates, independently of the above functions, so not affected by other tasks calling them
-// Return true if motion is pending i.e. they are are in a state of change
-bool Move::GetLiveMachineCoordinates(float coords[MaxAxes]) const noexcept
+void Move::GetLiveMachineCoordinates(float coords[MaxAxes]) const noexcept
 {
 	const size_t numVisibleAxes = reprap.GetGCodes().GetVisibleAxes();
 	const size_t numTotalAxes = reprap.GetGCodes().GetTotalAxes();
 
 	// Get the positions of each motor
 	int32_t currentMotorPositions[MaxAxes];
-	bool motionPending = false;
 	{
 		AtomicCriticalSectionLocker lock;											// to make sure we get a consistent set of coordinates
 		for (size_t i = 0; i < numTotalAxes; ++i)
 		{
 			currentMotorPositions[i] = dms[i].currentMotorPosition;
-			if (dms[i].MotionPending())
-			{
-				motionPending = true;
-			}
 		}
 	}
 
 	MotorStepsToCartesian(currentMotorPositions, numVisibleAxes, numTotalAxes, coords);
-	return motionPending;
 }
 
-// Force an update of the stored machine coordinates
-void Move::UpdateLiveMachineCoordinates() const noexcept
+// Fetch the machine coordinates. We need to pass a tool context because that affects the inverse bed transform.
+void Move::UpdateLiveMachineCoordinates(float coords[MaxAxes], const Tool *_ecv_null tool) const noexcept
 {
-	motionAdded = false;
-	bool motionPending = GetLiveMachineCoordinates(latestLiveCoordinates);
+	GetLiveMachineCoordinates(coords);
+	InverseAxisAndBedTransform(coords, tool);
 
 	for (size_t i = MaxAxesPlusExtruders - reprap.GetGCodes().GetNumExtruders(); i < MaxAxesPlusExtruders; ++i)
 	{
-		latestLiveCoordinates[i] = dms[i].currentMotorPosition / driveStepsPerMm[i];
-		if (dms[i].MotionPending())
-		{
-			motionPending = true;
-		}
-	}
-
-	// Optimisation: if no movement, save the positions for next time
-	{
-		AtomicCriticalSectionLocker lock;
-		if (!motionPending && !motionAdded)
-		{
-			liveCoordinatesValid = true;
-		}
+		coords[i] = dms[i].currentMotorPosition / driveStepsPerMm[i];
 	}
 }
 
@@ -1950,8 +1913,6 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 			}
 		}
 	}
-
-	motionAdded = true;
 
 	// If there were no segments attached to this DM initially, we need to schedule the interrupt for the new segment at the start of the list.
 	// Don't do this until we have added all the segments for this move, because the first segment we added may have been modified and/or split when we added further segments to implement input shaping
@@ -2638,8 +2599,6 @@ void Move::StepDrivers(uint32_t now) noexcept
 		}
 		dmToInsert = nextToInsert;
 	}
-
-	liveCoordinatesValid = false;
 }
 
 // Prepare each DM that we generated a step for for the next step
@@ -3416,7 +3375,7 @@ void Move::PollOneDriver(size_t driver) noexcept
 				}
 				else if (logOnStallDrivers.Intersects(mask))
 				{
-					reprap.GetPlatform().MessageF(WarningMessage, "Driver %u stalled at Z height %.2f\n", driver, (double)LiveMachineCoordinate(Z_AXIS));
+					reprap.GetPlatform().MessageF(WarningMessage, "Driver %u stalled at Z height %.2f\n", driver, (double)reprap.GetGCodes().GetPrimaryMovementState().LiveMachineCoordinate(Z_AXIS));
 				}
 			}
 		}

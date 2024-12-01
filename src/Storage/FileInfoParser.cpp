@@ -490,7 +490,7 @@ const char *_ecv_array FileInfoParser::ScanBuffer(const char *_ecv_array pStart,
 					if (*pStart == 'Z')
 					{
 						const char *_ecv_array q;
-						const float height = SafeStrtof(pStart + 3, &q);
+						const float height = SafeStrtof(pStart + 1, &q);
 						if (!std::isnan(height) && !std::isinf(height) && height > parsedFileInfo.objectHeight)
 						{
 							// If the Z movement command ends in ";E or "; E" then ignore it

@@ -1808,7 +1808,7 @@ bool GCodes::LockMovementSystemAndWaitForStandstill(GCodeBuffer& gb, MovementSys
 		//TODO when SbcInterface stops calling this from its own task, get rid of this, it isn't correct any more anyway
 		ms.updateUserPositionGb = &gb;
 	}
-	reprap.GetMove().ForceLiveCoordinatesUpdate();				// make sure that immediately after e.g. M400 the machine position is fetched correctly (issue 921)
+	ms.ForceLiveCoordinatesUpdate();							// make sure that immediately after e.g. M400 the machine position is fetched correctly (issue 921)
 	return true;
 }
 
@@ -3416,7 +3416,7 @@ void GCodes::HandleM114(GCodeBuffer& gb, const StringRef& s) const noexcept
 	// Now the extruder coordinates
 	for (size_t i = 0; i < numExtruders; i++)
 	{
-		s.catf("E%u:%.1f ", i, (double)reprap.GetMove().LiveMachineCoordinate(ExtruderToLogicalDrive(i)));
+		s.catf("E%u:%.1f ", i, (double)ms.LiveMachineCoordinate(ExtruderToLogicalDrive(i)));
 	}
 
 	// Print the axis stepper motor positions as Marlin does, as an aid to debugging.

@@ -15,7 +15,7 @@
 #include <Tools/Tool.h>
 #include <Endstops/ZProbe.h>
 
-void Move::AxisAndBedTransform(float xyzPoint[MaxAxes], const Tool *tool, bool useBedCompensation) const noexcept
+void Move::AxisAndBedTransform(float xyzPoint[MaxAxes], const Tool *_ecv_null tool, bool useBedCompensation) const noexcept
 {
 	AxisTransform(xyzPoint, tool);
 	if (useBedCompensation)
@@ -24,14 +24,14 @@ void Move::AxisAndBedTransform(float xyzPoint[MaxAxes], const Tool *tool, bool u
 	}
 }
 
-void Move::InverseAxisAndBedTransform(float xyzPoint[MaxAxes], const Tool *tool) const noexcept
+void Move::InverseAxisAndBedTransform(float xyzPoint[MaxAxes], const Tool *_ecv_null tool) const noexcept
 {
 	InverseBedTransform(xyzPoint, tool);
 	InverseAxisTransform(xyzPoint, tool);
 }
 
 // Do the Axis transform BEFORE the bed transform
-void Move::AxisTransform(float xyzPoint[MaxAxes], const Tool *tool) const noexcept
+void Move::AxisTransform(float xyzPoint[MaxAxes], const Tool *_ecv_null tool) const noexcept
 {
 	// Identify the lowest Y axis
 	const size_t numVisibleAxes = reprap.GetGCodes().GetVisibleAxes();
@@ -57,7 +57,7 @@ void Move::AxisTransform(float xyzPoint[MaxAxes], const Tool *tool) const noexce
 }
 
 // Invert the Axis transform AFTER the bed transform
-void Move::InverseAxisTransform(float xyzPoint[MaxAxes], const Tool *tool) const noexcept
+void Move::InverseAxisTransform(float xyzPoint[MaxAxes], const Tool *_ecv_null tool) const noexcept
 {
 	// Identify the lowest Y axis
 	const size_t numVisibleAxes = reprap.GetGCodes().GetVisibleAxes();
@@ -114,7 +114,7 @@ float Move::ComputeHeightCorrection(float xyzPoint[MaxAxes], const Tool *tool) c
 }
 
 // Do the bed transform AFTER the axis transform
-void Move::BedTransform(float xyzPoint[MaxAxes], const Tool *tool) const noexcept
+void Move::BedTransform(float xyzPoint[MaxAxes], const Tool *_ecv_null tool) const noexcept
 {
 	if (usingMesh)
 	{
@@ -128,7 +128,7 @@ void Move::BedTransform(float xyzPoint[MaxAxes], const Tool *tool) const noexcep
 }
 
 // Invert the bed transform BEFORE the axis transform
-void Move::InverseBedTransform(float xyzPoint[MaxAxes], const Tool *tool) const noexcept
+void Move::InverseBedTransform(float xyzPoint[MaxAxes], const Tool *_ecv_null tool) const noexcept
 {
 	if (usingMesh)
 	{
