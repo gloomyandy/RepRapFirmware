@@ -15,9 +15,9 @@ class SharedSpiDevice : public SpiDevice
 {
 public:
 #if STM32
-	SharedSpiDevice(SSPChannel chan) noexcept;
+	explicit SharedSpiDevice(SSPChannel chan) noexcept;
 #else
-	SharedSpiDevice(uint8_t sercomNum) noexcept;
+	explicit SharedSpiDevice(uint8_t sercomNum) noexcept;
 #endif
 
 	// Get ownership of this SPI, return true if successful

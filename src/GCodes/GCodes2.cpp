@@ -544,8 +544,9 @@ bool GCodes::HandleGcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 			if (gb.Executing())
 # endif
 			{
-				g68Angle = 0.0;
+				g68Angle = g68Centre[0] = g68Centre[1] = 0.0;
 				UpdateCurrentUserPosition(gb);
+				reprap.MoveUpdated();
 			}
 			break;
 #endif
@@ -855,15 +856,21 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						}
 						else
 						{
-							// Turn off every spindle if no 'P' parameter is present and the current tool does not have a spindle
+							// Turn off every configured spindle if no 'P' parameter is present and the current tool does not have a spindle
 							for (size_t i = 0; i < MaxSpindles; i++)
 							{
-								platform.AccessSpindle(i).SetState(SpindleState::stopped);
+								if (platform.AccessSpindle(i).GetState() != SpindleState::unconfigured)
+								{
+									platform.AccessSpindle(i).SetState(SpindleState::stopped);
+								}
 							}
 							break;
 						}
 
-						platform.AccessSpindle(slot).SetState(SpindleState::stopped);
+						if (platform.AccessSpindle(slot).GetState() != SpindleState::unconfigured)
+						{
+							platform.AccessSpindle(slot).SetState(SpindleState::stopped);
+						}
 					}
 				}
 				break;
@@ -1718,15 +1725,21 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						const float f = gb.GetPwmValue();
 						if (seenFanNum)
 						{
-							result = reprap.GetFansManager().SetFanValue(fanNum, f, reply);
 							// If this is a print cooling fan for an active tool, set the virtual fan speed in the corresponding MovementState
 							for (MovementState& ms : moveStates)
 							{
 								if (ms.currentTool != nullptr && ms.currentTool->GetFanMapping().IsBitSet(fanNum))
 								{
 									ms.virtualFanSpeed = f;
+									if (ms.currentTool->GetFanMapping().IsOnlyBitSet(fanNum))
+									{
+										ms.currentTool->SetFansPwm(f);
+									}
 								}
 							}
+
+							// Set the fan value here to ensure that the tool heaters' heating rates are correctly updated first
+							result = reprap.GetFansManager().SetFanValue(fanNum, f, reply);
 						}
 						else
 						{
