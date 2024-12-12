@@ -265,14 +265,14 @@ constexpr ObjectModelTableEntry RepRap::objectModelTable[] =
 {
 	// Within each group, these entries must be in alphabetical order
 	// 0. root
-	{ "boards",					OBJECT_MODEL_FUNC_ARRAY(0),												ObjectModelEntryFlags::live },
+	{ "boards",					OBJECT_MODEL_FUNC_ARRAY(0),												ObjectModelEntryFlags::liveNotPanelDue },
 #if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES || HAS_SBC_INTERFACE
 	{ "directories",			OBJECT_MODEL_FUNC(self, 1),												ObjectModelEntryFlags::none },
 #endif
 	{ "fans",					OBJECT_MODEL_FUNC_ARRAY(1),												ObjectModelEntryFlags::live },
 	{ "global",					OBJECT_MODEL_FUNC(&(self->globalVariables)),							ObjectModelEntryFlags::none },
 	{ "heat",					OBJECT_MODEL_FUNC(self->heat),											ObjectModelEntryFlags::live },
-	{ "inputs",					OBJECT_MODEL_FUNC_ARRAY(2),												ObjectModelEntryFlags::live },
+	{ "inputs",					OBJECT_MODEL_FUNC_ARRAY(2),												ObjectModelEntryFlags::liveNotPanelDue },
 	{ "job",					OBJECT_MODEL_FUNC(self->printMonitor),									ObjectModelEntryFlags::live },
 #if SUPPORT_LED_STRIPS
 	{ "ledStrips",				OBJECT_MODEL_FUNC_ARRAY(9),												ObjectModelEntryFlags::none },
@@ -349,7 +349,7 @@ constexpr ObjectModelTableEntry RepRap::objectModelTable[] =
 	{ "currentTool",			OBJECT_MODEL_FUNC((int32_t)self->gCodes->GetCurrentMovementState(context).GetCurrentToolNumber()),	ObjectModelEntryFlags::live },
 	{ "deferredPowerDown",		OBJECT_MODEL_FUNC_IF(self->platform->IsAtxPowerControlled(), self->platform->IsDeferredPowerDown()),	ObjectModelEntryFlags::none },
 	{ "displayMessage",			OBJECT_MODEL_FUNC(self->message.c_str()),								ObjectModelEntryFlags::none },
-	{ "gpOut",					OBJECT_MODEL_FUNC_ARRAY(6),												ObjectModelEntryFlags::live },
+	{ "gpOut",					OBJECT_MODEL_FUNC_ARRAY(6),												ObjectModelEntryFlags::liveNotPanelDue },
 #if SUPPORT_LASER
 	// 2020-04-24: return the configured laser PWM even if the laser is temporarily turned off
 	{ "laserPwm",				OBJECT_MODEL_FUNC_IF(self->gCodes->GetMachineType() == MachineType::laser, self->gCodes->GetLaserPwm(), 2),	ObjectModelEntryFlags::live },
@@ -387,17 +387,17 @@ constexpr ObjectModelTableEntry RepRap::objectModelTable[] =
 	{ "frequency",				OBJECT_MODEL_FUNC((int32_t)self->beepFrequency),						ObjectModelEntryFlags::none },
 
 	// 5. seqs
-	{ "boards",					OBJECT_MODEL_FUNC((int32_t)self->boardsSeq),							ObjectModelEntryFlags::live },
+	{ "boards",					OBJECT_MODEL_FUNC((int32_t)self->boardsSeq),							ObjectModelEntryFlags::liveNotPanelDue },
 #if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES || HAS_SBC_INTERFACE
 	{ "directories",			OBJECT_MODEL_FUNC((int32_t)self->directoriesSeq),						ObjectModelEntryFlags::live },
 #endif
 	{ "fans",					OBJECT_MODEL_FUNC((int32_t)self->fansSeq),								ObjectModelEntryFlags::live },
 	{ "global",					OBJECT_MODEL_FUNC((int32_t)self->globalSeq),							ObjectModelEntryFlags::live },
 	{ "heat",					OBJECT_MODEL_FUNC((int32_t)self->heatSeq),								ObjectModelEntryFlags::live },
-	{ "inputs",					OBJECT_MODEL_FUNC((int32_t)self->inputsSeq),							ObjectModelEntryFlags::live },
+	{ "inputs",					OBJECT_MODEL_FUNC((int32_t)self->inputsSeq),							ObjectModelEntryFlags::liveNotPanelDue },
 	{ "job",					OBJECT_MODEL_FUNC((int32_t)self->jobSeq),								ObjectModelEntryFlags::live },
 #if SUPPORT_LED_STRIPS
-	{ "ledStrips",				OBJECT_MODEL_FUNC((int32_t)self->ledStripsSeq),							ObjectModelEntryFlags::live },
+	{ "ledStrips",				OBJECT_MODEL_FUNC((int32_t)self->ledStripsSeq),							ObjectModelEntryFlags::liveNotPanelDue },
 #endif
 	// no need for 'limits' because it never changes
 	{ "move",					OBJECT_MODEL_FUNC((int32_t)self->moveSeq),								ObjectModelEntryFlags::live },

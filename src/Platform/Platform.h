@@ -41,7 +41,6 @@ Licence: GPL
 #include <GPIO/GpInPort.h>
 #include <GPIO/GpOutPort.h>
 #include <Comms/AuxDevice.h>
-#include <Comms/PanelDueUpdater.h>
 #include <General/IPAddress.h>
 #include <General/function_ref.h>
 
@@ -56,6 +55,10 @@ Licence: GPL
 #if SUPPORT_CAN_EXPANSION
 # include <CanMessageFormats.h>
 # include <RemoteInputHandle.h>
+#endif
+
+#if SUPPORT_PANELDUE_FLASH
+class PanelDueUpdater;
 #endif
 
 // Define the number of ADC filters and the indices of the extra ones

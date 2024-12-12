@@ -137,7 +137,7 @@ void WiFiSocket::Poll() noexcept
 
 	// As well as getting the status for the socket we asked about, we also received bitmaps of connected sockets.
 	// Pass these to the Network module so that it can avoid polling idle sockets.
-	GetInterface()->UpdateSocketStatus(resp.Value().connectedSockets, resp.Value().otherEndClosedSockets);
+	GetInterface()->UpdateSocketStatus(resp.Value().connectedSockets, resp.Value().otherEndClosedSockets, resp.Value().rssi);
 
 	switch (resp.Value().state)
 	{

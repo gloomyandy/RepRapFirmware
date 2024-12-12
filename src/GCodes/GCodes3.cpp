@@ -3,7 +3,8 @@
  *
  *  Created on: 5 Dec 2017
  *      Author: David
- *  This file contains functions that are called form file GCodes2.cpp to execute various G and M codes.
+ *
+ *  This file contains functions that are called from file GCodes2.cpp to execute various G and M codes.
  */
 
 #include "GCodes.h"
@@ -1710,5 +1711,50 @@ void GCodes::ProcessEvent(GCodeBuffer& gb) noexcept
 		}
 	}
 }
+
+#if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
+
+// M38 (SHA1 hash of a file) implementation:
+bool GCodes::StartHash(const char* filename) noexcept
+{
+	// Get a FileStore object
+	fileBeingHashed = platform.OpenFile(FS_PREFIX, filename, OpenMode::read);
+	if (fileBeingHashed == nullptr)
+	{
+		return false;
+	}
+
+	// Start hashing
+	hash.Reset();
+	return true;
+}
+
+GCodeResult GCodes::AdvanceHash(const StringRef &reply) noexcept
+{
+	// Read and process some more data from the file
+	alignas(4) char buffer[FILE_BUFFER_SIZE];
+	const int bytesRead = fileBeingHashed->Read(buffer, FILE_BUFFER_SIZE);
+	if (bytesRead != -1)
+	{
+		hash.Update(buffer, bytesRead);
+
+		if (bytesRead != FILE_BUFFER_SIZE)
+		{
+			fileBeingHashed->Close();
+			fileBeingHashed = nullptr;
+			reply.printf("%08" PRIx32, hash.Get());
+			return GCodeResult::ok;
+		}
+		return GCodeResult::notFinished;
+	}
+
+	// Something went wrong, we cannot read any more from the file
+	fileBeingHashed->Close();
+	fileBeingHashed = nullptr;
+	reply.copy("error reading file");
+	return GCodeResult::error;
+}
+
+#endif
 
 // End

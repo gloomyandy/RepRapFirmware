@@ -345,8 +345,6 @@ WiFiInterface::WiFiInterface(Platform& p) noexcept
 #endif
 }
 
-#if SUPPORT_OBJECT_MODEL
-
 // Object model table and functions
 // Note: if using GCC version 7.3.1 20180622 and lambda functions are used in this table, you must compile this file with option -std=gnu++17.
 // Otherwise the table will be allocated in RAM instead of flash, which wastes too much RAM.
@@ -362,17 +360,16 @@ constexpr ObjectModelTableEntry WiFiInterface::objectModelTable[] =
 	{ "firmwareVersion",	OBJECT_MODEL_FUNC(self->wiFiServerVersion.c_str()),											ObjectModelEntryFlags::none },
 	{ "gateway",			OBJECT_MODEL_FUNC(self->gateway),															ObjectModelEntryFlags::none },
 	{ "mac",				OBJECT_MODEL_FUNC_IF(self->GetState() == NetworkState::active, self->macAddress),			ObjectModelEntryFlags::none },
+	{ "rssi",				OBJECT_MODEL_FUNC_IF(self->GetState() == NetworkState::active, (int32_t)self->rssi),		ObjectModelEntryFlags::live },
 	{ "ssid",				OBJECT_MODEL_FUNC_IF(self->GetState() == NetworkState::active, self->actualSsid.c_str()),	ObjectModelEntryFlags::none },
 	{ "state",				OBJECT_MODEL_FUNC(self->GetStateName()),													ObjectModelEntryFlags::none },
 	{ "subnet",				OBJECT_MODEL_FUNC(self->netmask),															ObjectModelEntryFlags::none },
 	{ "type",				OBJECT_MODEL_FUNC_NOSELF("wifi"),															ObjectModelEntryFlags::none },
 };
 
-constexpr uint8_t WiFiInterface::objectModelTableDescriptor[] = { 1, 8 };
+constexpr uint8_t WiFiInterface::objectModelTableDescriptor[] = { 1, 9 };
 
 DEFINE_GET_OBJECT_MODEL_TABLE(WiFiInterface)
-
-#endif
 
 void WiFiInterface::Init() noexcept
 {
@@ -1784,8 +1781,9 @@ void WiFiInterface::TerminateSockets(TcpPort port, bool local) noexcept
 }
 
 // This is called to tell the network which sockets are active
-void WiFiInterface::UpdateSocketStatus(uint16_t connectedSockets, uint16_t otherEndClosedSockets) noexcept
+void WiFiInterface::UpdateSocketStatus(uint16_t connectedSockets, uint16_t otherEndClosedSockets, int8_t p_rssi) noexcept
 {
+	rssi = p_rssi;
 	for (size_t i = 0; i < NumWiFiTcpSockets; ++i)
 	{
 		if (((connectedSockets | otherEndClosedSockets) & (1u << i)) != 0)

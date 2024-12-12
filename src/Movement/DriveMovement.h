@@ -91,7 +91,7 @@ private:
 #if SUPPORT_CAN_EXPANSION
 	void TakeStepsAndCalcStepTimeRarely(uint32_t clocksNow) noexcept SPEED_CRITICAL;
 #endif
-	MoveSegment *NewSegment(uint32_t now) noexcept SPEED_CRITICAL;
+	MoveSegment *_ecv_null NewSegment(uint32_t now) noexcept SPEED_CRITICAL;
 	bool ScheduleFirstSegment() noexcept;
 
 	void ReleaseSegments() noexcept;					// release the list of segments and set it to nullptr

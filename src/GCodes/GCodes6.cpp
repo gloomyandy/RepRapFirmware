@@ -4,7 +4,7 @@
  *  Created on: 19 Jul 2022
  *      Author: David
  *
- *  This file defined member functions of the GCodes class that handle bed probing and height maps
+ *  This file defines member functions of the GCodes class that handle bed probing and height maps
  */
 
 #include "GCodes.h"

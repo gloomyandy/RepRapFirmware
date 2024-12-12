@@ -29,7 +29,7 @@ constexpr ObjectModelTableEntry GpInputPort::objectModelTable[] =
 {
 	// Within each group, these entries must be in alphabetical order
 	// Return 'value' as an integer, not a boolean, because we may allow analog inputs in future
-	{ "value",	OBJECT_MODEL_FUNC((int32_t)((self->GetState()) ? 1 : 0)),	ObjectModelEntryFlags::live },
+	{ "value",	OBJECT_MODEL_FUNC((int32_t)((self->GetState()) ? 1 : 0)),	ObjectModelEntryFlags::liveNotPanelDue },
 };
 
 constexpr uint8_t GpInputPort::objectModelTableDescriptor[] = { 1, 1 };

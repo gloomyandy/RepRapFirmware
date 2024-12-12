@@ -206,7 +206,7 @@ bool FileStore::Close() noexcept
 	case FileUseMode::readOnly:
 	case FileUseMode::readWrite:
 		{
-			const irqflags_t flags = IrqSave();
+			const auto flags = IrqSave();
 			if (openCount > 1)
 			{
 				--openCount;
@@ -229,7 +229,7 @@ bool FileStore::Close() noexcept
 	case FileUseMode::invalidated:
 	default:
 		{
-			const irqflags_t flags = IrqSave();
+			const auto flags = IrqSave();
 			if (openCount > 1)
 			{
 				--openCount;
@@ -569,7 +569,7 @@ void FileStore::Duplicate() noexcept
 	case FileUseMode::readOnly:
 	case FileUseMode::readWrite:
 		{
-			const irqflags_t flags = IrqSave();
+			const auto flags = IrqSave();
 			++openCount;
 			IrqRestore(flags);
 		}

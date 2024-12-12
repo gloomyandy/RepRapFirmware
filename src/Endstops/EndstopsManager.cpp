@@ -88,10 +88,10 @@ constexpr ObjectModelTableEntry EndstopsManager::objectModelTable[] =
 {
 	// Within each group, these entries must be in alphabetical order
 	// 0. sensors members
-	{ "analog",				OBJECT_MODEL_FUNC_ARRAY(0),		ObjectModelEntryFlags::live },
+	{ "analog",				OBJECT_MODEL_FUNC_ARRAY(0),		ObjectModelEntryFlags::liveNotPanelDue },
 	{ "endstops",			OBJECT_MODEL_FUNC_ARRAY(1), 	ObjectModelEntryFlags::live },
-	{ "filamentMonitors",	OBJECT_MODEL_FUNC_ARRAY(2),		ObjectModelEntryFlags::live },
-	{ "gpIn",				OBJECT_MODEL_FUNC_ARRAY(3), 	ObjectModelEntryFlags::live },
+	{ "filamentMonitors",	OBJECT_MODEL_FUNC_ARRAY(2),		ObjectModelEntryFlags::liveNotPanelDue },
+	{ "gpIn",				OBJECT_MODEL_FUNC_ARRAY(3), 	ObjectModelEntryFlags::liveNotPanelDue },
 	{ "probes",				OBJECT_MODEL_FUNC_ARRAY(4),		ObjectModelEntryFlags::live },
 };
 

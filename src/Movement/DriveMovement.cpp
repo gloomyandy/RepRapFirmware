@@ -56,7 +56,7 @@ void DriveMovement::DebugPrint() const noexcept
 	const char c = (drive < reprap.GetGCodes().GetTotalAxes()) ? reprap.GetGCodes().GetAxisLetters()[drive] : (char)('0' + LogicalDriveToExtruder(drive));
 	if (state != DMState::idle)
 	{
-		debugPrintf("DM%c state=%u err=%u dir=%c next=%" PRIi32 " rev=%" PRIi32 " ssl=%" PRIi32 " sns=%" PRIi32 " interval=%" PRIu32 " q=%.4e t0=%.4e p=%.4e dcf=%.2f\n",
+		debugPrintf("DM%c state=%u err=%u dir=%c next=%" PRIi32 " rev=%" PRIi32 " ssl=%" PRIi32 " sns=%" PRIi32 " interval=%" PRIu32 " q=%.4g t0=%.4g p=%.4g dcf=%.2f\n",
 						c, (unsigned int)state, (unsigned int)stepErrorType, (direction) ? 'F' : 'B',
 							nextStep, reverseStartStep, segmentStepLimit, netStepsThisSegment, stepInterval,
 								(double)q, (double)t0, (double)p, (double)distanceCarriedForwards);
@@ -111,13 +111,13 @@ bool DriveMovement::ScheduleFirstSegment() noexcept
 // set driversCurrentlyUsed to 0 to suppress the step pulse, and return the segment.
 // If there is a segment ready to execute and it has steps, set up our movement parameters, copy the flags over, set the 'executing' flag in the segment, and return the segment.
 // If there is a segment ready to execute but it involves zero steps, skip and free it and start again.
-MoveSegment *DriveMovement::NewSegment(uint32_t now) noexcept
+MoveSegment *_ecv_null DriveMovement::NewSegment(uint32_t now) noexcept
 {
 	positionAtSegmentStart = currentMotorPosition;
 
 	while (true)
 	{
-		MoveSegment *seg = segments;				// capture volatile variable
+		MoveSegment *_ecv_null seg = segments;				// capture volatile variable
 		if (seg == nullptr)
 		{
 			segmentFlags.Init();

@@ -167,9 +167,16 @@ RepRap reprap;
 // Get the format string to use for printing a floating point number to the specified number of significant digits. Zero means the maximum sensible number.
 const char *_ecv_array GetFloatFormatString(float val, unsigned int numDigitsAfterPoint) noexcept
 {
-	static constexpr const char *_ecv_array FormatStrings[] = { "%.7g", "%.1g", "%.2g", "%.3g", "%.4g", "%.5g", "%.6g", "%.7g" };
-	static_assert(ARRAY_SIZE(FormatStrings) == MaxFloatDigitsDisplayedAfterPoint + 1);
-	return FormatStrings[min<unsigned int>(numDigitsAfterPoint, MaxFloatDigitsDisplayedAfterPoint)];
+	// If the value is below 0.1 then use 'g' format and treat the requested number of decimal digits as the number of significant digits needed
+	// f the value is very large then use 'g' format and treat the requested number of decimal digits as the number of significant digits needed
+	// Else use 'f' format.
+	static constexpr const char *_ecv_array FormatStringsF[] = { "%.7f", "%.1f", "%.2f", "%.3f", "%.4f", "%.5f", "%.6f", "%.7f" };
+	static constexpr const char *_ecv_array FormatStringsG[] = { "%.7g", "%.1g", "%.2g", "%.3g", "%.4g", "%.5g", "%.6g", "%.7g" };
+	static_assert(ARRAY_SIZE(FormatStringsF) == MaxFloatDigitsDisplayedAfterPoint + 1);
+	static_assert(ARRAY_SIZE(FormatStringsG) == MaxFloatDigitsDisplayedAfterPoint + 1);
+
+	const char *_ecv_array const *_ecv_array formatStringToUse = (fabsf(val) < 0.1 || fabsf(val) >= 10000.0) ? FormatStringsG : FormatStringsF;
+	return formatStringToUse[min<unsigned int>(numDigitsAfterPoint, MaxFloatDigitsDisplayedAfterPoint)];
 }
 
 //*************************************************************************************************

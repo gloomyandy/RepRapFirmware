@@ -49,7 +49,7 @@ static bool isErased(const uint32_t addr, const size_t len) noexcept
     // On the STM32H7 if the flash has not been correctly erased then simply reading
     // it can cause a bus fault (due to multiple ECC errors). We avoid this by disaabling
     // the fault mechanism while checking the flash memory.
-    const irqflags_t flags = IrqSave();
+    const coreIrqflags_t flags = IrqSave();
 
     __set_FAULTMASK(1);
     SCB->CCR |= SCB_CCR_BFHFNMIGN_Msk;
@@ -215,7 +215,7 @@ static bool FlashRead(const uint32_t addr, uint8_t *data, const size_t len) noex
     // On the STM32H7 if the flash has not been correctly erased then simply reading
     // it can cause a bus fault (due to multiple ECC errors). We avoid this by disaabling
     // the fault mechanism while checking the flash memory.
-    const irqflags_t flags = IrqSave();
+    const coreIrqflags_t flags = IrqSave();
 
     __set_FAULTMASK(1);
     SCB->CCR |= SCB_CCR_BFHFNMIGN_Msk;

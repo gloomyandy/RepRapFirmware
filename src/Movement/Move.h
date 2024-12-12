@@ -139,7 +139,7 @@ public:
 	void EmergencyDisableDrivers() noexcept;
 	void SetDriversIdle() noexcept;
 
-	GCodeResult ConfigureDriverBrakePort(GCodeBuffer& gb, const StringRef& reply, size_t driver) noexcept
+	GCodeResult ConfigureDriverBrakePort(GCodeBuffer& gb, const StringRef& reply, size_t driver) THROWS(GCodeException)
 		pre(driver < GetNumActualDirectDrivers());
 	GCodeResult SetMotorCurrent(size_t axisOrExtruder, float current, int code, const StringRef& reply) noexcept;
 
@@ -148,7 +148,7 @@ public:
 	float GetIdleCurrentFactor() const noexcept { return idleCurrentFactor; }
 	uint32_t GetIdleTimeout() const noexcept { return idleTimeout; }
 	bool SetDriverMicrostepping(size_t driver, unsigned int microsteps, bool interpolate) noexcept;
-	bool SetDriversMicrostepping(size_t axisOrExtruder, int microsteps, bool interpolate, const StringRef& reply) noexcept;
+	bool SetDriversMicrostepping(size_t axisOrExtruder, unsigned int microsteps, bool interpolate, const StringRef& reply) noexcept;
 	void SetDriverStepTiming(size_t driver, const float microseconds[4]) noexcept;
 	bool GetDriverStepTiming(size_t driver, float microseconds[4]) const noexcept;
 
@@ -244,7 +244,7 @@ public:
 
 	void SetAsExtruder(size_t drive, bool isExtruder) noexcept pre(drive < MaxAxesPlusExtruders) { dms[drive].SetAsExtruder(isExtruder); }
 
-	bool SetMicrostepping(size_t axisOrExtruder, int microsteps, bool mode, const StringRef& reply) noexcept pre(axisOrExtruder < MaxAxesPlusExtruders);
+	bool SetMicrostepping(size_t axisOrExtruder, unsigned int microsteps, bool mode, const StringRef& reply) noexcept pre(axisOrExtruder < MaxAxesPlusExtruders);
 	unsigned int GetMicrostepping(size_t axisOrExtruder, bool& interpolation) const noexcept pre(axisOrExtruder < MaxAxesPlusExtruders);
 	unsigned int GetMicrostepping(size_t axisOrExtruder) const noexcept pre(axisOrExtruder < MaxAxesPlusExtruders) { return microstepping[axisOrExtruder] & 0x7FFF; }
 	bool GetMicrostepInterpolation(size_t axisOrExtruder) const noexcept pre(axisOrExtruder < MaxAxesPlusExtruders) { return (microstepping[axisOrExtruder] & 0x8000) != 0; }
@@ -599,7 +599,7 @@ private:
 	static TASKMEM Task<MoveTaskStackWords> moveTask;
 
 	static constexpr size_t LaserTaskStackWords = 300;				// stack size in dwords for the laser and IOBits task (increased to support scanning Z probes)
-	static Task<LaserTaskStackWords> *laserTask;					// the task used to manage laser power or IOBits
+	static Task<LaserTaskStackWords> *_ecv_null laserTask;			// the task used to manage laser power or IOBits
 
 	// Member data
 	DDARing rings[NumMovementSystems];
@@ -616,7 +616,7 @@ private:
 #endif
 	volatile uint32_t lastDirChangeTime;							// when we last changed the DIR signal to a slow driver
 
-	StepTimer timer;												// Timer object to control getting step interrupts
+	StepTimer stepsTimer;											// Timer object to control getting step interrupts
 	DriveMovement *_ecv_null activeDMs;
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
 	DriveMovement *_ecv_null phaseStepDMs;
@@ -966,7 +966,7 @@ inline __attribute__((always_inline)) bool Move::ScheduleNextStepInterrupt() noe
 {
 	if (activeDMs != nullptr)
 	{
-		return timer.ScheduleMovementCallbackFromIsr(activeDMs->nextStepTime);
+		return stepsTimer.ScheduleMovementCallbackFromIsr(activeDMs->nextStepTime);
 	}
 	return false;
 }

@@ -116,7 +116,7 @@ constexpr ObjectModelTableEntry Tool::objectModelTable[] =
 	{ "feedForwardTemp",	OBJECT_MODEL_FUNC_ARRAY(8), 															ObjectModelEntryFlags::none },
 	{ "filamentExtruder",	OBJECT_MODEL_FUNC((int32_t)self->filamentExtruder),										ObjectModelEntryFlags::none },
 	{ "heaters",			OBJECT_MODEL_FUNC_ARRAY(4), 															ObjectModelEntryFlags::none },
-	{ "isRetracted",		OBJECT_MODEL_FUNC(self->IsRetracted()), 												ObjectModelEntryFlags::live },
+	{ "isRetracted",		OBJECT_MODEL_FUNC(self->IsRetracted()), 												ObjectModelEntryFlags::liveNotPanelDue },
 	{ "mix",				OBJECT_MODEL_FUNC_ARRAY(5), 															ObjectModelEntryFlags::none },
 	{ "name",				OBJECT_MODEL_FUNC(self->name),						 									ObjectModelEntryFlags::none },
 	{ "number",				OBJECT_MODEL_FUNC((int32_t)self->myNumber),												ObjectModelEntryFlags::none },

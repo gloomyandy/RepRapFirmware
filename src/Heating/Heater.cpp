@@ -42,7 +42,7 @@ constexpr ObjectModelTableEntry Heater::objectModelTable[] =
 	// Within each group, these entries must be in alphabetical order
 	// 0. Heater members
 	{ "active",				OBJECT_MODEL_FUNC(self->GetActiveTemperature(), 1), 									ObjectModelEntryFlags::live },
-	{ "avgPwm",				OBJECT_MODEL_FUNC(self->GetAveragePWM(), 3), 											ObjectModelEntryFlags::live },
+	{ "avgPwm",				OBJECT_MODEL_FUNC(self->GetAveragePWM(), 3), 											ObjectModelEntryFlags::liveNotPanelDue },
 	{ "current",			OBJECT_MODEL_FUNC(self->GetTemperature(), 2), 											ObjectModelEntryFlags::live },
 	{ "max",				OBJECT_MODEL_FUNC(self->GetHighestTemperatureLimit(), 1), 								ObjectModelEntryFlags::none },
 	{ "maxBadReadings",		OBJECT_MODEL_FUNC((int32_t)self->maxBadTemperatureCount), 								ObjectModelEntryFlags::none },

@@ -25,7 +25,7 @@ bool InputMonitor::Activate(bool useInterrupt) noexcept
 		if (threshold == 0)
 		{
 			// Digital input
-			const irqflags_t flags = IrqSave();
+			const auto flags = IrqSave();
 			ok = !useInterrupt || port.AttachInterrupt(CommonDigitalPortInterrupt, InterruptMode::change, CallbackParameter(this));
 			state = port.ReadDigital();
 			IrqRestore(flags);

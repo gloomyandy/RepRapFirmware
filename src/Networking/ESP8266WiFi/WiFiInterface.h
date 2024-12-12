@@ -89,7 +89,7 @@ public:
 	static const char* TranslateWiFiState(WiFiState w) noexcept;
 	void SpiInterrupt() noexcept;
 	void EspRequestsTransfer() noexcept;
-	void UpdateSocketStatus(uint16_t connectedSockets, uint16_t otherEndClosedSockets) noexcept;
+	void UpdateSocketStatus(uint16_t connectedSockets, uint16_t otherEndClosedSockets, int8_t p_rssi) noexcept;
 
 protected:
 	DECLARE_OBJECT_MODEL
@@ -178,6 +178,7 @@ private:
 	String<StringLength20> wiFiServerVersion;
 
 	uint8_t startupRetryCount;
+	int8_t rssi = 0;
 	bool usingDhcp = true;
 
 	// For processing debug messages from the WiFi module

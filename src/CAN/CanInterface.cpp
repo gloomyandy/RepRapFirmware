@@ -56,10 +56,23 @@ constexpr uint32_t MaxUrgentSendWait = 20;									// milliseconds
 constexpr uint32_t MaxTimeSyncSendWait = 2;									// milliseconds
 constexpr uint32_t MaxResponseSendWait = CanInterface::UsualSendTimeout;	// milliseconds
 constexpr uint32_t MaxRequestSendWait = CanInterface::UsualSendTimeout;		// milliseconds
+
+// Define how often we send time sync messages. This value and the time interval between sending broadcast status messages (currently 250ms) should be relatively prime.
+// The reason is that if we try to send a time sync message just after a board has started broadcasting a status message, the time sync message will get delayed
+// until the broadcast message finishes, which could be up to 600us at 1Mbps (the time taken to send a message with a 64-byte payload when not using BRS).
+// When we used a 200us interval here, this meant that the same clash would occur 1 second later, and again 1 second after that.
+// Using a value here that is relatively prime to 250ms avoids that happening. Alternatively we could add a random element to the interval.
+constexpr uint32_t CanClockIntervalMillis = 211;
 #if SUPPORT_SPICAN
 constexpr uint16_t MaxTimeSyncDelay = 2000;									// the maximum normal delay before a CAN time sync message is sent
 #else
-constexpr uint16_t MaxTimeSyncDelay = 300;									// the maximum normal delay before a CAN time sync message is sent
+// Define the maximum time sync delay that we tolerate. Occasionally on the SAME70 we get spurious very long delays, so we must ignore those.
+// CAN-FD packets have 42 header bits, up to 64*8 data bits and 45 trailer bits. The header and data parts may have added stuff bits.
+// That's a maximum of 554 header+data bits plus up to 20% additional stuff bits, and 45 trailer bits including fixed stuff bits.
+// So the maximum number of bits is less than 710, which takes 710us to transmit at 1Mbps. Allow an extra 5us for scheduling delays.
+constexpr uint16_t MaxTimeSyncDelay = (uint16_t)MicrosecondsToStepClocks((42 + 64 * 8) * 1.2 + 45 + 5);	// the maximum normal delay before a CAN time sync message is sent, in step clocks
+
+static_assert(MaxTimeSyncDelay >= 400 && MaxTimeSyncDelay <= 1000);			// check it's in the right ball park
 #endif
 
 #define USE_BIT_RATE_SWITCH		0
@@ -202,8 +215,6 @@ constexpr auto TxBufferIndexMotion = CanDevice::TxBufferNumber::buffer5;
 constexpr auto RxBufferIndexBroadcast = CanDevice::RxBufferNumber::fifo0;
 constexpr auto RxBufferIndexRequest = CanDevice::RxBufferNumber::fifo0;
 constexpr auto RxBufferIndexResponse = CanDevice::RxBufferNumber::fifo1;
-
-constexpr uint32_t CanClockIntervalMillis = 200;
 
 #if SUPPORT_SPICAN
 // CanSender management task

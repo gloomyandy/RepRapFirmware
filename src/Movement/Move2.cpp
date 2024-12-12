@@ -32,7 +32,7 @@
 
 // Set the microstepping for local drivers, returning true if successful. All drivers for the same axis must use the same microstepping.
 // Caller must deal with remote drivers.
-bool Move::SetMicrostepping(size_t axisOrExtruder, int microsteps, bool interp, const StringRef& reply) noexcept
+bool Move::SetMicrostepping(size_t axisOrExtruder, unsigned int microsteps, bool interp, const StringRef& reply) noexcept
 {
 	bool ret = SetDriversMicrostepping(axisOrExtruder, microsteps, interp, reply);
 	if (ret)
@@ -189,7 +189,7 @@ GCodeResult Move::ConfigurePressureAdvance(GCodeBuffer& gb, const StringRef& rep
 		}
 		else
 		{
-			const Tool * const ct = reprap.GetGCodes().GetConstMovementState(gb).currentTool;
+			const Tool *_ecv_null const ct = reprap.GetGCodes().GetConstMovementState(gb).currentTool;
 			if (ct == nullptr)
 			{
 				reply.copy("No tool selected");
@@ -519,7 +519,7 @@ StandardDriverStatus Move::GetLocalDriverStatus(size_t driver) const noexcept
 // Must not be called from an ISR, or with interrupts disabled.
 void Move::SetDriversIdle() noexcept
 {
-	if (idleCurrentFactor == 0)
+	if (idleCurrentFactor == 0.0)
 	{
 		DisableAllDrivers();
 		reprap.GetGCodes().SetAllAxesNotHomed();
@@ -550,7 +550,7 @@ void Move::SetDriversIdle() noexcept
 }
 
 // Configure the brake port for a driver
-GCodeResult Move::ConfigureDriverBrakePort(GCodeBuffer& gb, const StringRef& reply, size_t driver) noexcept
+GCodeResult Move::ConfigureDriverBrakePort(GCodeBuffer& gb, const StringRef& reply, size_t driver) THROWS(GCodeException)
 {
 # if !SUPPORT_BRAKE_PWM
 	if (gb.Seen('V'))
@@ -824,7 +824,7 @@ void Move::SetIdleCurrentFactor(float f) noexcept
 #endif
 }
 
-bool Move::SetDriversMicrostepping(size_t axisOrExtruder, int microsteps, bool interp, const StringRef& reply) noexcept
+bool Move::SetDriversMicrostepping(size_t axisOrExtruder, unsigned int microsteps, bool interp, const StringRef& reply) noexcept
 {
 	bool ok = true;
 	IterateLocalDrivers(axisOrExtruder,

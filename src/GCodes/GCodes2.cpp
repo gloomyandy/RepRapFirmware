@@ -67,6 +67,10 @@
 # include <Platform/Logger.h>
 #endif
 
+#if SUPPORT_PANELDUE_FLASH
+# include <Comms/PanelDueUpdater.h>
+#endif
+
 // If the code to act on is completed, this returns true, otherwise false.
 // It is called repeatedly for a given code until it returns true for that code.
 bool GCodes::ActOnCode(GCodeBuffer& gb, const StringRef& reply) noexcept
@@ -307,21 +311,17 @@ bool GCodes::HandleGcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						}
 
 						// Should we queue this code?
-						if (gb.CanQueueCodes())
+						// Don't queue any GCodes if there are segments not yet picked up by Move, because in the event that a segment corresponds to no movement,
+						// the move gets discarded, which throws out the count of scheduled moves and hence the synchronisation
+						if (gb.CanQueueCodes() && GCodeQueue::ShouldQueueG10(gb))
 						{
-							GCodeQueue * const codeQueue = GetMovementState(gb).codeQueue;
-							if (codeQueue->ShouldQueueG10(gb))
+							if (GetMovementState(gb).segmentsLeft == 0 && GetMovementState(gb).codeQueue->QueueCode(gb))
 							{
-								// Don't queue any GCodes if there are segments not yet picked up by Move, because in the event that a segment corresponds to no movement,
-								// the move gets discarded, which throws out the count of scheduled moves and hence the synchronisation
-								if (GetMovementState(gb).segmentsLeft == 0 && codeQueue->QueueCode(gb))
-								{
-									HandleReply(gb, GCodeResult::ok, "");
-									return true;
-								}
-
-								return false;		// we should queue this code but we can't yet, so wait until we can either execute it or queue it
+								HandleReply(gb, GCodeResult::ok, "");
+								return true;
 							}
+
+							return false;		// we should queue this code but we can't yet, so wait until we can either execute it or queue it
 						}
 
 						// We don't want to queue it
@@ -607,7 +607,8 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 	if (   IsSimulating()
 		&& (code < 20 || code > 37)													// allow file operations while simulating
 		&& code != 0 && code != 1 && code != 82 && code != 83
-		&& code != 105 && code != 109 && code != 111 && code != 112 && code != 115 && code != 122
+		&& code != 98 && code != 99													// allow macro calls when simulating
+		&& code != 105 && code != 109 && code != 111 && code != 112 && code != 115 && code != 120 && code != 121 && code != 122
 		&& code != 200 && code != 204 && code != 205 && code != 207
 		&& code != 408 && code != 409 && code != 486
 		&& code != 572 && code != 593												// allow changes to PA and IS while simulating
@@ -656,21 +657,17 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #endif
 
 	// Can we queue this code?
-	if (gb.CanQueueCodes())
+	// Don't queue any GCodes if there are segments not yet picked up by Move, because in the event that a segment corresponds to no movement,
+	// the move gets discarded, which throws out the count of scheduled moves and hence the synchronisation
+	if (gb.CanQueueCodes() && GCodeQueue::ShouldQueueMCode(gb))
 	{
-		GCodeQueue * const codeQueue = GetMovementState(gb).codeQueue;
-		if (codeQueue->ShouldQueueMCode(gb))
+		if (GetMovementState(gb).segmentsLeft == 0 && GetMovementState(gb).codeQueue->QueueCode(gb))
 		{
-			// Don't queue any GCodes if there are segments not yet picked up by Move, because in the event that a segment corresponds to no movement,
-			// the move gets discarded, which throws out the count of scheduled moves and hence the synchronisation
-			if (GetMovementState(gb).segmentsLeft == 0 && codeQueue->QueueCode(gb))
-			{
-				HandleReply(gb, GCodeResult::ok, "");
-				return true;
-			}
-
-			return false;		// we should queue this code but we can't yet, so wait until we can either execute it or queue it
+			HandleReply(gb, GCodeResult::ok, "");
+			return true;
 		}
+
+		return false;		// we should queue this code but we can't yet, so wait until we can either execute it or queue it
 	}
 
 #if HAS_SBC_INTERFACE
@@ -1446,8 +1443,8 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 				break;
 			}
 
-#if 0		// was (HAS_MASS_STORAGE || HAS_EMBEDDED_FILES), removed this function to save space on Duet 2
-			case 38: // Report SHA1 of file
+#if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
+			case 38: // Report CRC32 of file
 				if (!LockFileSystem(gb))								// getting file hash takes several calls and isn't reentrant
 				{
 					return false;
@@ -4163,7 +4160,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							}
 
 							// An axis letter is given, so try to level the given axis
-							const float correctionAngle = atanf((z2 - z1) / (a2 - a1)) * 180.0 / M_PI;
+							const float correctionAngle = atanf((z2 - z1) / (a2 - a1)) * 180.0 / Pi;
 							const float correctionFactor = gb.Seen('S') ? gb.GetPositiveFValue() : 1.0;
 							ms.coords[axisToUse] += correctionAngle * correctionFactor;
 							ms.rotationalAxesMentioned = true;
@@ -4431,7 +4428,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						if (seenCommandString)
 						{
 							// Replace the power fail script atomically
-							char *_ecv_array newPowerFailScript = new char[powerFailString.strlen() + 1];
+							char *_ecv_array _ecv_null newPowerFailScript = new char[powerFailString.strlen() + 1];
 							strcpy(newPowerFailScript, powerFailString.c_str());
 							ReplaceObject(powerFailScript, newPowerFailScript);
 							reprap.StateUpdated();

@@ -41,6 +41,10 @@ Licence: GPL
 #include "SimulationMode.h"
 #include <Movement/BedProbing/Grid.h>
 
+#if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
+# include <Storage/CRC32.h>
+#endif
+
 const char feedrateLetter = 'F';						// GCode feedrate
 const char extrudeLetter = 'E'; 						// GCode extrude
 
@@ -740,6 +744,14 @@ private:
 	bool isFlashing;							// Is a new firmware binary going to be flashed?
 #if SUPPORT_PANELDUE_FLASH
 	bool isFlashingPanelDue;					// Are we in the process of flashing PanelDue?
+#endif
+
+#if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
+	// M38 data
+	FileStore *_ecv_null fileBeingHashed = nullptr;
+	CRC32 hash;
+	bool StartHash(const char* filename) noexcept;
+	GCodeResult AdvanceHash(const StringRef &reply) noexcept;
 #endif
 
 	// Laser

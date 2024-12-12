@@ -83,7 +83,7 @@ void Move::InverseAxisTransform(float xyzPoint[MaxAxes], const Tool *_ecv_null t
 }
 
 // Compute the height correction needed at a point, ignoring taper
-float Move::ComputeHeightCorrection(float xyzPoint[MaxAxes], const Tool *tool) const noexcept
+float Move::ComputeHeightCorrection(float xyzPoint[MaxAxes], const Tool *_ecv_null tool) const noexcept
 {
 	float zCorrection = 0.0;
 	unsigned int numCorrections = 0;
@@ -219,7 +219,7 @@ float Move::GetProbeCoordinates(int count, float& x, float& y, bool wantNozzlePo
 	return probePoints.GetZHeight(count);
 }
 
-const char *Move::GetCompensationTypeString() const noexcept
+const char *_ecv_array Move::GetCompensationTypeString() const noexcept
 {
 	return (usingMesh) ? "mesh" : "none";
 }
@@ -227,7 +227,7 @@ const char *Move::GetCompensationTypeString() const noexcept
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE
 
 // Load the height map from file, returning true if an error occurred with the error reason appended to the buffer
-bool Move::LoadHeightMapFromFile(FileStore *f, const char *fname, const StringRef& r) noexcept
+bool Move::LoadHeightMapFromFile(FileStore *f, const char *_ecv_array fname, const StringRef& r) noexcept
 {
 	const bool err = heightMap.LoadFromFile(f, fname, r
 #if SUPPORT_PROBE_POINTS_FILE
@@ -249,7 +249,7 @@ bool Move::LoadHeightMapFromFile(FileStore *f, const char *fname, const StringRe
 }
 
 // Save the height map to a file returning true if an error occurred
-bool Move::SaveHeightMapToFile(FileStore *f, const char *fname) noexcept
+bool Move::SaveHeightMapToFile(FileStore *f, const char *_ecv_array fname) noexcept
 {
 	return heightMap.SaveToFile(f, fname, zShift);
 }
@@ -257,7 +257,7 @@ bool Move::SaveHeightMapToFile(FileStore *f, const char *fname) noexcept
 # if SUPPORT_PROBE_POINTS_FILE
 
 // Load the probe points map from a file returning true if an error occurred
-bool Move::LoadProbePointsFromFile(FileStore *f, const char *fname, const StringRef& r) noexcept
+bool Move::LoadProbePointsFromFile(FileStore *f, const char *_ecv_array fname, const StringRef& r) noexcept
 {
 	return heightMap.LoadFromFile(f, fname, r, true);
 }

@@ -610,12 +610,6 @@ constexpr size_t NO_AXIS = 0x3F;									// A value to represent no axis, must f
 
 static_assert(MaxAxesPlusExtruders <= MaxAxes + MaxExtruders);
 
-#if SUPPORT_CAN_EXPANSION
-constexpr size_t MaxTotalDrivers = NumDirectDrivers + MaxCanDrivers;
-#else
-constexpr size_t MaxTotalDrivers = NumDirectDrivers;
-#endif
-
 // Convert between extruder drive numbers and logical drive numbers.
 // In order to save memory when MaxAxesPlusExtruders < MaxAxes + MaxExtruders, the logical drive number of an axis is the same as the axis number,
 // but the logical drive number of an extruder is MaxAxesPlusExtruders - 1 - extruder_number.

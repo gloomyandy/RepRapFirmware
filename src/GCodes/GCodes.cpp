@@ -2456,6 +2456,16 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 
 		// Apply segmentation if necessary
 		// As soon as we set segmentsLeft nonzero, the Move process will assume that the move is ready to take, so this must be the last thing we do.
+		const Kinematics &_ecv_from kin = reprap.GetMove().GetKinematics();
+		const SegmentationType st = kin.GetSegmentationType();
+		float moveLengthSquared = fsquare(ms.currentUserPosition[X_AXIS] - initialUserPosition[X_AXIS]) + fsquare(ms.currentUserPosition[Y_AXIS] - initialUserPosition[Y_AXIS]);
+		if (st.useZSegmentation)
+		{
+			moveLengthSquared += fsquare(ms.currentUserPosition[Z_AXIS] - initialUserPosition[Z_AXIS]);
+		}
+		const float moveLength = fastSqrtf(moveLengthSquared);
+		const float moveTime = moveLength/(ms.feedRate * StepClockRate);		// this is a best-case time, often the move will take longer
+
 #if SUPPORT_LASER
 		if (machineType == MachineType::laser && isCoordinated && ms.laserPixelData.numPixels > 1)
 		{
@@ -2464,19 +2474,11 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 		else
 #endif
 		{
-			const Kinematics &_ecv_from kin = reprap.GetMove().GetKinematics();
-			const SegmentationType st = kin.GetSegmentationType();
+
 			// To speed up simulation on SCARA printers, we don't apply kinematics segmentation when simulating.
 			if (st.useSegmentation && simulationMode != SimulationMode::normal && (ms.hasPositiveExtrusion || ms.isCoordinated || st.useG0Segmentation))
 			{
 				// This kinematics approximates linear motion by means of segmentation
-				float moveLengthSquared = fsquare(ms.currentUserPosition[X_AXIS] - initialUserPosition[X_AXIS]) + fsquare(ms.currentUserPosition[Y_AXIS] - initialUserPosition[Y_AXIS]);
-				if (st.useZSegmentation)
-				{
-					moveLengthSquared += fsquare(ms.currentUserPosition[Z_AXIS] - initialUserPosition[Z_AXIS]);
-				}
-				const float moveLength = fastSqrtf(moveLengthSquared);
-				const float moveTime = moveLength/(ms.feedRate * StepClockRate);		// this is a best-case time, often the move will take longer
 				ms.totalSegments = (unsigned int)max<long>(1, lrintf(min<float>(moveLength * kin.GetReciprocalMinSegmentLength(), moveTime * kin.GetSegmentsPerSecond())));
 			}
 			else
@@ -2503,6 +2505,10 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 				}
 			}
 		}
+
+		// The step clock wraps around every ~45 minutes (a bit less on Duet 2) which causes issues if the move will take more than about half this time.
+		// So if the move will take more than about 5 minutes, segment it.
+		ms.totalSegments = max<unsigned int>(ms.totalSegments, (unsigned int)(moveTime * (1.0/(float)MaxSegmentTime)));
 	}
 
 	ms.doingArcMove = false;

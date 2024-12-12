@@ -183,13 +183,33 @@ struct ExpressionValue
 enum class ObjectModelEntryFlags : uint8_t
 {
 	// none, live and verbose are alternatives occupying the bottom 2 bits
+	// 'notPanelDue' is set on fields that have 'live' set but are not of interest to PaneDue
 	none = 0,					// nothing special
 	live = 1,					// fast changing data, included in common status response
-	important = 2,				// important when it is present, so include in unsolicited responses to PanelDue
-	liveOrImportantMask = 3,	// mask to select values flagged as either live or important
+	important = 2,				// important when it is present, so include in unsolicited responses to PanelDue. Used for message boxes.
 	verbose = 4,				// omit reporting this value by default
-	obsolete = 8				// entry is deprecated and should not be used any more
+	obsolete = 8,				// entry is deprecated and should not be used any more
+	notPanelDue = 16,			// not of interest to PanelDue and other UIs that don't need so much detail (used in conjunction with 'live')
+
+	liveNotPanelDue = live | notPanelDue
 };
+
+inline constexpr ObjectModelEntryFlags operator|(ObjectModelEntryFlags a, ObjectModelEntryFlags b) noexcept
+{
+	return (ObjectModelEntryFlags)((uint8_t)a | (uint8_t)b);
+}
+
+inline constexpr ObjectModelEntryFlags& operator|=(ObjectModelEntryFlags& a, ObjectModelEntryFlags b) noexcept
+{
+	a = a | b;
+	return a;
+}
+
+inline constexpr ObjectModelEntryFlags& operator&=(ObjectModelEntryFlags& a, uint8_t b) noexcept
+{
+	a = (ObjectModelEntryFlags)((uint8_t)a & b);
+	return a;
+}
 
 // Context passed to object model functions
 class ObjectExplorationContext
@@ -248,16 +268,16 @@ private:
 	int line;
 	int column;
 	const GCodeBuffer *_ecv_null gb;
-	unsigned int shortForm : 1,
+	uint16_t shortForm : 1,
 				wantArrayLength : 1,
 				wantExists : 1,
 				includeNonLive : 1,
 				includeImportant : 1,
+				includePanelDue : 1,
 				includeNulls : 1,
-				excludeVerbose : 1,
-				excludeObsolete : 1,
 				obsoleteFieldQueried : 1,
 				truncateLongArrays : 1;
+	ObjectModelEntryFlags excludedFlags;			// don't report fields with any of these flags set
 };
 
 // Entry to describe an array of objects or values. These must be brace-initializable into flash memory.

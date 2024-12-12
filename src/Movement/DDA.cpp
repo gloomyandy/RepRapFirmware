@@ -142,7 +142,7 @@ void PrepParams::SetFromDDA(const DDA& dda) noexcept
 
 void PrepParams::DebugPrint() const noexcept
 {
-	debugPrintf("pp: td=%.3e ad=%.3e dsd=%.3e a=%.3e d=%.3e ac=%" PRIu32 " sc=%" PRIu32 " dc=%" PRIu32 "\n",
+	debugPrintf("pp: td=%.3g ad=%.3g dsd=%.3g a=%.3g d=%.3g ac=%" PRIu32 " sc=%" PRIu32 " dc=%" PRIu32 "\n",
 					(double)totalDistance, (double)accelDistance, (double)decelStartDistance, (double)acceleration, (double)deceleration, accelClocks, steadyClocks, decelClocks);
 }
 
@@ -191,7 +191,15 @@ void DDA::DebugPrintVector(const char *name, const float *vec, size_t len) const
 	debugPrintf("%s=", name);
 	for (size_t i = 0; i < len; ++i)
 	{
-		debugPrintf("%c%f", ((i == 0) ? '[' : ' '), (double)vec[i]);
+		const char c = (i == 0) ? '[' : ' ';
+		if (vec[i] == 0.0)
+		{
+			debugPrintf("%c0", c);						// just print 0 to save characters
+		}
+		else
+		{
+			debugPrintf("%c%.4g", c, (double)vec[i]);
+		}
 	}
 	debugPrintf("]");
 }
@@ -212,7 +220,7 @@ void DDA::DebugPrint(const char *tag) const noexcept
 		DebugPrintVector(" end", endCoordinates, numAxes);
 	}
 
-	debugPrintf(" s=%.4e", (double)totalDistance);
+	debugPrintf(" s=%.4g", (double)totalDistance);
 	DebugPrintVector(" vec", directionVector, MaxAxesPlusExtruders);
 	debugPrintf("\n" "a=%.4e d=%.4e reqv=%.4e startv=%.4e topv=%.4e endv=%.4e cks=%" PRIu32 " fp=%" PRIu32 " fl=%04x\n",
 				(double)acceleration, (double)deceleration, (double)requestedSpeed, (double)startSpeed, (double)topSpeed, (double)endSpeed, clocksNeeded, (uint32_t)filePos, flags.all);
@@ -227,6 +235,21 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 	// The call to CartesianToMotorSteps may adjust the invisible axis endpoints for architectures such as CoreXYU and delta with >3 towers, so set them up here.
 	const size_t numTotalAxes = reprap.GetGCodes().GetTotalAxes();
 	const size_t numVisibleAxes = reprap.GetGCodes().GetVisibleAxes();
+	const Move& move = reprap.GetMove();
+
+#if SUPPORT_ASYNC_MOVES
+	DriversBitmap ownedDrivers;
+	const Kinematics& kin = move.GetKinematics();
+	for (size_t axis = 0; axis < numVisibleAxes; ++axis)
+	{
+		if (nextMove.axesAndExtrudersOwned.IsBitSet(axis))
+		{
+			ownedDrivers |= kin.GetControllingDrives(axis, false);
+		}
+	}
+#endif
+
+	// Set any invisible axis endpoints to the same positions as the previous move
 	const int32_t * const positionNow = prev->DriveCoordinates();
 	for (size_t axis = numVisibleAxes; axis < numTotalAxes; ++axis)
 	{
@@ -236,7 +259,6 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 	flags.all = 0;														// set all flags false
 
 	// 1. Compute the new endpoints and the movement vector
-	const Move& move = reprap.GetMove();
 	if (doMotorMapping)
 	{
 		if (!move.CartesianToMotorSteps(nextMove.coords, endPoint, nextMove.isCoordinated))		// transform the axis coordinates if on a delta or CoreXY printer
@@ -258,7 +280,7 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 		if (drive < numVisibleAxes)
 		{
 #if SUPPORT_ASYNC_MOVES
-			if (nextMove.axesAndExtrudersOwned.IsBitSet(drive))
+			if (ownedDrivers.IsBitSet(drive))
 #endif
 			{
 				if (doMotorMapping)

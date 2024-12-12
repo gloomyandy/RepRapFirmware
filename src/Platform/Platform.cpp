@@ -45,6 +45,11 @@
 #include <Hardware/NonVolatileMemory.h>
 #include <Storage/CRC32.h>
 #include <Accelerometers/Accelerometers.h>
+
+#if SUPPORT_PANELDUE_FLASH
+# include <Comms/PanelDueUpdater.h>
+#endif
+
 #if STM32
 using LegacyAnalogIn::AdcBits;
 # include "STM32/BoardConfig.h"
@@ -223,12 +228,12 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 #if SUPPORT_DIRECT_LCD
 	{ "directDisplay",		OBJECT_MODEL_FUNC_IF_NOSELF(reprap.GetDisplay().IsPresent(), &reprap.GetDisplay()),					ObjectModelEntryFlags::none },
 #endif
-	{ "drivers",			OBJECT_MODEL_FUNC_ARRAY(0),																			ObjectModelEntryFlags::live },
+	{ "drivers",			OBJECT_MODEL_FUNC_ARRAY(0),																			ObjectModelEntryFlags::liveNotPanelDue },
 	{ "firmwareDate",		OBJECT_MODEL_FUNC_NOSELF(DATE),																		ObjectModelEntryFlags::none },
 	{ "firmwareFileName",	OBJECT_MODEL_FUNC_NOSELF(IAP_FIRMWARE_FILE),														ObjectModelEntryFlags::none },
 	{ "firmwareName",		OBJECT_MODEL_FUNC_NOSELF(FIRMWARE_NAME),															ObjectModelEntryFlags::none },
 	{ "firmwareVersion",	OBJECT_MODEL_FUNC_NOSELF(VERSION),																	ObjectModelEntryFlags::none },
-	{ "freeRam",			OBJECT_MODEL_FUNC_NOSELF((int32_t)Tasks::GetNeverUsedRam()),										ObjectModelEntryFlags::live },
+	{ "freeRam",			OBJECT_MODEL_FUNC_NOSELF((int32_t)Tasks::GetNeverUsedRam()),										ObjectModelEntryFlags::liveNotPanelDue },
 #if HAS_SBC_INTERFACE
 	{ "iapFileNameSBC",		OBJECT_MODEL_FUNC_NOSELF(IAP_UPDATE_FILE_SBC),														ObjectModelEntryFlags::none },
 #endif
@@ -238,7 +243,7 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 	{ "maxHeaters",			OBJECT_MODEL_FUNC_NOSELF((int32_t)MaxHeaters),														ObjectModelEntryFlags::verbose },
 	{ "maxMotors",			OBJECT_MODEL_FUNC_NOSELF((int32_t)NumDirectDrivers),												ObjectModelEntryFlags::verbose },
 #if HAS_CPU_TEMP_SENSOR
-	{ "mcuTemp",			OBJECT_MODEL_FUNC(self, 1),																			ObjectModelEntryFlags::live },
+	{ "mcuTemp",			OBJECT_MODEL_FUNC(self, 1),																			ObjectModelEntryFlags::liveNotPanelDue },
 #endif
 #ifdef DUET_NG
 	{ "name",				OBJECT_MODEL_FUNC(self->GetBoardName()),															ObjectModelEntryFlags::none },
@@ -255,31 +260,31 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 	{ "uniqueId",			OBJECT_MODEL_FUNC_IF(self->uniqueId.IsValid(), self->uniqueId),										ObjectModelEntryFlags::none },
 #endif
 #if HAS_12V_MONITOR
-	{ "v12",				OBJECT_MODEL_FUNC(self, 3),																			ObjectModelEntryFlags::live },
+	{ "v12",				OBJECT_MODEL_FUNC(self, 3),																			ObjectModelEntryFlags::liveNotPanelDue },
 #endif
 #if HAS_VOLTAGE_MONITOR
-	{ "vIn",				OBJECT_MODEL_FUNC(self, 2),																			ObjectModelEntryFlags::live },
+	{ "vIn",				OBJECT_MODEL_FUNC(self, 2),																			ObjectModelEntryFlags::liveNotPanelDue },
 #endif
 #if HAS_WIFI_NETWORKING
 	{ "wifiFirmwareFileName", OBJECT_MODEL_FUNC_NOSELF(WIFI_FIRMWARE_FILE),														ObjectModelEntryFlags::none },
 #endif
 #if HAS_CPU_TEMP_SENSOR
 	// 1. boards[0].mcuTemp members
-	{ "current",			OBJECT_MODEL_FUNC(self->GetMcuTemperatures().current, 1),											ObjectModelEntryFlags::live },
+	{ "current",			OBJECT_MODEL_FUNC(self->GetMcuTemperatures().current, 1),											ObjectModelEntryFlags::liveNotPanelDue },
 	{ "max",				OBJECT_MODEL_FUNC(self->GetMcuTemperatures().maximum, 1),											ObjectModelEntryFlags::none },
 	{ "min",				OBJECT_MODEL_FUNC(self->GetMcuTemperatures().minimum, 1),											ObjectModelEntryFlags::none },
 #endif
 
 	// 2. boards[0].vIn members
 #if HAS_VOLTAGE_MONITOR
-	{ "current",			OBJECT_MODEL_FUNC(self->GetCurrentPowerVoltage(), 1),												ObjectModelEntryFlags::live },
+	{ "current",			OBJECT_MODEL_FUNC(self->GetCurrentPowerVoltage(), 1),												ObjectModelEntryFlags::liveNotPanelDue },
 	{ "max",				OBJECT_MODEL_FUNC(self->GetPowerVoltages().maximum, 1),												ObjectModelEntryFlags::none },
 	{ "min",				OBJECT_MODEL_FUNC(self->GetPowerVoltages().minimum, 1),												ObjectModelEntryFlags::none },
 #endif
 
 #if HAS_12V_MONITOR
 	// 3. boards[0].v12 members
-	{ "current",			OBJECT_MODEL_FUNC(self->GetV12Voltages().current, 1),												ObjectModelEntryFlags::live },
+	{ "current",			OBJECT_MODEL_FUNC(self->GetV12Voltages().current, 1),												ObjectModelEntryFlags::liveNotPanelDue },
 	{ "max",				OBJECT_MODEL_FUNC(self->GetV12Voltages().maximum, 1),												ObjectModelEntryFlags::none },
 	{ "min",				OBJECT_MODEL_FUNC(self->GetV12Voltages().minimum, 1),												ObjectModelEntryFlags::none },
 #endif
