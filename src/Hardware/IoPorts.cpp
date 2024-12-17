@@ -47,7 +47,7 @@ constexpr unsigned int AdcBits = LegacyAnalogIn::AdcBits;
 bool IoPort::AssignPort(GCodeBuffer& gb, const StringRef& reply, PinUsedBy neededFor, PinAccess access) THROWS(GCodeException)
 {
 	IoPort *_ecv_from const p = this;
-	return AssignPorts(gb, reply, neededFor, 1, &p, &access) == 1;
+	return AssignPorts(gb, reply, neededFor, 1, (IoPort *_ecv_from const *_ecv_array)&p, &access) == 1;
 }
 
 // Try to assign ports, returning the number of ports successfully assigned
@@ -111,7 +111,7 @@ bool IoPort::AssignPort(GCodeBuffer& gb, const StringRef& reply, PinUsedBy neede
 bool IoPort::AssignPort(const char *_ecv_array pinName, const StringRef& reply, PinUsedBy neededFor, PinAccess access) noexcept
 {
 	IoPort *_ecv_from const p = this;
-	return AssignPorts(pinName, reply, neededFor, 1, &p, &access) == 1;
+	return AssignPorts(pinName, reply, neededFor, 1, (IoPort *_ecv_from const *_ecv_array)&p, &access) == 1;
 }
 
 /*static*/ const char *_ecv_array IoPort::TranslatePinAccess(PinAccess access) noexcept
@@ -396,69 +396,71 @@ void IoPort::AppendPinName(const StringRef& str) const noexcept
 {
 	if (IsValid())
 	{
-#if SUPPORT_REMOTE_COMMANDS
-		if (CanInterface::InExpansionMode())
-		{
-			str.catf("%u.", CanInterface::GetCanAddress());
-		}
-#endif
-		if (GetInvert())
-		{
-			str.cat('!');
-		}
-		const size_t insertPoint = str.strlen();
 #if STM32
-		const char *_ecv_array pn = GetPinNames(logicalPin);
+		const char *_ecv_array _ecv_null pn = GetPinNames(logicalPin);
 #else
-		const char *_ecv_array pn = PinTable[logicalPin].GetNames();
+		const char *_ecv_array _ecv_null pn = PinTable[logicalPin].GetNames();
 #endif
-		unsigned int numPrinted = 0;
-		do
+		if (pn != nullptr)
 		{
-			bool inverted = (*pn == '!');
-			if (inverted)
+#if SUPPORT_REMOTE_COMMANDS
+			if (CanInterface::InExpansionMode())
 			{
-				++pn;
+				str.catf("%u.", CanInterface::GetCanAddress());
 			}
-			if (hardwareInvert)
+#endif
+			if (GetInvert())
 			{
-				inverted = !inverted;
+				str.cat('!');
 			}
-			if (inverted)
+			const size_t insertPoint = str.strlen();
+			unsigned int numPrinted = 0;
+			do
 			{
-				// skip this one
-				while (*pn != 0 && *pn != ',')
+				bool inverted = (*pn == '!');
+				if (inverted)
 				{
 					++pn;
 				}
-			}
-			else
+				if (hardwareInvert)
+				{
+					inverted = !inverted;
+				}
+				if (inverted)
+				{
+					// skip this one
+					while (*pn != 0 && *pn != ',')
+					{
+						++pn;
+					}
+				}
+				else
+				{
+					// Include this one
+					if (numPrinted != 0)
+					{
+						str.cat(',');
+					}
+					++numPrinted;
+					while (*pn != 0 && *pn != ',')
+					{
+						str.cat(*pn);
+						++pn;
+					}
+				}
+
+			} while (*pn++ == ',');
+
+			if (numPrinted > 1)
 			{
-				// Include this one
-				if (numPrinted != 0)
-				{
-					str.cat(',');
-				}
-				++numPrinted;
-				while (*pn != 0 && *pn != ',')
-				{
-					str.cat(*pn);
-					++pn;
-				}
+				str.Insert(insertPoint, '(');
+				str.cat(')');
 			}
-
-		} while (*pn++ == ',');
-
-		if (numPrinted > 1)
-		{
-			str.Insert(insertPoint, '(');
-			str.cat(')');
 		}
+		return;
 	}
-	else
-	{
-		str.cat(NoPinName);
-	}
+
+	str.cat(NoPinName);
 }
 
 /*static*/ void IoPort::AppendPinNames(const StringRef& str, size_t numPorts, const IoPort * const ports[]) noexcept

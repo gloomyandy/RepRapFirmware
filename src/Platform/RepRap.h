@@ -41,7 +41,7 @@ enum class ResponseSource
 
 typedef Bitmap<uint32_t> DebugFlags;
 
-class RepRap INHERIT_OBJECT_MODEL
+class RepRap final INHERIT_OBJECT_MODEL
 {
 public:
 	RepRap() noexcept;
@@ -106,18 +106,18 @@ public:
 	bool SpinTimeoutImminent() const noexcept;
 	bool IsStopped() const noexcept;
 
-	OutputBuffer *GetStatusResponse(uint8_t type, ResponseSource source) const noexcept;
-	OutputBuffer *GetConfigResponse() noexcept;
-	OutputBuffer *GetLegacyStatusResponse(uint8_t type, int seq) const noexcept;
+	OutputBuffer *_ecv_null GetStatusResponse(uint8_t type, ResponseSource source) const noexcept;
+	OutputBuffer *_ecv_null GetConfigResponse() noexcept;
+	OutputBuffer *_ecv_null GetLegacyStatusResponse(uint8_t type, int seq) const noexcept;
 
 #if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
-	OutputBuffer *GetFilesResponse(const char *_ecv_array dir, unsigned int startAt, int maxItems, bool flagsDirs) noexcept;
-	OutputBuffer *GetFilelistResponse(const char *_ecv_array dir, unsigned int startAt, int maxItems) noexcept;
-	OutputBuffer *GetThumbnailResponse(const char *_ecv_array filename, FilePosition offset, bool forM31point1) noexcept;
+	OutputBuffer *_ecv_null GetFilesResponse(const char *_ecv_array dir, unsigned int startAt, int maxItems, bool flagsDirs) noexcept;
+	OutputBuffer *_ecv_null GetFilelistResponse(const char *_ecv_array dir, unsigned int startAt, int maxItems) noexcept;
+	OutputBuffer *_ecv_null GetThumbnailResponse(const char *_ecv_array filename, FilePosition offset, bool forM31point1) noexcept;
 #endif
 
-	GCodeResult GetFileInfoResponse(const char *_ecv_array filename, OutputBuffer *_ecv_null &response, bool quitEarly) noexcept;
-	OutputBuffer *GetModelResponse(const GCodeBuffer *_ecv_null gb, const char *_ecv_array key, const char *_ecv_array flags) const THROWS(GCodeException);
+	GCodeResult GetFileInfoResponse(const char *_ecv_array _ecv_null filename, OutputBuffer *_ecv_null &response, bool quitEarly) noexcept;
+	OutputBuffer *GetModelResponse(const GCodeBuffer *_ecv_null gb, const char *_ecv_array _ecv_null key, const char *_ecv_array _ecv_null flags) const THROWS(GCodeException);
 	Mutex& GetObjectModelReportMutex() noexcept { return objectModelReportMutex; }
 
 	void Beep(unsigned int freq, unsigned int ms) noexcept;
@@ -131,11 +131,11 @@ public:
 	void UpdateFirmware(const char *_ecv_array iapFilename, const char *_ecv_array iapParam) noexcept;
 #endif
 	void PrepareToLoadIap() noexcept;
-	[[noreturn]] void StartIap(const char *_ecv_array filename) noexcept;
 #if STM32
 	void RunSdIap(const char *_ecv_array filename) noexcept;
 	void RunCanIap(const char *_ecv_array filename) noexcept;
 #endif
+	[[noreturn]] void StartIap(const char *_ecv_array _ecv_null filename) noexcept;
 
 	void ReportInternalError(const char *_ecv_array file, const char *_ecv_array func, int line) const noexcept;	// report an internal error
 
@@ -188,9 +188,9 @@ private:
 	static constexpr size_t NumDebugRecords = 4;
 
 	static void EncodeString(StringRef& response, const char *_ecv_array src, size_t spaceToLeave, bool allowControlChars = false, char prefix = 0) noexcept;
-	static void AppendFloatArray(OutputBuffer *buf, const char *_ecv_array name, size_t numValues, function_ref_noexcept<float(size_t) noexcept> func, unsigned int numDecimalDigits) noexcept;
-	static void AppendIntArray(OutputBuffer *buf, const char *_ecv_array name, size_t numValues, function_ref_noexcept<int(size_t) noexcept> func) noexcept;
-	static void AppendStringArray(OutputBuffer *buf, const char *_ecv_array name, size_t numValues, function_ref_noexcept<const char *(size_t) noexcept> func) noexcept;
+	static void AppendFloatArray(OutputBuffer *buf, const char *_ecv_array _ecv_null name, size_t numValues, function_ref_noexcept<float(size_t) noexcept> func, unsigned int numDecimalDigits) noexcept;
+	static void AppendIntArray(OutputBuffer *buf, const char *_ecv_array _ecv_null name, size_t numValues, function_ref_noexcept<int(size_t) noexcept> func) noexcept;
+	static void AppendStringArray(OutputBuffer *buf, const char *_ecv_array _ecv_null name, size_t numValues, function_ref_noexcept<const char *(size_t) noexcept> func) noexcept;
 
 	size_t GetStatusIndex() const noexcept;
 	char GetStatusCharacter() const noexcept;

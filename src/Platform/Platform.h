@@ -203,7 +203,7 @@ enum class ErrorCode : uint32_t
 };
 
 // The main class that defines the RepRap machine for the benefit of the other classes
-class Platform INHERIT_OBJECT_MODEL
+class Platform final INHERIT_OBJECT_MODEL
 {
 public:
 	Platform() noexcept;
@@ -500,7 +500,7 @@ private:
 
 #if HAS_MASS_STORAGE
 	// Logging
-	Logger *logger;
+	Logger *_ecv_null logger;
 #endif
 
 	// Network
@@ -583,12 +583,12 @@ private:
 	AuxDevice auxDevices[NumAuxChannels];
 #endif
 #if SUPPORT_PANELDUE_FLASH
-	PanelDueUpdater* panelDueUpdater;
+	PanelDueUpdater *_ecv_null panelDueUpdater;
 #endif
 
 	// Files
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE || HAS_EMBEDDED_FILES
-	const char *_ecv_array sysDir;
+	const char *_ecv_array _ecv_null sysDir;
 	mutable ReadWriteLock sysDirLock;
 #endif
 
@@ -597,7 +597,7 @@ private:
 	AnalogChannelNumber zProbeAdcChannel;
 	uint8_t tickState;
 	size_t currentFilterNumber;
-	int debugCode;
+	unsigned int debugCode;
 
 	// Hotend configuration
 	float filamentWidth;

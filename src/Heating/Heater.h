@@ -46,7 +46,7 @@ public:
 	Heater(const Heater &_ecv_from) = delete;
 
 	// Configuration methods
-	virtual GCodeResult ConfigurePortAndSensor(const char *portName, PwmFrequency freq, unsigned int sn, const StringRef& reply) = 0;
+	virtual GCodeResult ConfigurePortAndSensor(const char *_ecv_array portName, PwmFrequency freq, unsigned int sn, const StringRef& reply) = 0;
 	virtual GCodeResult SetPwmFrequency(PwmFrequency freq, const StringRef& reply) = 0;
 	virtual GCodeResult ReportDetails(const StringRef& reply) const noexcept = 0;
 

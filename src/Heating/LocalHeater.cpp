@@ -96,7 +96,7 @@ void LocalHeater::ResetHeater() noexcept
 }
 
 // Configure the heater port and the sensor number
-GCodeResult LocalHeater::ConfigurePortAndSensor(const char *portName, PwmFrequency freq, unsigned int sn, const StringRef& reply)
+GCodeResult LocalHeater::ConfigurePortAndSensor(const char *_ecv_array portName, PwmFrequency freq, unsigned int sn, const StringRef& reply)
 {
 	if constexpr (MaxPortsPerHeater == 1)
 	{
@@ -108,7 +108,7 @@ GCodeResult LocalHeater::ConfigurePortAndSensor(const char *portName, PwmFrequen
 	else
 	{
 		PinAccess access[MaxPortsPerHeater];
-		IoPort* portAddrs[MaxPortsPerHeater];
+		IoPort *_ecv_from portAddrs[MaxPortsPerHeater];
 		for (size_t i = 0; i < MaxPortsPerHeater; ++i)
 		{
 			access[i] = PinAccess::pwm;
@@ -331,7 +331,7 @@ void LocalHeater::Spin() noexcept
 							if (actualTemperatureRise < expectedTemperatureRise * ((IsBedOrChamber()) ? MinBedTemperatureRiseFactor : MinToolTemperatureRiseFactor))
 							{
 								++heatingFaultCount;
-								if (heatingFaultCount * HeatSampleIntervalMillis > GetMaxHeatingFaultTime() * SecondsToMillis)
+								if ((float)(heatingFaultCount * HeatSampleIntervalMillis) > GetMaxHeatingFaultTime() * SecondsToMillis)
 								{
 									RaiseHeaterFault(HeaterFaultType::temperatureRisingTooSlowly,
 														"expected %.2f" DEGREE_SYMBOL "C/sec measured %.2f" DEGREE_SYMBOL "C/sec",
@@ -356,7 +356,7 @@ void LocalHeater::Spin() noexcept
 				if (fabsf(error) > GetMaxTemperatureExcursion() && temperature > MaxAmbientTemperature)
 				{
 					++heatingFaultCount;
-					if (heatingFaultCount * HeatSampleIntervalMillis > GetMaxHeatingFaultTime() * SecondsToMillis)
+					if ((float)(heatingFaultCount * HeatSampleIntervalMillis) > GetMaxHeatingFaultTime() * SecondsToMillis)
 					{
 						RaiseHeaterFault(HeaterFaultType::exceededAllowedExcursion,
 											"target %.1f" DEGREE_SYMBOL "C actual %.1f" DEGREE_SYMBOL "C",

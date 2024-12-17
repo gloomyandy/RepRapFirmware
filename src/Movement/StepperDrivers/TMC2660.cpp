@@ -308,8 +308,8 @@ static Pdc * const spiPdc =
 #endif
 
 // Words to send and receive driver SPI data from/to
-volatile static uint32_t spiDataOut = 0;					// volatile because we care about when it is written
-volatile static uint32_t spiDataIn = 0;						// volatile because the PDC writes it
+static volatile uint32_t spiDataOut = 0;					// volatile because we care about when it is written
+static volatile uint32_t spiDataIn = 0;						// volatile because the PDC writes it
 
 // Variables used by the ISR
 static TmcDriverState * volatile currentDriver = nullptr;	// volatile because the ISR changes it

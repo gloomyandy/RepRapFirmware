@@ -101,14 +101,14 @@ extern const char VersionText[] = FIRMWARE_NAME " version " VERSION;
 
 #if HAS_HIGH_SPEED_SD && !SAME5x										// SAME5x uses CoreN2G which makes its own RTOS calls
 
-static TaskHandle hsmciTask = nullptr;									// the task that is waiting for a HSMCI command to complete
+static TaskHandle _ecv_null hsmciTask = nullptr;						// the task that is waiting for a HSMCI command to complete
 
 // HSMCI interrupt handler
 extern "C" void HSMCI_Handler() noexcept
 {
-	HSMCI->HSMCI_IDR = 0xFFFFFFFF;										// disable all HSMCI interrupts
+	HSMCI->HSMCI_IDR = 0xFFFFFFFFu;										// disable all HSMCI interrupts
 #if SAME70
-	XDMAC->XDMAC_CHID[DmacChanHsmci].XDMAC_CID = 0xFFFFFFFF;			// disable all DMA interrupts for this channel
+	XDMAC->XDMAC_CHID[DmacChanHsmci].XDMAC_CID = 0xFFFFFFFFu;			// disable all DMA interrupts for this channel
 #endif
 	TaskBase::GiveFromISR(hsmciTask, NotifyIndices::Sdhc);				// wake up the task
 }
@@ -118,8 +118,8 @@ extern "C" void HSMCI_Handler() noexcept
 // HSMCI DMA complete callback
 void HsmciDmaCallback(CallbackParameter cb, DmaCallbackReason reason) noexcept
 {
-	HSMCI->HSMCI_IDR = 0xFFFFFFFF;										// disable all HSMCI interrupts
-	XDMAC->XDMAC_CHID[DmacChanHsmci].XDMAC_CID = 0xFFFFFFFF;			// disable all DMA interrupts for this channel
+	HSMCI->HSMCI_IDR = 0xFFFFFFFFu;										// disable all HSMCI interrupts
+	XDMAC->XDMAC_CHID[DmacChanHsmci].XDMAC_CID = 0xFFFFFFFFu;			// disable all DMA interrupts for this channel
 	if (hsmciTask != nullptr)
 	{
 		TaskBase::GiveFromISR(hsmciTask, NotifyIndices::Sdhc);
@@ -163,8 +163,16 @@ extern "C" void hsmciIdle(uint32_t stBits, uint32_t dmaBits) noexcept
 // Otherwise the table will be allocate in RAM instead of flash, which wastes too much RAM.
 
 // Macro to build a standard lambda function that includes the necessary type conversions
-#define OBJECT_MODEL_FUNC(...) OBJECT_MODEL_FUNC_BODY(RepRap, __VA_ARGS__)
-#define OBJECT_MODEL_FUNC_IF(_condition,...) OBJECT_MODEL_FUNC_IF_BODY(RepRap, _condition,__VA_ARGS__)
+#define OBJECT_MODEL_FUNC(...)					OBJECT_MODEL_FUNC_BODY(RepRap, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC_IF(_condition,...)	OBJECT_MODEL_FUNC_IF_BODY(RepRap, _condition,__VA_ARGS__)
+#define OBJECT_MODEL_ARRAY_COUNT(_value)		OBJECT_MODEL_ARRAY_COUNT_BODY(RepRap, _value)
+#define OBJECT_MODEL_ARRAY_VALUE(...)			OBJECT_MODEL_ARRAY_VALUE_BODY(RepRap, __VA_ARGS__)
+
+// Get an ExpressionValue that represents a port if it is in use, or null if it is unused
+static ExpressionValue GetExpressionForGpOutPort(GpOutputPort& port) noexcept
+{
+	return (port.IsUnused()) ? ExpressionValue(nullptr) : ExpressionValue(&port);
+}
 
 constexpr ObjectModelArrayTableEntry RepRap::objectModelArrayTable[] =
 {
@@ -172,78 +180,71 @@ constexpr ObjectModelArrayTableEntry RepRap::objectModelArrayTable[] =
 	{
 		nullptr,					// no lock needed
 #if SUPPORT_CAN_EXPANSION
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return ((const RepRap*)self)->expansion->GetNumExpansionBoards() + 1; },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
-				{	return (context.GetLastIndex() == 0)
-							? ExpressionValue(((const RepRap*)self)->platform, 0)
-								: ExpressionValue(((const RepRap*)self)->expansion, 0); }
+		OBJECT_MODEL_ARRAY_COUNT(self->expansion->GetNumExpansionBoards() + 1),
+		OBJECT_MODEL_ARRAY_VALUE((context.GetLastIndex() == 0)
+									? ExpressionValue(self->platform, 0)
+									: ExpressionValue(self->expansion, 0))
 #else
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return 1; },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(((const RepRap*)self)->platform, 0); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(1),
+		OBJECT_MODEL_ARRAY_VALUE(self->platform, 0)
 #endif
 	},
 	// 1. Fans
 	{
 		&FansManager::fansLock,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return ((const RepRap*)self)->fansManager->GetNumFansToReport(); },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(((const RepRap*)self)->fansManager->FindFan(context.GetLastIndex()).Ptr()); }
+		OBJECT_MODEL_ARRAY_COUNT(self->fansManager->GetNumFansToReport()),
+		OBJECT_MODEL_ARRAY_VALUE(self->fansManager->FindFan(context.GetLastIndex()).Ptr()),
 	},
 	// 2. Inputs
 	{
 		nullptr,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return ((const RepRap*)self)->gCodes->GetNumInputs(); },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(((const RepRap*)self)->gCodes->GetInput(context.GetLastIndex())); }
+		OBJECT_MODEL_ARRAY_COUNT(self->gCodes->GetNumInputs()),
+		OBJECT_MODEL_ARRAY_VALUE(self->gCodes->GetInput(context.GetLastIndex()))
 	},
 	// 3. Spindles
 	{
 		nullptr,					// no lock needed
-		[] (const ObjectModel *self, const ObjectExplorationContext& context) noexcept -> size_t { return MaxSpindles; },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(&((const RepRap*)self)->platform->AccessSpindle(context.GetLastIndex())); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(MaxSpindles),
+		OBJECT_MODEL_ARRAY_VALUE(&(self->platform->AccessSpindle(context.GetLastIndex())))
 	},
 	// 4. Tools
 	{
 		&Tool::toolListLock,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return Tool::GetNumToolsToReport(); },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(Tool::GetLockedTool(context.GetLastIndex()).Ptr()); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(Tool::GetNumToolsToReport()),
+		OBJECT_MODEL_ARRAY_VALUE_NOSELF(Tool::GetLockedTool(context.GetLastIndex()).Ptr())
 	},
 	// 5. Volumes
 	{
 		nullptr,
 #if HAS_MASS_STORAGE
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return MassStorage::GetNumVolumes(); },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(MassStorage::GetVolume(context.GetLastIndex())); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(MassStorage::GetNumVolumes()),
+		OBJECT_MODEL_ARRAY_VALUE_NOSELF(MassStorage::GetVolume(context.GetLastIndex()))
 #else
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return 0; },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(nullptr); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(0),
+		OBJECT_MODEL_ARRAY_VALUE(nullptr)
 #endif
 	},
 	// 6. GP outputs
 	{
 		nullptr,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return reprap.GetPlatform().GetNumGpOutputsToReport(); },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
-						{
-							const GpOutputPort& port = reprap.GetPlatform().GetGpOutPort(context.GetLastIndex());
-							return (port.IsUnused()) ? ExpressionValue(nullptr) : ExpressionValue(&port);
-						}
+		OBJECT_MODEL_ARRAY_COUNT(self->GetPlatform().GetNumGpOutputsToReport()),
+		OBJECT_MODEL_ARRAY_VALUE(GetExpressionForGpOutPort(self->GetPlatform().GetGpOutPort(context.GetLastIndex())))
 	},
 	// 7. Restore points
 	{
 		nullptr,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return NumVisibleRestorePoints; },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
-																			{ return ExpressionValue(&((const RepRap*)self)->gCodes->GetCurrentMovementState(context).restorePoints[context.GetLastIndex()]); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(NumVisibleRestorePoints),
+		OBJECT_MODEL_ARRAY_VALUE(&self->gCodes->GetCurrentMovementState(context).restorePoints[context.GetLastIndex()])
 	},
 	// 8. Volume changes
 	{
 		nullptr,
 #if HAS_MASS_STORAGE
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return MassStorage::GetNumVolumes(); },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
-																			{ return ExpressionValue((int32_t)MassStorage::GetVolumeSeq(context.GetLastIndex())); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(MassStorage::GetNumVolumes()),
+		OBJECT_MODEL_ARRAY_VALUE_NOSELF((int32_t)MassStorage::GetVolumeSeq(context.GetLastIndex()))
 #else
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return 0; },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(nullptr); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(0),
+		OBJECT_MODEL_ARRAY_VALUE_NOSELF(nullptr)
 #endif
 	}
 #if SUPPORT_LED_STRIPS
@@ -251,9 +252,8 @@ constexpr ObjectModelArrayTableEntry RepRap::objectModelArrayTable[] =
 	// 9. LED strips
 	{
 		&LedStripManager::ledLock,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return ((const RepRap*)self)->platform->GetLedStripManager().GetNumLedStrips(); },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
-				{ return ExpressionValue(((const RepRap*)self)->platform->GetLedStripManager().GetLedStrip(context.GetLastIndex())); }
+		OBJECT_MODEL_ARRAY_COUNT(self->platform->GetLedStripManager().GetNumLedStrips()),
+		OBJECT_MODEL_ARRAY_VALUE(self->platform->GetLedStripManager().GetLedStrip(context.GetLastIndex()))
 	}
 #endif
 };
@@ -429,7 +429,7 @@ ReadWriteLock *_ecv_null RepRap::GetObjectLock(unsigned int tableNumber) const n
 constexpr uint8_t RepRap::objectModelTableDescriptor[] =
 {
 	7,																						// number of sub-tables
-	15 + (HAS_MASS_STORAGE | HAS_EMBEDDED_FILES | HAS_SBC_INTERFACE) + SUPPORT_LED_STRIPS,	// root
+	15 + ((unsigned int)HAS_MASS_STORAGE | (unsigned int)HAS_EMBEDDED_FILES | (unsigned int)HAS_SBC_INTERFACE) + SUPPORT_LED_STRIPS,	// root
 #if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES || HAS_SBC_INTERFACE
 	7, 																						// directories
 #else
@@ -438,7 +438,7 @@ constexpr uint8_t RepRap::objectModelTableDescriptor[] =
 	26 + SUPPORT_LED_STRIPS,																// limits
 	22 + HAS_VOLTAGE_MONITOR + SUPPORT_LASER,												// state
 	2,																						// state.beep
-	12 + HAS_NETWORKING + (2 * HAS_MASS_STORAGE) + (HAS_MASS_STORAGE | HAS_EMBEDDED_FILES | HAS_SBC_INTERFACE) + SUPPORT_LED_STRIPS,	// seqs
+	12 + (unsigned int)HAS_NETWORKING + (2 * HAS_MASS_STORAGE) + ((unsigned int)HAS_MASS_STORAGE | (unsigned int)HAS_EMBEDDED_FILES | (unsigned int)HAS_SBC_INTERFACE) + SUPPORT_LED_STRIPS,	// seqs
 	3																						// state.configErr
 };
 
@@ -713,7 +713,7 @@ void RepRap::Init() noexcept
 #if HAS_HIGH_SPEED_SD && !SAME5x
 	// Switch to giving up the CPU while waiting for a SD operation to complete
 	hsmci_set_idle_func(hsmciIdle);
-	HSMCI->HSMCI_IDR = 0xFFFFFFFF;						// disable all HSMCI interrupts
+	HSMCI->HSMCI_IDR = 0xFFFFFFFFu;						// disable all HSMCI interrupts
 	NVIC_EnableIRQ(HSMCI_IRQn);
 #endif
 
@@ -724,7 +724,7 @@ void RepRap::Init() noexcept
 }
 
 // Run a startup file
-bool RepRap::RunStartupFile(const char *filename, bool isMainConfigFile) noexcept
+bool RepRap::RunStartupFile(const char *_ecv_array filename, bool isMainConfigFile) noexcept
 {
 	const bool rslt = gCodes->RunConfigFile(filename, isMainConfigFile);
 	if (rslt)
@@ -861,12 +861,12 @@ void RepRap::Spin() noexcept
 	}
 	else
 	{
-		const uint32_t now = StepTimer::GetTimerTicks();
-		const uint32_t dt = now - lastTime;
+		const uint32_t now2 = StepTimer::GetTimerTicks();
+		const uint32_t dt = now2 - lastTime;
 #if 0 //DEBUG
 		if (dt > 1000000)
 		{
-			platform->MessageF(ErrorMessage, "dt %" PRIu32 " now %08" PRIx32 " last %08" PRIx32 "\n", dt, now, lastTime);
+			platform->MessageF(ErrorMessage, "dt %" PRIu32 " now %08" PRIx32 " last %08" PRIx32 "\n", dt, now2, lastTime);
 		}
 #endif
 		if (dt < fastLoop)
@@ -896,7 +896,7 @@ void RepRap::Diagnostics(MessageType mtype) noexcept
 	// Print the firmware version, board type etc.
 
 #ifdef DUET_NG
-	const char* const expansionName = DuetExpansion::GetExpansionBoardName();
+	const char *_ecv_array _ecv_null const expansionName = DuetExpansion::GetExpansionBoardName();
 #endif
 
 	platform->MessageF(mtype,
@@ -1078,12 +1078,12 @@ void RepRap::ClearDebug() noexcept
 
 void RepRap::PrintDebug(MessageType mt) noexcept
 {
-	platform->Message((MessageType)(mt | PushFlag), "Debugging enabled for modules:");
+	platform->Message((MessageType)((uint32_t)mt | (uint32_t)PushFlag), "Debugging enabled for modules:");
 	for (size_t i = 0; i < NumRealModules; i++)
 	{
 		if (debugMaps[i].IsNonEmpty())
 		{
-			platform->MessageF((MessageType)(mt | PushFlag), " %s(%u - %#" PRIx32 ")", Module(i).ToString(), i, debugMaps[i].GetRaw());
+			platform->MessageF((MessageType)((uint32_t)mt | (uint32_t)PushFlag), " %s(%u - %#" PRIx32 ")", Module(i).ToString(), i, debugMaps[i].GetRaw());
 		}
 	}
 
@@ -1092,7 +1092,7 @@ void RepRap::PrintDebug(MessageType mt) noexcept
 	{
 		if (debugMaps[i].IsEmpty())
 		{
-			platform->MessageF((MessageType)(mt | PushFlag), " %s(%u)", Module(i).ToString(), i);
+			platform->MessageF((MessageType)((uint32_t)mt | (uint32_t)PushFlag), " %s(%u)", Module(i).ToString(), i);
 		}
 	}
 	platform->Message(mt, "\n");
@@ -1140,7 +1140,7 @@ void RepRap::Tick() noexcept
 				}
 				else
 				{
-					relevantStackPtr = const_cast<const uint32_t*>(pxTaskGetLastStackTop(relevantTask->GetFreeRTOSHandle()));
+					relevantStackPtr = const_cast<const uint32_t *_ecv_array>(pxTaskGetLastStackTop(relevantTask->GetFreeRTOSHandle()));
 					// All registers were saved on the stack, so to get useful return addresses we need to skip most of them.
 					// See the port.c files in FreeRTOS for the stack layouts
 #if SAME70 || SAM4E || SAME5x
@@ -1174,7 +1174,7 @@ bool RepRap::SpinTimeoutImminent() const noexcept
 // Type 1 is the ordinary JSON status response.
 // Type 2 is the same except that static parameters are also included.
 // Type 3 is the same but instead of static parameters we report print estimation values.
-OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) const noexcept
+OutputBuffer *_ecv_null RepRap::GetStatusResponse(uint8_t type, ResponseSource source) const noexcept
 {
 	// Need something to write to...
 	OutputBuffer *response;
@@ -1188,7 +1188,7 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 
 	// Homed axes
 	const size_t numVisibleAxes = gCodes->GetVisibleAxes();
-	AppendIntArray(response, "axesHomed", numVisibleAxes, [this](size_t axis) noexcept { return (gCodes->IsAxisHomed(axis)) ? 1 : 0; });
+	AppendIntArray(response, "axesHomed", numVisibleAxes, [this](size_t axis) noexcept -> int { return (gCodes->IsAxisHomed(axis)) ? 1 : 0; });
 
 	// XYZ positions
 	// Coordinates may be NaNs or infinities, for example when delta or SCARA homing fails. We must replace any NaNs or infinities to avoid JSON parsing errors.
@@ -1197,16 +1197,16 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 
 	// First the user coordinates
 	response->catf(",\"wpl\":%u,", gCodes->GetPrimaryWorkplaceCoordinateSystemNumber());
-	AppendFloatArray(response, "xyz", numVisibleAxes, [this](size_t axis) noexcept { return gCodes->GetUserCoordinate(gCodes->GetPrimaryMovementState(), axis); }, 3);
+	AppendFloatArray(response, "xyz", numVisibleAxes, [this](size_t axis) noexcept -> float { return gCodes->GetUserCoordinate(gCodes->GetPrimaryMovementState(), axis); }, 3);
 
 	// Machine coordinates
 	const MovementState& ms = gCodes->GetPrimaryMovementState();				// we only report the primary in this response
 	response->cat(',');
-	AppendFloatArray(response, "machine", numVisibleAxes, [this, &ms](size_t axis) noexcept { return ms.LiveMachineCoordinate(axis); }, 3);
+	AppendFloatArray(response, "machine", numVisibleAxes, [this, &ms](size_t axis) noexcept -> float { return ms.LiveMachineCoordinate(axis); }, 3);
 
 	// Actual extruder positions since power up, last G92 or last M23
 	response->cat(',');
-	AppendFloatArray(response, "extr", Tool::GetExtrudersInUse(), [this, &ms](size_t extruder) noexcept { return ms.LiveMachineCoordinate(ExtruderToLogicalDrive(extruder)); }, 1);
+	AppendFloatArray(response, "extr", Tool::GetExtrudersInUse(), [this, &ms](size_t extruder) noexcept -> float { return ms.LiveMachineCoordinate(ExtruderToLogicalDrive(extruder)); }, 1);
 
 	// Current speeds
 	response->catf("},\"speeds\":{\"requested\":%.1f,\"top\":%.1f}", (double)move->GetRequestedSpeedMmPerSec(), (double)move->GetTopSpeedMmPerSec());
@@ -1264,7 +1264,7 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 		response->cat(',');
 		const size_t numFans = fansManager->GetNumFansToReport();
 		AppendIntArray(response, "fanPercent", numFans,
-						[this](size_t fan) noexcept
+						[this](size_t fan) noexcept -> int
 						{
 							const float fanValue = fansManager->GetFanValue(fan);
 							return  (fanValue < 0.0) ? -1 : (int)lrintf(fanValue * 100.0);
@@ -1272,7 +1272,7 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 
 		// Speed and Extrusion factors in %
 		response->catf(",\"speedFactor\":%.1f,", (double)(gCodes->GetPrimarySpeedFactor() * 100.0));
-		AppendFloatArray(response, "extrFactors", Tool::GetExtrudersInUse(), [this](size_t extruder) noexcept { return gCodes->GetExtrusionFactor(extruder) * 100.0; }, 1);
+		AppendFloatArray(response, "extrFactors", Tool::GetExtrudersInUse(), [this](size_t extruder) noexcept -> float { return gCodes->GetExtrusionFactor(extruder) * 100.0; }, 1);
 
 		// Z babystepping
 		response->catf(",\"babystep\":%.3f}", (double)gCodes->GetTotalBabyStepOffset(Z_AXIS));
@@ -1301,7 +1301,7 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 		}
 
 		// Send fan RPM value(s)
-		AppendIntArray(response, "fanRPM", numFans, [this](size_t fan) noexcept { return (int)fansManager->GetFanRPM(fan); });
+		AppendIntArray(response, "fanRPM", numFans, [this](size_t fan) noexcept -> int { return (int)fansManager->GetFanRPM(fan); });
 		response->cat('}');
 	}
 
@@ -1341,20 +1341,20 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 		// Current temperatures
 		{
 			const size_t numHeaters = heat->GetNumHeatersToReport();
-			AppendFloatArray(response, "current", numHeaters, [this](size_t heater) noexcept { return heat->GetHeaterTemperature(heater); }, 1);
+			AppendFloatArray(response, "current", numHeaters, [this](size_t heater) noexcept -> float { return heat->GetHeaterTemperature(heater); }, 1);
 
 			// Current states
 			response->cat(',');
-			AppendIntArray(response, "state", numHeaters, [this](size_t heater) noexcept { return (int)heat->GetStatus(heater).ToBaseType(); });
+			AppendIntArray(response, "state", numHeaters, [this](size_t heater) noexcept -> int { return (int)heat->GetStatus(heater).ToBaseType(); });
 		}
 
 		// Tool temperatures
 		response->cat(",\"tools\":{\"active\":[");
 		{
 			ReadLocker lock(Tool::toolListLock);
-			for (const Tool *tool = Tool::GetToolList(); tool != nullptr; tool = tool->Next())
+			for (const Tool *_ecv_null tool = Tool::GetToolList(); tool != nullptr; tool = tool->Next())
 			{
-				AppendFloatArray(response, nullptr, tool->HeaterCount(), [tool](unsigned int n) noexcept { return tool->GetToolHeaterActiveTemperature(n); }, 1);
+				AppendFloatArray(response, nullptr, tool->HeaterCount(), [tool](unsigned int n) noexcept -> float { return tool->GetToolHeaterActiveTemperature(n); }, 1);
 				if (tool->Next() != nullptr)
 				{
 					response->cat(',');
@@ -1362,9 +1362,9 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 			}
 
 			response->cat("],\"standby\":[");
-			for (const Tool *tool = Tool::GetToolList(); tool != nullptr; tool = tool->Next())
+			for (const Tool *_ecv_null tool = Tool::GetToolList(); tool != nullptr; tool = tool->Next())
 			{
-				AppendFloatArray(response, nullptr, tool->HeaterCount(), [tool](unsigned int n) noexcept { return tool->GetToolHeaterStandbyTemperature(n); }, 1);
+				AppendFloatArray(response, nullptr, tool->HeaterCount(), [tool](unsigned int n) noexcept -> float { return tool->GetToolHeaterStandbyTemperature(n); }, 1);
 				if (tool->Next() != nullptr)
 				{
 					response->cat(',');
@@ -1486,22 +1486,22 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 		{
 			response->cat(",\"tools\":[");
 			ReadLocker lock(Tool::toolListLock);
-			for (const Tool *tool = Tool::GetToolList(); tool != nullptr; tool = tool->Next())
+			for (const Tool *_ecv_null tool = Tool::GetToolList(); tool != nullptr; tool = tool->Next())
 			{
 				// Number
 				response->catf("{\"number\":%d,", tool->Number());
 
 				// Heaters
-				AppendIntArray(response, "heaters", tool->HeaterCount(), [tool](size_t heater) noexcept { return tool->GetHeater(heater); });
+				AppendIntArray(response, "heaters", tool->HeaterCount(), [tool](size_t heater) noexcept -> int { return tool->GetHeater(heater); });
 
 				// Extruder drives
 				response->cat(',');
-				AppendIntArray(response, "drives", tool->DriveCount(), [tool](size_t drive) noexcept { return tool->GetDrive(drive); });
+				AppendIntArray(response, "drives", tool->DriveCount(), [tool](size_t drive) noexcept -> int { return tool->GetDrive(drive); });
 
 				// Axis mapping
 				response->cat(",\"axisMap\":[[");
 				tool->GetXAxisMap().Iterate
-					([response](unsigned int xi, unsigned int count) noexcept
+					([response](unsigned int xi, unsigned int count) noexcept -> void
 						{
 							if (count != 0)
 							{
@@ -1513,7 +1513,7 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 				response->cat("],[");
 
 				tool->GetYAxisMap().Iterate
-					([response](unsigned int yi, unsigned int count) noexcept
+					([response](unsigned int yi, unsigned int count) noexcept -> void
 						{
 							if (count != 0)
 							{
@@ -1541,7 +1541,7 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 
 				// Offsets
 				response->cat(',');
-				AppendFloatArray(response, "offsets", numVisibleAxes, [tool](size_t axis) noexcept { return tool->GetOffset(axis); }, 2);
+				AppendFloatArray(response, "offsets", numVisibleAxes, [tool](size_t axis) noexcept -> float { return tool->GetOffset(axis); }, 2);
 
   				// Do we have any more tools?
 				response->cat((tool->Next() != nullptr) ? "}," : "}");
@@ -1582,7 +1582,7 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 		response->catf(",\"currentLayerTime\":%.1f,", (double)(printMonitor->GetCurrentLayerTime()));
 
 		// Raw Extruder Positions
-		AppendFloatArray(response, "extrRaw", Tool::GetExtrudersInUse(), [this](size_t extruder) noexcept { return gCodes->GetRawExtruderTotalByDrive(extruder); }, 1);
+		AppendFloatArray(response, "extrRaw", Tool::GetExtrudersInUse(), [this](size_t extruder) noexcept -> float { return gCodes->GetRawExtruderTotalByDrive(extruder); }, 1);
 
 		// Fraction of file printed
 		response->catf(",\"fractionPrinted\":%.1f", (double)((printMonitor->IsPrinting()) ? (printMonitor->FractionOfFilePrinted() * 100.0) : 0.0));
@@ -1608,10 +1608,10 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source) con
 	return response;
 }
 
-OutputBuffer *RepRap::GetConfigResponse() noexcept
+OutputBuffer *_ecv_null RepRap::GetConfigResponse() noexcept
 {
 	// We need some resources to return a valid config response...
-	OutputBuffer *response;
+	OutputBuffer *_ecv_null response;
 	if (!OutputBuffer::Allocate(response))
 	{
 		return nullptr;
@@ -1621,29 +1621,29 @@ OutputBuffer *RepRap::GetConfigResponse() noexcept
 
 	// Axis minima
 	response->copy('{');
-	AppendFloatArray(response, "axisMins", numAxes, [this](size_t axis) noexcept { return move->AxisMinimum(axis); }, 2);
+	AppendFloatArray(response, "axisMins", numAxes, [this](size_t axis) noexcept -> float { return move->AxisMinimum(axis); }, 2);
 
 	// Axis maxima
 	response->cat(',');
-	AppendFloatArray(response, "axisMaxes", numAxes, [this](size_t axis) noexcept { return move->AxisMaximum(axis); }, 2);
+	AppendFloatArray(response, "axisMaxes", numAxes, [this](size_t axis) noexcept -> float { return move->AxisMaximum(axis); }, 2);
 
 	// Accelerations
 	response->cat(',');
-	AppendFloatArray(response, "accelerations", MaxAxesPlusExtruders, [this](size_t drive) noexcept { return InverseConvertAcceleration(move->NormalAcceleration(drive)); }, 2);
+	AppendFloatArray(response, "accelerations", MaxAxesPlusExtruders, [this](size_t drive) noexcept -> float { return InverseConvertAcceleration(move->NormalAcceleration(drive)); }, 2);
 
 	// Motor currents
 	response->cat(',');
-	AppendIntArray(response, "currents", MaxAxesPlusExtruders, [this](size_t drive) noexcept { return (int)move->GetMotorCurrent(drive, 906); });
+	AppendIntArray(response, "currents", MaxAxesPlusExtruders, [this](size_t drive) noexcept -> int { return (int)move->GetMotorCurrent(drive, 906); });
 
 	// Firmware details
 	response->catf(",\"firmwareElectronics\":\"%.s", platform->GetElectronicsString());
 #ifdef DUET_NG
-	const char* expansionName = DuetExpansion::GetExpansionBoardName();
+	const char *_ecv_array _ecv_null expansionName = DuetExpansion::GetExpansionBoardName();
 	if (expansionName != nullptr)
 	{
 		response->catf(" + %.s", expansionName);
 	}
-	const char* additionalExpansionName = DuetExpansion::GetAdditionalExpansionBoardName();
+	const char *_ecv_array _ecv_null additionalExpansionName = DuetExpansion::GetAdditionalExpansionBoardName();
 	if (additionalExpansionName != nullptr)
 	{
 		response->catf(" + %.s", additionalExpansionName);
@@ -1676,11 +1676,11 @@ OutputBuffer *RepRap::GetConfigResponse() noexcept
 	response->catf(",\"idleTimeout\":%.1f,", (double)(move->IdleTimeout()));
 
 	// Maximum jerk
-	AppendFloatArray(response, "minFeedrates", MaxAxesPlusExtruders, [this](size_t drive) noexcept { return InverseConvertSpeedToMmPerSec(move->GetMaxInstantDv(drive)); }, 2);
+	AppendFloatArray(response, "minFeedrates", MaxAxesPlusExtruders, [this](size_t drive) noexcept -> float { return InverseConvertSpeedToMmPerSec(move->GetMaxInstantDv(drive)); }, 2);
 
 	// Maximum feedrates
 	response->cat(',');
-	AppendFloatArray(response, "maxFeedrates", MaxAxesPlusExtruders, [this](size_t drive) noexcept { return InverseConvertSpeedToMmPerSec(move->MaxFeedrate(drive)); }, 2);
+	AppendFloatArray(response, "maxFeedrates", MaxAxesPlusExtruders, [this](size_t drive) noexcept -> float { return InverseConvertSpeedToMmPerSec(move->MaxFeedrate(drive)); }, 2);
 
 	// Config file is no longer included, because we can use rr_configfile or M503 instead
 	response->cat('}');
@@ -1694,10 +1694,10 @@ OutputBuffer *RepRap::GetConfigResponse() noexcept
 // Type 2 is the M105 S2 response, which is like the new-style status response but some fields are omitted.
 // Type 3 is the M105 S3 response, which is like the M105 S2 response except that static values are also included.
 // 'seq' is the response sequence number, if it is not -1 and we have a different sequence number then we send the gcode response
-OutputBuffer *RepRap::GetLegacyStatusResponse(uint8_t type, int seq) const noexcept
+OutputBuffer *_ecv_null RepRap::GetLegacyStatusResponse(uint8_t type, int seq) const noexcept
 {
 	// Need something to write to...
-	OutputBuffer *response;
+	OutputBuffer *_ecv_null response;
 	if (!OutputBuffer::Allocate(response))
 	{
 		// Should never happen
@@ -1744,7 +1744,7 @@ OutputBuffer *RepRap::GetLegacyStatusResponse(uint8_t type, int seq) const noexc
 	response->cat(']');
 
 	// Send the heater statuses (0=off, 1=standby, 2=active, 3 = fault)
-	response->catf(",\"hstat\":[%u", (bedHeater == -1) ? 0 : heat->GetStatus(bedHeater).ToBaseType());
+	response->catf(",\"hstat\":[%u", (bedHeater == -1) ? 0u : (unsigned int)heat->GetStatus(bedHeater).ToBaseType());
 	for (size_t heater = DefaultE0Heater; heater < Tool::GetToolHeatersInUse(); heater++)
 	{
 		response->catf(",%u", heat->GetStatus(heater).ToBaseType());
@@ -1754,15 +1754,15 @@ OutputBuffer *RepRap::GetLegacyStatusResponse(uint8_t type, int seq) const noexc
 	// User coordinates
 	const size_t numVisibleAxes = gCodes->GetVisibleAxes();
 	const MovementState& ms = gCodes->GetPrimaryMovementState();
-	AppendFloatArray(response, "pos", numVisibleAxes, [this, &ms](size_t axis) noexcept { return gCodes->GetUserCoordinate(ms, axis); }, 3);
+	AppendFloatArray(response, "pos", numVisibleAxes, [this, &ms](size_t axis) noexcept -> float { return gCodes->GetUserCoordinate(ms, axis); }, 3);
 
 	// Machine coordinates
 	response->cat(',');
-	AppendFloatArray(response, "machine", numVisibleAxes, [this, &ms](size_t axis) noexcept { return ms.LiveMachineCoordinate(axis); }, 3);
+	AppendFloatArray(response, "machine", numVisibleAxes, [this, &ms](size_t axis) noexcept -> float { return ms.LiveMachineCoordinate(axis); }, 3);
 
 	// Send the speed and extruder override factors
 	response->catf(",\"sfactor\":%.1f,", (double)(gCodes->GetPrimarySpeedFactor() * 100.0));
-	AppendFloatArray(response, "efactor", Tool::GetExtrudersInUse(), [this](size_t extruder) noexcept { return gCodes->GetExtrusionFactor(extruder) * 100.0; }, 1);
+	AppendFloatArray(response, "efactor", Tool::GetExtrudersInUse(), [this](size_t extruder) noexcept -> float { return gCodes->GetExtrusionFactor(extruder) * 100.0; }, 1);
 
 	// Send the baby stepping offset
 	response->catf(",\"babystep\":%.03f", (double)(gCodes->GetTotalBabyStepOffset(Z_AXIS)));
@@ -1795,11 +1795,11 @@ OutputBuffer *RepRap::GetLegacyStatusResponse(uint8_t type, int seq) const noexc
 	response->cat("],");
 
 	// Send fan RPM value(s)
-	AppendIntArray(response, "fanRPM", fansManager->GetNumFansToReport(), [this](size_t fan) { return (int)fansManager->GetFanRPM(fan);});
+	AppendIntArray(response, "fanRPM", fansManager->GetNumFansToReport(), [this](size_t fan) noexcept ->int { return (int)fansManager->GetFanRPM(fan);});
 
 	// Send the home state. To keep the messages short, we send 1 for homed and 0 for not homed, instead of true and false.
 	response->cat(',');
-	AppendIntArray(response, "homed", numVisibleAxes, [this](size_t axis) noexcept { return (gCodes->IsAxisHomed(axis)) ? 1 : 0; });
+	AppendIntArray(response, "homed", numVisibleAxes, [this](size_t axis) noexcept -> int { return (gCodes->IsAxisHomed(axis)) ? 1 : 0; });
 
 	if (printMonitor->IsPrinting())
 	{
@@ -1857,10 +1857,10 @@ OutputBuffer *RepRap::GetLegacyStatusResponse(uint8_t type, int seq) const noexc
 
 // Get the list of files in the specified directory in JSON format. PanelDue uses this one, so include a newline at the end.
 // If flagDirs is true then we prefix each directory with a * character.
-OutputBuffer *RepRap::GetFilesResponse(const char *dir, unsigned int startAt, int maxItems, bool flagsDirs) noexcept
+OutputBuffer *_ecv_null RepRap::GetFilesResponse(const char *_ecv_array dir, unsigned int startAt, int maxItems, bool flagsDirs) noexcept
 {
 	// Need something to write to...
-	OutputBuffer *response;
+	OutputBuffer *_ecv_null response;
 	if (!OutputBuffer::Allocate(response))
 	{
 		return nullptr;
@@ -1897,7 +1897,7 @@ OutputBuffer *RepRap::GetFilesResponse(const char *dir, unsigned int startAt, in
 				if (filesFound >= startAt)
 				{
 					// Make sure we can end this response properly
-					if (bytesLeft < fileInfo.fileName.strlen() * 2 + 20 || (maxItems > 0 && filesFound >= startAt + maxItems))
+					if (bytesLeft < fileInfo.fileName.strlen() * 2 + 20 || (maxItems > 0 && filesFound >= startAt + (unsigned int)maxItems))
 					{
 						// No more space available or about to exceed the number of requested items - stop here
 						MassStorage::AbandonFindNext();
@@ -1936,7 +1936,7 @@ OutputBuffer *RepRap::GetFilesResponse(const char *dir, unsigned int startAt, in
 }
 
 // Get a JSON-style filelist including file types and sizes
-OutputBuffer *RepRap::GetFilelistResponse(const char *dir, unsigned int startAt, int maxItems) noexcept
+OutputBuffer *_ecv_null RepRap::GetFilelistResponse(const char *_ecv_array dir, unsigned int startAt, int maxItems) noexcept
 {
 	// Need something to write to...
 	OutputBuffer *response;
@@ -1975,7 +1975,7 @@ OutputBuffer *RepRap::GetFilelistResponse(const char *dir, unsigned int startAt,
 				if (filesFound >= startAt)
 				{
 					// Make sure we can end this response properly
-					if (bytesLeft < fileInfo.fileName.strlen() * 2 + 50 || (maxItems > 0 && filesFound >= startAt + maxItems))
+					if (bytesLeft < fileInfo.fileName.strlen() * 2 + 50 || (maxItems > 0 && filesFound >= startAt + (unsigned int)maxItems))
 					{
 						// No more space available or about to exceed the number of requested items - stop here
 						MassStorage::AbandonFindNext();
@@ -2036,7 +2036,7 @@ OutputBuffer *RepRap::GetFilelistResponse(const char *dir, unsigned int startAt,
 // 'offset' is the offset into the file of the thumbnail data that the caller wants.
 // It is up to the caller to get the offset right, however we must fail gracefully if the caller passes us a bad offset.
 // The offset should always be either the initial offset or the 'next' value passed in a previous call, so it should always be the start of a line.
-OutputBuffer *RepRap::GetThumbnailResponse(const char *filename, FilePosition offset, bool forM31point1) noexcept
+OutputBuffer *_ecv_null RepRap::GetThumbnailResponse(const char *_ecv_array filename, FilePosition offset, bool forM31point1) noexcept
 {
 	constexpr unsigned int ThumbnailMaxDataSizeM31 = 1024;			// small enough for PanelDue to buffer
 	constexpr unsigned int ThumbnailMaxDataSizeRr = 2600;			// about two TCP messages
@@ -2044,7 +2044,7 @@ OutputBuffer *RepRap::GetThumbnailResponse(const char *filename, FilePosition of
 	static_assert(ThumbnailMaxDataSizeRr % 4 == 0, "must be a multiple of to guarantee base64 alignment");
 
 	// Need something to write to...
-	OutputBuffer *response;
+	OutputBuffer *_ecv_null response;
 	if (!OutputBuffer::Allocate(response))
 	{
 		return nullptr;
@@ -2056,7 +2056,7 @@ OutputBuffer *RepRap::GetThumbnailResponse(const char *filename, FilePosition of
 	}
 	response->catf("{\"fileName\":\"%.s\",\"offset\":%" PRIu32 ",", filename, offset);
 
-	FileStore *const f = platform->OpenFile(Platform::GetGCodeDir(), filename, OpenMode::read);
+	FileStore *_ecv_null const f = platform->OpenFile(Platform::GetGCodeDir(), filename, OpenMode::read);
 	unsigned int err = 0;
 	if (f != nullptr)
 	{
@@ -2080,7 +2080,7 @@ OutputBuffer *RepRap::GetThumbnailResponse(const char *filename, FilePosition of
 				const FilePosition posOld = offset;
 				offset = f->Position();
 
-				const char *p = lineBuffer;
+				const char *_ecv_array p = lineBuffer;
 
 				// Skip white spaces
 				while ((p - lineBuffer <= charsRead) && (*p == ';' || *p == ' ' || *p == '\t'))
@@ -2105,7 +2105,7 @@ OutputBuffer *RepRap::GetThumbnailResponse(const char *filename, FilePosition of
 				}
 
 				const unsigned int charsSkipped = p - lineBuffer;
-				const unsigned int charsAvailable = charsRead - charsSkipped;
+				const unsigned int charsAvailable = (unsigned int)charsRead - charsSkipped;
 				unsigned int charsWrittenFromThisLine;
 				if (charsAvailable <= thumbnailMaxDataSize - charsWrittenThisCall)
 				{
@@ -2141,7 +2141,7 @@ OutputBuffer *RepRap::GetThumbnailResponse(const char *filename, FilePosition of
 
 // Get information for the specified file, or the currently printing file (if 'filename' is null or empty), in JSON format
 // Return GCodeResult::Warning if the file doesn't exist, else GCodeResult::ok or GCodeResult::notFinished
-GCodeResult RepRap::GetFileInfoResponse(const char *filename, OutputBuffer *_ecv_null &response, bool quitEarly) noexcept
+GCodeResult RepRap::GetFileInfoResponse(const char *_ecv_array _ecv_null filename, OutputBuffer *_ecv_null &response, bool quitEarly) noexcept
 {
 	const bool specificFile = (filename != nullptr && filename[0] != 0);
 	GCodeFileInfo info;
@@ -2245,7 +2245,7 @@ GCodeResult RepRap::GetFileInfoResponse(const char *filename, OutputBuffer *_ecv
 
 // Helper functions to write JSON arrays
 // Append float array using the specified number of decimal places
-void RepRap::AppendFloatArray(OutputBuffer *buf, const char *name, size_t numValues, function_ref_noexcept<float(size_t) noexcept> func, unsigned int numDecimalDigits) noexcept
+void RepRap::AppendFloatArray(OutputBuffer *buf, const char *_ecv_array _ecv_null name, size_t numValues, function_ref_noexcept<float(size_t) noexcept> func, unsigned int numDecimalDigits) noexcept
 {
 	if (name != nullptr)
 	{
@@ -2264,7 +2264,7 @@ void RepRap::AppendFloatArray(OutputBuffer *buf, const char *name, size_t numVal
 	buf->cat(']');
 }
 
-void RepRap::AppendIntArray(OutputBuffer *buf, const char *name, size_t numValues, function_ref_noexcept<int(size_t) noexcept> func) noexcept
+void RepRap::AppendIntArray(OutputBuffer *buf, const char *_ecv_array _ecv_null name, size_t numValues, function_ref_noexcept<int(size_t) noexcept> func) noexcept
 {
 	if (name != nullptr)
 	{
@@ -2282,7 +2282,7 @@ void RepRap::AppendIntArray(OutputBuffer *buf, const char *name, size_t numValue
 	buf->cat(']');
 }
 
-void RepRap::AppendStringArray(OutputBuffer *buf, const char *name, size_t numValues, function_ref_noexcept<const char *(size_t) noexcept> func) noexcept
+void RepRap::AppendStringArray(OutputBuffer *buf, const char *_ecv_array _ecv_null name, size_t numValues, function_ref_noexcept<const char *(size_t) noexcept> func) noexcept
 {
 	if (name != nullptr)
 	{
@@ -2302,7 +2302,7 @@ void RepRap::AppendStringArray(OutputBuffer *buf, const char *name, size_t numVa
 
 // Return a query into the object model, or return nullptr if no buffer available
 // We append a newline to help PanelDue resync after receiving corrupt or incomplete data. DWC ignores it.
-OutputBuffer *RepRap::GetModelResponse(const GCodeBuffer *_ecv_null gb, const char *key, const char *flags) const THROWS(GCodeException)
+OutputBuffer *RepRap::GetModelResponse(const GCodeBuffer *_ecv_null gb, const char *_ecv_array _ecv_null key, const char *_ecv_array _ecv_null flags) const THROWS(GCodeException)
 {
 	OutputBuffer *outBuf;
 	if (OutputBuffer::Allocate(outBuf))
@@ -2320,7 +2320,7 @@ OutputBuffer *RepRap::GetModelResponse(const GCodeBuffer *_ecv_null gb, const ch
 
 		try
 		{
-			reprap.ReportAsJson(gb, outBuf, key, flags, wantArrayLength);
+			ReportAsJson(gb, outBuf, key, flags, wantArrayLength);
 			outBuf->cat("}\n");
 			if (outBuf->HadOverflow())
 			{
@@ -2373,7 +2373,7 @@ void RepRap::Beep(unsigned int freq, unsigned int ms) noexcept
 }
 
 // Send a short message. We send it to both PanelDue and the web interface.
-void RepRap::SetMessage(const char *msg) noexcept
+void RepRap::SetMessage(const char *_ecv_array msg) noexcept
 {
 	message.copy(msg);
 #if SUPPORT_DIRECT_LCD
@@ -2422,9 +2422,9 @@ char RepRap::GetStatusCharacter() const noexcept
 	return "CFHODRSAMPTBI"[GetStatusIndex()];
 }
 
-const char* RepRap::GetStatusString() const noexcept
+const char *_ecv_array RepRap::GetStatusString() const noexcept
 {
-	static const char *const StatusStrings[] =
+	static const char *_ecv_array const StatusStrings[] =
 	{
 		"starting",
 		"updating",
@@ -2448,24 +2448,24 @@ bool RepRap::NoPasswordSet() const noexcept
 	return (password[0] == 0 || CheckPassword(DEFAULT_PASSWORD));
 }
 
-bool RepRap::CheckPassword(const char *pw) const noexcept
+bool RepRap::CheckPassword(const char *_ecv_array pw) const noexcept
 {
 	String<RepRapPasswordLength> copiedPassword;
 	copiedPassword.CopyAndPad(pw);
 	return password.ConstantTimeEquals(copiedPassword);
 }
 
-void RepRap::SetPassword(const char* pw) noexcept
+void RepRap::SetPassword(const char *_ecv_array pw) noexcept
 {
 	password.CopyAndPad(pw);
 }
 
-const char *RepRap::GetName() const noexcept
+const char *_ecv_array RepRap::GetName() const noexcept
 {
 	return myName.c_str();
 }
 
-void RepRap::SetName(const char* nm) noexcept
+void RepRap::SetName(const char *_ecv_array nm) noexcept
 {
 	myName.copy(nm);
 
@@ -2487,7 +2487,7 @@ void RepRap::SetName(const char* nm) noexcept
 bool RepRap::CheckFirmwareUpdatePrerequisites(const StringRef& reply, const StringRef& filenameRef) noexcept
 {
 #if HAS_MASS_STORAGE
-	FileStore * const firmwareFile = platform->OpenFile(FIRMWARE_DIRECTORY, filenameRef.IsEmpty() ? IAP_FIRMWARE_FILE : filenameRef.c_str(), OpenMode::read);
+	FileStore *_ecv_null const firmwareFile = platform->OpenFile(FIRMWARE_DIRECTORY, filenameRef.IsEmpty() ? IAP_FIRMWARE_FILE : filenameRef.c_str(), OpenMode::read);
 	if (firmwareFile == nullptr)
 	{
 		String<MaxFilenameLength> firmwareBinaryLocation;
@@ -2517,7 +2517,7 @@ bool RepRap::CheckFirmwareUpdatePrerequisites(const StringRef& reply, const Stri
 		firmwareFile->Seek(32) &&
 #endif
 
-	firmwareFile->Read(reinterpret_cast<char*>(&firstDword), sizeof(firstDword)) == (int)sizeof(firstDword);
+	firmwareFile->Read(reinterpret_cast<char *_ecv_array>(&firstDword), sizeof(firstDword)) == (int)sizeof(firstDword);
 	firmwareFile->Close();
 	if (!ok || firstDword !=
 #if STM32
@@ -2547,7 +2547,7 @@ bool RepRap::CheckFirmwareUpdatePrerequisites(const StringRef& reply, const Stri
 #if HAS_MASS_STORAGE
 
 // Update the firmware. Prerequisites should be checked before calling this.
-void RepRap::UpdateFirmware(const char *iapFilename, const char *iapParam) noexcept
+void RepRap::UpdateFirmware(const char *_ecv_array iapFilename, const char *_ecv_array iapParam) noexcept
 {
 #if STM32
 	// Check to see if we should use a built in IAP
@@ -2564,7 +2564,7 @@ void RepRap::UpdateFirmware(const char *iapFilename, const char *iapParam) noexc
 	}
 # endif
 #endif
-	FileStore * iapFile = platform->OpenFile(FIRMWARE_DIRECTORY, iapFilename, OpenMode::read);
+	FileStore *_ecv_null iapFile = platform->OpenFile(FIRMWARE_DIRECTORY, iapFilename, OpenMode::read);
 	if (iapFile == nullptr)
 	{
 		iapFile = platform->OpenFile(DEFAULT_SYS_DIR, iapFilename, OpenMode::read);
@@ -2579,7 +2579,7 @@ void RepRap::UpdateFirmware(const char *iapFilename, const char *iapParam) noexc
 	PrepareToLoadIap();
 
 	// Use RAM-based IAP
-	iapFile->Read(reinterpret_cast<char *>(IAP_IMAGE_START), iapFile->Length());
+	iapFile->Read(reinterpret_cast<char *_ecv_array>(IAP_IMAGE_START), iapFile->Length());
 	iapFile->Close();
 	StartIap(iapParam);
 }
@@ -2649,7 +2649,7 @@ void RepRap::PrepareToLoadIap() noexcept
 #endif
 }
 
-void RepRap::StartIap(const char *filename) noexcept
+void RepRap::StartIap(const char *_ecv_array _ecv_null filename) noexcept
 {
 	// Disable all interrupts, then reallocate the vector table and program entry point to the new IAP binary
 	// This does essentially what the Atmel AT02333 paper suggests (see 3.2.2 ff)
@@ -2659,20 +2659,21 @@ void RepRap::StartIap(const char *filename) noexcept
 	IrqDisable();
 	for (size_t i = 0; i < 8; i++)
 	{
-		NVIC->ICER[i] = 0xFFFFFFFF;					// Disable IRQs
-		NVIC->ICPR[i] = 0xFFFFFFFF;					// Clear pending IRQs
+		NVIC->ICER[i] = 0xFFFFFFFFu;				// Disable IRQs
+		NVIC->ICPR[i] = 0xFFFFFFFFu;				// Clear pending IRQs
 	}
 
 	// Disable all PIO IRQs, because the core assumes they are all disabled when setting them up
+
 #if !SAME5x && !STM32
-	PIOA->PIO_IDR = 0xFFFFFFFF;
-	PIOB->PIO_IDR = 0xFFFFFFFF;
-	PIOC->PIO_IDR = 0xFFFFFFFF;
+	PIOA->PIO_IDR = 0xFFFFFFFFu;
+	PIOB->PIO_IDR = 0xFFFFFFFFu;
+	PIOC->PIO_IDR = 0xFFFFFFFFu;
 # ifdef PIOD
-	PIOD->PIO_IDR = 0xFFFFFFFF;
+	PIOD->PIO_IDR = 0xFFFFFFFFu;
 # endif
 # ifdef ID_PIOE
-	PIOE->PIO_IDR = 0xFFFFFFFF;
+	PIOE->PIO_IDR = 0xFFFFFFFFu;
 # endif
 #endif
 
@@ -2704,7 +2705,7 @@ void RepRap::StartIap(const char *filename) noexcept
 # endif
 		   )
 		{
-			strcpy(reinterpret_cast<char*>(topOfStack), firmwareFileLocation.c_str());
+			strcpy(reinterpret_cast<char *_ecv_array>(topOfStack), firmwareFileLocation.c_str());
 		}
 	}
 #endif
@@ -2781,7 +2782,7 @@ void RepRap::StartIap(const char *filename) noexcept
 }
 
 // Report an internal error
-void RepRap::ReportInternalError(const char *file, const char *func, int line) const noexcept
+void RepRap::ReportInternalError(const char *_ecv_array file, const char *_ecv_array func, int line) const noexcept
 {
 	platform->MessageF(ErrorMessage, "Internal Error in %s at %s(%d)\n", func, file, line);
 }
@@ -2794,14 +2795,14 @@ void RepRap::ReportInternalError(const char *file, const char *func, int line) c
 // sParam = 2 Display the message box with an OK button, wait for acknowledgement (waiting is set up by the caller)
 // sParam = 3 As for 2 but also display a Cancel button
 // Returns the message box sequence number
-uint32_t RepRap::SendAlert(MessageType mt, const char *_ecv_array message, const char *_ecv_array title, int sParam, float tParam, AxesBitmap controls, MessageBoxLimits *_ecv_null limits) noexcept
+uint32_t RepRap::SendAlert(MessageType mt, const char *_ecv_array msg, const char *_ecv_array title, int sParam, float tParam, AxesBitmap controls, MessageBoxLimits *_ecv_null limits) noexcept
 {
 	WriteLocker lock(MessageBox::mboxLock);
 
 	uint32_t seq;
-	if ((mt & (HttpMessage | AuxMessage | LcdMessage | BinaryCodeReplyFlag)) != 0)
+	if (((uint32_t)mt & ((uint32_t)HttpMessage | (uint32_t)AuxMessage | (uint32_t)LcdMessage | (uint32_t)BinaryCodeReplyFlag)) != 0)
 	{
-		seq = MessageBox::Create(message, title, sParam, tParam, controls, limits);
+		seq = MessageBox::Create(msg, title, sParam, tParam, controls, limits);
 		StateUpdated();
 	}
 	else
@@ -2809,16 +2810,16 @@ uint32_t RepRap::SendAlert(MessageType mt, const char *_ecv_array message, const
 		seq = 0;
 	}
 
-	platform->MessageF(MessageType::LogInfo, "M291: - %s - %s", (strlen(title) > 0 ? title : "[no title]"), message);
+	platform->MessageF(MessageType::LogInfo, "M291: - %s - %s", (strlen(title) > 0 ? title : "[no title]"), msg);
 
-	mt = (MessageType)(mt & (UsbMessage | TelnetMessage | Aux2Message));
-	if (mt != 0)
+	mt = (MessageType)((uint32_t)mt & ((uint32_t)UsbMessage | (uint32_t)TelnetMessage | (uint32_t)Aux2Message));
+	if (mt != NoDestinationMessage)
 	{
 		if (strlen(title) > 0)
 		{
 			platform->MessageF(mt, "- %s -\n", title);
 		}
-		platform->MessageF(mt, "%s\n", message);
+		platform->MessageF(mt, "%s\n", msg);
 		if (sParam == 2)
 		{
 			platform->Message(mt, "Send M292 to continue\n");
@@ -2831,13 +2832,13 @@ uint32_t RepRap::SendAlert(MessageType mt, const char *_ecv_array message, const
 	return seq;
 }
 
-void RepRap::SendSimpleAlert(MessageType mt, const char *_ecv_array message, const char *_ecv_array title) noexcept
+void RepRap::SendSimpleAlert(MessageType mt, const char *_ecv_array msg, const char *_ecv_array title) noexcept
 {
-	(void)SendAlert(mt, message, title, 1, 0.0, AxesBitmap());
+	(void)SendAlert(mt, msg, title, 1, 0.0, AxesBitmap());
 }
 
 // Save the first error message generated while running config.g
-void RepRap::SaveConfigError(const char *filename, unsigned int lineNumber, const char *errorMessage) noexcept
+void RepRap::SaveConfigError(const char *_ecv_array filename, unsigned int lineNumber, const char *_ecv_array errorMessage) noexcept
 {
 	if (configErrorMessage.IsNull())
 	{
@@ -2911,7 +2912,7 @@ void RepRap::LogDebugMessage(const char *_ecv_array msg, uint32_t data0, uint32_
 
 #if SUPPORT_DIRECT_LCD
 
-const char *RepRap::GetLatestMessage(uint16_t& sequence) const noexcept
+const char *_ecv_array RepRap::GetLatestMessage(uint16_t& sequence) const noexcept
 {
 	sequence = messageSequence;
 	return message.c_str();

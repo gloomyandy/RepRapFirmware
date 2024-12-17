@@ -83,7 +83,7 @@ RotatingMagnetFilamentMonitor::RotatingMagnetFilamentMonitor(unsigned int drv, u
 	  minMovementAllowed(DefaultMinMovementAllowed), maxMovementAllowed(DefaultMaxMovementAllowed),
 	  minimumExtrusionCheckLength(DefaultMinimumExtrusionCheckLength), checkNonPrintingMoves(false)
 {
-	switchOpenMask = (monitorType == 4) ? TypeMagnetV1SwitchOpenMask : 0;
+	switchOpenMask = (monitorType == 4) ? TypeMagnetV1SwitchOpenMask : 0u;
 	Init();
 }
 

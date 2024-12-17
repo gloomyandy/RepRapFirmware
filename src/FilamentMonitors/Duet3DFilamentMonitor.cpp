@@ -31,8 +31,8 @@
 // Otherwise the table will be allocated in RAM instead of flash, which wastes too much RAM.
 
 // Macro to build a standard lambda function that includes the necessary type conversions
-#define OBJECT_MODEL_FUNC(...)					OBJECT_MODEL_FUNC_BODY(Duet3DFilamentMonitor, __VA_ARGS__)
-#define OBJECT_MODEL_FUNC_IF(_condition, ...)	OBJECT_MODEL_FUNC_IF_BODY(Duet3DFilamentMonitor, _condition, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC(...)					OBJECT_MODEL_FUNC_BODY_NONLEAF(Duet3DFilamentMonitor, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC_IF(_condition, ...)	OBJECT_MODEL_FUNC_IF_BODY_NONLEAF(Duet3DFilamentMonitor, _condition, __VA_ARGS__)
 
 constexpr ObjectModelTableEntry Duet3DFilamentMonitor::objectModelTable[] =
 {

@@ -69,7 +69,7 @@ LinearDeltaKinematics::LinearDeltaKinematics() noexcept : RoundBedKinematics(Kin
 }
 
 // Return the name of the current kinematics
-const char *LinearDeltaKinematics::GetName(bool forStatusReport) const noexcept
+const char *_ecv_array LinearDeltaKinematics::GetName(bool forStatusReport) const noexcept
 {
 	return (forStatusReport) ? "delta" : "Linear delta";
 }

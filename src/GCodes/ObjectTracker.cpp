@@ -9,32 +9,35 @@
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <Platform/RepRap.h>
 #include "GCodes.h"
+#include <limits>
 
 // Object model tables and functions for class ObjectTracker
 
 // Macro to build a standard lambda function that includes the necessary type conversions
-#define OBJECT_MODEL_FUNC(...) OBJECT_MODEL_FUNC_BODY(ObjectTracker, __VA_ARGS__)
-#define OBJECT_MODEL_FUNC_IF(_condition,...) OBJECT_MODEL_FUNC_IF_BODY(ObjectTracker, _condition,__VA_ARGS__)
+#define OBJECT_MODEL_FUNC(...)					OBJECT_MODEL_FUNC_BODY(ObjectTracker, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC_IF(_condition,...)	OBJECT_MODEL_FUNC_IF_BODY(ObjectTracker, _condition,__VA_ARGS__)
+#define OBJECT_MODEL_ARRAY_COUNT(_value)		OBJECT_MODEL_ARRAY_COUNT_BODY(ObjectTracker, _value)
+#define OBJECT_MODEL_ARRAY_VALUE(...)			OBJECT_MODEL_ARRAY_VALUE_BODY(ObjectTracker, __VA_ARGS__)
 
 constexpr ObjectModelArrayTableEntry ObjectTracker::objectModelArrayTable[] =
 {
 	// 0. objects
 	{
 		nullptr,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return min<size_t>(((const ObjectTracker*)self)->numObjects, MaxTrackedObjects); },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(self, 1); }
+		OBJECT_MODEL_ARRAY_COUNT(min<size_t>(self->numObjects, MaxTrackedObjects)),
+		OBJECT_MODEL_ARRAY_VALUE(self, 1)
 	},
 	// 1. X limits
 	{
 		nullptr,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return 2; },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ((const ObjectTracker*)self)->GetXCoordinate(context); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(2),
+		OBJECT_MODEL_ARRAY_VALUE(self->GetXCoordinate(context)),
 	},
 	// 2. Y limits
 	{
 		nullptr,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return 2; },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ((const ObjectTracker*)self)->GetYCoordinate(context); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(2),
+		OBJECT_MODEL_ARRAY_VALUE(self->GetYCoordinate(context))
 	}
 };
 

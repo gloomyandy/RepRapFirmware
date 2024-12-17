@@ -294,11 +294,6 @@ ExpressionValue::ExpressionValue(ExpressionValue&& other) noexcept
 	other.type = (uint32_t)TypeCode::None;
 }
 
-ExpressionValue::~ExpressionValue()
-{
-	Release();
-}
-
 ExpressionValue& ExpressionValue::operator=(const ExpressionValue& other) noexcept
 {
 	if (&other != this)

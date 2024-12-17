@@ -49,8 +49,8 @@
 //
 //*****************************************************************************
 
-#include "Networking/W5500Ethernet/Wiznet/Ethernet/socketlib.h"
-#include "Networking/W5500Ethernet/Wiznet/Internet/DHCP/dhcp.h"
+#include <Networking/W5500Ethernet/Wiznet/Ethernet/socketlib.h>
+#include "dhcp.h"
 #include <cstring>
 
 /* If you want to display debug & processing message, Define _DHCP_DEBUG_ in dhcp.h */
@@ -61,7 +61,7 @@
 extern "C" void debugPrintf(const char *fmt, ...);
 # define DEBUG_PRINTF(...) debugPrintf(__VA_ARGS__)
 #else
-# define DEBUG_PRINTF(_fmt, ...)
+# define DEBUG_PRINTF(...)
 #endif
 
 /* DHCP state machine. */

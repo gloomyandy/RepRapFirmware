@@ -16,7 +16,6 @@
 #include <GCodes/GCodes.h>
 #include <ObjectModel/GlobalVariables.h>
 #include <GCodes/GCodeBuffer/ExpressionParser.h>
-#include <array>
 
 constexpr FileInfoParser::ParseTableEntry FileInfoParser::parseTable[] =
 {
@@ -93,7 +92,7 @@ constexpr bool FileInfoParser::TableIsCorrectlyOrdered() noexcept
 		}
 	}
 	return true;
-};
+}
 
 static_assert(FileInfoParser::TableIsCorrectlyOrdered());
 

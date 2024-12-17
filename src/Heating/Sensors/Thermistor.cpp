@@ -10,6 +10,7 @@
 #include <Platform/Platform.h>
 #include <Platform/RepRap.h>
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
+#include <limits>
 
 #if HAS_VREF_MONITOR
 # include <GCodes/GCodes.h>
@@ -219,7 +220,7 @@ void Thermistor::InitPort() noexcept
 }
 
 // Configure the temperature sensor
-GCodeResult Thermistor::Configure(GCodeBuffer& gb, const StringRef& reply, bool& changed)
+GCodeResult Thermistor::Configure(GCodeBuffer& gb, const StringRef& reply, bool& changed) THROWS(GCodeException)
 {
 	if (!ConfigurePort(gb, reply, PinAccess::readAnalog, changed))
 	{

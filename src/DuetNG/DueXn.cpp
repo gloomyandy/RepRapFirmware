@@ -357,7 +357,7 @@ uint16_t DuetExpansion::DiagnosticRead() noexcept
 	return retval;
 }
 
-void DuetExpansion::Exit()
+void DuetExpansion::Exit() noexcept
 {
 	detachInterrupt(DueX_INT);
 	if (dueXTask != nullptr)

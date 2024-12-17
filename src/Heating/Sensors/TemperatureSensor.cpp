@@ -17,7 +17,7 @@
 // Otherwise the table will be allocated in RAM instead of flash, which wastes too much RAM.
 
 // Macro to build a standard lambda function that includes the necessary type conversions
-#define OBJECT_MODEL_FUNC(...) OBJECT_MODEL_FUNC_BODY(TemperatureSensor, __VA_ARGS__)
+#define OBJECT_MODEL_FUNC(...) OBJECT_MODEL_FUNC_BODY_NONLEAF(TemperatureSensor, __VA_ARGS__)
 
 constexpr ObjectModelTableEntry TemperatureSensor::objectModelTable[] =
 {
@@ -208,7 +208,7 @@ TemperatureSensor *_ecv_from _ecv_null TemperatureSensor::Create(unsigned int se
 #endif
 	{
 		ts = nullptr;
-		for (const SensorTypeDescriptor *desc = SensorTypeDescriptor::GetRoot(); desc != nullptr; desc = desc->GetNext())
+		for (const SensorTypeDescriptor *_ecv_null desc = SensorTypeDescriptor::GetRoot(); desc != nullptr; desc = desc->GetNext())
 		{
 			if (ReducedStringEquals(typeName, desc->GetName()))
 			{
