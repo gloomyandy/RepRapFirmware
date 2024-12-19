@@ -352,7 +352,7 @@ bool FileInfoParser::ReadAndProcessFileChunk(bool isParsingHeader, bool& reached
 
 	if (!reachedEnd && pEnd < bufLim)
 	{
-		scanStartOffset = GCodeOverlapSize - (bufLim - pEnd);
+		scanStartOffset = GCodeOverlapSize - (size_t)(bufLim - pEnd);
 		memcpy(buf + scanStartOffset, pEnd, bufLim - pEnd);
 	}
 	else
@@ -361,7 +361,7 @@ bool FileInfoParser::ReadAndProcessFileChunk(bool isParsingHeader, bool& reached
 	}
 	if (reachedEnd && isParsingHeader)
 	{
-		parsedFileInfo.headerSize = bufferStartFilePosition + (pEnd - buf);
+		parsedFileInfo.headerSize = bufferStartFilePosition + (size_t)(pEnd - buf);
 	}
 
 	return true;
@@ -424,7 +424,7 @@ const char *_ecv_array FileInfoParser::ScanBuffer(const char *_ecv_array pStart,
 						// There is definitely a line terminator, and as line terminators do not occur in key phrases, it is safe to call StringStartsWith
 						// Do a binary search of the table on the first character
 						size_t low = 0, high = ARRAY_SIZE(parseTable);
-						const char c1 = toupper(c);
+						const char c1 = (char)toupper(c);
 						do
 						{
 							size_t mid = (low + high)/2;
@@ -464,7 +464,7 @@ const char *_ecv_array FileInfoParser::ScanBuffer(const char *_ecv_array pStart,
 												++argStart;
 											} while ((c2 = *argStart) == ' ' || c2 == '\t' || c2 == ':' || c2 == '=');
 										}
-										(this->*pte.FileInfoParser::ParseTableEntry::func)(kStart, argStart, lineEnd, pte.param);
+										(this->*pte.func)(kStart, argStart, lineEnd, pte.param);
 										break;
 									}
 									++mid;
@@ -578,7 +578,7 @@ void FileInfoParser::ProcessGeneratedBy(const char *_ecv_array k, const char *_e
 // Process the layer height
 void FileInfoParser::ProcessLayerHeight(const char *_ecv_array k, const char *_ecv_array p, const char *_ecv_array lineEnd, int param) noexcept
 {
-	const char *tailPtr;
+	const char *_ecv_array tailPtr;
 	const float val = SafeStrtof(p, &tailPtr);
 	if (tailPtr != p && !std::isnan(val) && !std::isinf(val))	// if we found and converted a number
 	{
@@ -588,7 +588,7 @@ void FileInfoParser::ProcessLayerHeight(const char *_ecv_array k, const char *_e
 
 void FileInfoParser::ProcessObjectHeight(const char *_ecv_array k, const char *_ecv_array p, const char *_ecv_array lineEnd, int param) noexcept
 {
-	const char *tailPtr;
+	const char *_ecv_array tailPtr;
 	const float val = SafeStrtof(p, &tailPtr);
 	if (tailPtr != p && !std::isnan(val) && !std::isinf(val))	// if we found and converted a number
 	{
@@ -746,7 +746,7 @@ void FileInfoParser::ProcessThumbnail(const char *_ecv_array k, const char *_ecv
 			const uint32_t size = StrToU32(p, &npos);
 			if (size >= 10)
 			{
-				const FilePosition offset = bufferStartFilePosition + (lineEnd + 1 - buf);
+				const FilePosition offset = bufferStartFilePosition + (size_t)(lineEnd + 1 - buf);
 				GCodeFileInfo::ThumbnailInfo& th = parsedFileInfo.thumbnails[numThumbnailsStored++];
 				th.width = w;
 				th.height = h;
@@ -894,24 +894,21 @@ void FileInfoParser::ProcessCustomInfo(const char *_ecv_array k, const char *_ec
 		{
 			++p;
 			ExpressionParser parser(nullptr, p, lineEnd);
-			ExpressionValue ev;
 			try
 			{
-				ev = parser.Parse(true);
+				ExpressionValue ev = parser.Parse(true);					// may throw
+				auto vset = vars->GetForWriting();
+				if (vset->Lookup(kStart, nameLength, false) == nullptr)
+				{
+					vset->InsertNew(kStart, nameLength, ev, 0);				// may throw
+				}
 			}
 			catch (GCodeException& exc)
 			{
-				ev.SetNull(nullptr);
 				if (reprap.Debug(Module::PrintMonitor))
 				{
 					exc.DebugPrint();
 				}
-			}
-
-			auto vset = vars->GetForWriting();
-			if (vset->Lookup(kStart, nameLength, false) == nullptr)
-			{
-				vset->InsertNew(kStart, nameLength, ev, 0);
 			}
 		}
 	}
