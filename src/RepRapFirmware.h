@@ -754,16 +754,16 @@ const NvicPriority NvicPrioritySpi = 7;				// SPI is used for network transfers 
 const NvicPriority NvicPriorityWatchdog = 0;		// the secondary watchdog has the highest priority
 const NvicPriority NvicPriorityTimerPWM = 1;		// Run PWM timing as high as we can to avoid jitter
 const NvicPriority NvicPriorityDriversSerialTMC = 5;// STM uses a software UART, make this a very high priority
-const NvicPriority NvicPriorityAuxUart = 8;			// UART is next
-const NvicPriority NvicPrioritySDIO = 9;
-const NvicPriority NvicPriorityCan = 6;				// CAN interface
-const NvicPriority NvicPriorityPins = 6;			// priority for GPIO pin interrupts - filament sensors must be higher than step
-const NvicPriority NvicPriorityStep = 7;			// step interrupt is next highest, it can preempt most other interrupts
-const NvicPriority NvicPriorityWiFiUart = 8;		// UART used to receive debug data from the WiFi module
-const NvicPriority NvicPriorityUSB = 8;				// USB interrupt
-const NvicPriority NvicPriorityHSMCI = 8;			// HSMCI command complete interrupt
-const NvicPriority NvicPrioritySpi = 8;				// SPI is used for network transfers on Duet WiFi/Duet vEthernet
-const NvicPriority NvicPriorityTwi = 9;				// TWI is used to read endstop and other inputs on the DueXn
+const NvicPriority NvicPriorityAuxUart = 6;			// UART is next
+const NvicPriority NvicPriorityWiFiUart = 6;		// UART used to receive debug data from the WiFi module
+const NvicPriority NvicPrioritySDIO = 10;
+const NvicPriority NvicPriorityCan = 7;				// CAN interface
+const NvicPriority NvicPriorityPins = 7;			// priority for GPIO pin interrupts - filament sensors must be higher than step
+const NvicPriority NvicPriorityStep = 8;			// step interrupt is next highest, it can preempt most other interrupts
+const NvicPriority NvicPriorityUSB = 9;				// USB interrupt
+const NvicPriority NvicPriorityHSMCI = 9;			// HSMCI command complete interrupt
+const NvicPriority NvicPrioritySpi = 9;				// SPI is used for network transfers on Duet WiFi/Duet vEthernet
+const NvicPriority NvicPriorityTwi = 10;			// TWI is used to read endstop and other inputs on the DueXn
 #else
 // Use priority 2 or lower for interrupts where low latency is critical and FreeRTOS calls are not needed.
 # if SAM4E
