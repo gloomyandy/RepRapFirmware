@@ -1125,7 +1125,7 @@ void RepRap::Tick() noexcept
 				move->EmergencyDisableDrivers();
 
 				// Save the stack of the stuck task when we get stuck in a spin loop
-				const uint32_t *relevantStackPtr;
+				const uint32_t *_ecv_array relevantStackPtr;
 				const TaskHandle relevantTask = (heatTaskStuck) ? Heat::GetHeatTask() : Tasks::GetMainTask();
 				if (relevantTask == RTOSIface::GetCurrentTask())
 				{

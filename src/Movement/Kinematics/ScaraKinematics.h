@@ -33,7 +33,7 @@ public:
 	bool CartesianToMotorSteps(const float machinePos[], const float stepsPerMm[], size_t numVisibleAxes, size_t numTotalAxes, int32_t motorPos[], bool isCoordinated) const noexcept override;
 	void MotorStepsToCartesian(const int32_t motorPos[], const float stepsPerMm[], size_t numVisibleAxes, size_t numTotalAxes, float machinePos[]) const noexcept override;
 	bool IsReachable(float axesCoords[MaxAxes], AxesBitmap axes) const noexcept override;
-	LimitPositionResult LimitPosition(float finalCoords[], const float * null initialCoords, size_t numAxes, AxesBitmap axesToLimit, bool isCoordinated, bool applyM208Limits) const noexcept override;
+	LimitPositionResult LimitPosition(float finalCoords[], const float *_ecv_array null initialCoords, size_t numAxes, AxesBitmap axesToLimit, bool isCoordinated, bool applyM208Limits) const noexcept override;
 	void GetAssumedInitialPosition(size_t numAxes, float positions[]) const noexcept override;
 	HomingMode GetHomingMode() const noexcept override { return HomingMode::homeIndividualMotors; }
 	AxesBitmap AxesAssumedHomed(AxesBitmap g92Axes) const noexcept override;
@@ -54,8 +54,8 @@ private:
 	static constexpr float DefaultMinPsi = -135.0;					// minimum distal joint angle
 	static constexpr float DefaultMaxPsi = 135.0;					// maximum distal joint angle
 
-	static constexpr const char *HomeProximalFileName = "homeproximal.g";
-	static constexpr const char *HomeDistalFileName = "homedistal.g";
+	static constexpr const char *_ecv_array HomeProximalFileName = "homeproximal.g";
+	static constexpr const char *_ecv_array HomeDistalFileName = "homedistal.g";
 
 	void Recalc() noexcept;
 	bool CalculateThetaAndPsi(const float machinePos[], bool isCoordinated, float& theta, float& psi, bool& armMode) const noexcept;

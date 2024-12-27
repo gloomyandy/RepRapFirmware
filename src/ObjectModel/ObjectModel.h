@@ -216,7 +216,7 @@ class ObjectExplorationContext
 {
 public:
 	// Constructor used when reporting the OM as JSON
-	ObjectExplorationContext(const GCodeBuffer *_ecv_null gbp, bool wal, const char *reportFlags, unsigned int initialMaxDepth, size_t initialBufferOffset) noexcept;
+	ObjectExplorationContext(const GCodeBuffer *_ecv_null gbp, bool wal, const char *_ecv_array reportFlags, unsigned int initialMaxDepth, size_t initialBufferOffset) noexcept;
 
 	// Constructor used when evaluating expressions
 	ObjectExplorationContext(const GCodeBuffer *_ecv_null gbp, bool wal, bool wex, int p_line, int p_col) noexcept;
@@ -251,8 +251,8 @@ public:
 	bool ObsoleteFieldQueried() const noexcept { return obsoleteFieldQueried; }
 	void SetObsoleteFieldQueried() noexcept { obsoleteFieldQueried = true; }
 
-	GCodeException ConstructParseException(const char *msg) const noexcept;
-	GCodeException ConstructParseException(const char *msg, const char *sparam) const noexcept;
+	GCodeException ConstructParseException(const char *_ecv_array msg) const noexcept;
+	GCodeException ConstructParseException(const char *_ecv_array msg, const char *_ecv_array sparam) const noexcept;
 	void CheckStack(uint32_t calledFunctionStackUsage) const THROWS(GCodeException);
 
 private:
@@ -329,7 +329,7 @@ protected:
 	ExpressionValue GetObjectValue(ObjectExplorationContext& context, const ObjectModelClassDescriptor *classDescriptor, const ExpressionValue& val, const char *_ecv_array idString) const THROWS(GCodeException);
 
 	// Get the object model table entry for the current level object in the query
-	const ObjectModelTableEntry *FindObjectModelTableEntry(const ObjectModelClassDescriptor *classDescriptor, uint8_t tableNumber, const char *_ecv_array idString) const noexcept;
+	const ObjectModelTableEntry *_ecv_null FindObjectModelTableEntry(const ObjectModelClassDescriptor *classDescriptor, uint8_t tableNumber, const char *_ecv_array idString) const noexcept;
 
 	virtual const ObjectModelClassDescriptor *_ecv_null GetObjectModelClassDescriptor() const noexcept = 0;
 
@@ -418,7 +418,7 @@ public:
 	// Member functions. These must all be 'const'.
 
 	// Return true if this object table entry matches a filter or query
-	bool Matches(const char *filter, const ObjectExplorationContext& context) const noexcept;
+	bool Matches(const char *_ecv_array filter, const ObjectExplorationContext& context) const noexcept;
 
 	// Check if the queried field is obsolete
 	bool IsObsolete() const noexcept { return ((uint8_t)flags & (uint8_t)ObjectModelEntryFlags::obsolete) != 0; }
@@ -430,7 +430,7 @@ public:
 	const char *_ecv_array  GetName() const noexcept { return name; }
 
 	// Compare the name of this field with the filter string that we are trying to match
-	int IdCompare(const char *id) const noexcept;
+	int IdCompare(const char *_ecv_array id) const noexcept;
 
 	// Return true if a section of the OMT is ordered
 	static inline constexpr bool IsOrdered(const ObjectModelTableEntry *_ecv_array omt, size_t len) noexcept

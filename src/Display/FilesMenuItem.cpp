@@ -54,7 +54,7 @@ void FilesMenuItem::EnterDirectory() noexcept
 
 uint8_t FilesMenuItem::GetDirectoryNesting() const noexcept
 {
-	const char *pcPathElement = currentDirectory.c_str();
+	const char *_ecv_array pcPathElement = currentDirectory.c_str();
 	uint8_t uNumSlashes = 0;
 
 	while ('\0' != *pcPathElement)
@@ -85,7 +85,7 @@ void FilesMenuItem::Draw(Lcd &_ecv_from lcd, PixelNumber rightMargin, bool highl
 	{
 		sdCardState = notStarted;
 	}
-	else if (!drawn || itemChanged || highlighted != highlight)
+	else if (!drawn || itemChanged || (bool)highlighted != highlight)
 	{
 		switch (sdCardState)
 		{

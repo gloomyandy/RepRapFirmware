@@ -20,7 +20,7 @@
 #include <GCodes/GCodes.h>
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 
-const char * const Kinematics::HomeAllFileName = "homeall.g";
+const char *_ecv_array const Kinematics::HomeAllFileName = "homeall.g";
 
 #if SUPPORT_OBJECT_MODEL
 

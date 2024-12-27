@@ -63,7 +63,7 @@ struct RawMove
 	// GCC normally calls memcpy to assign objects of this class. We can do better because we know they must be 32-bit aligned.
 	RawMove &_ecv_from operator=(const RawMove& arg) noexcept
 	{
-		memcpyu32(reinterpret_cast<uint32_t *_ecv_array>(this), reinterpret_cast<const uint32_t *_ecv_array>(&arg), sizeof(*this)/4);
+		memcpyu32(reinterpret_cast<uint32_t *_ecv_array>(this), reinterpret_cast<const uint32_t *_ecv_array>(&arg), sizeof(RawMove)/4);
 		return *this;
 	}
 };
@@ -84,7 +84,7 @@ constexpr size_t ResumeObjectRestorePointNumber = NumVisibleRestorePoints + 1;
 
 // Details of a move that are needed only by GCodes
 // CAUTION: segmentsLeft should ONLY be changed from 0 to not 0 by calling NewMoveAvailable()!
-class MovementState : public RawMove
+class MovementState final : public RawMove
 {
 public:
 

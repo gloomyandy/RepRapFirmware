@@ -320,7 +320,7 @@ GCodeResult Heater::StartAutoTune(GCodeBuffer& gb, const StringRef& reply, FansB
 	return rslt;
 }
 
-const char *const Heater::TuningPhaseText[] =
+const char *_ecv_array const Heater::TuningPhaseText[] =
 {
 	"checking temperature is stable",
 	"heating up",

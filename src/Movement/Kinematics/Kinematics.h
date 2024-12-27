@@ -13,7 +13,7 @@
 
 template<class T> class MathMatrix;
 
-inline floatc_t fcsquare(floatc_t a)
+inline floatc_t fcsquare(floatc_t a) noexcept
 {
 	return a * a;
 }
@@ -220,7 +220,7 @@ protected:
 	static void PrintVector(const char *_ecv_array s, const float *_ecv_array v, size_t numElems) noexcept;
 	static void PrintVector(const char *_ecv_array s, const double *_ecv_array v, size_t numElems) noexcept;
 
-	static const char * const HomeAllFileName;
+	static const char *_ecv_array const HomeAllFileName;
 
 private:
 	// Default values for those kinematics that always use segmentation

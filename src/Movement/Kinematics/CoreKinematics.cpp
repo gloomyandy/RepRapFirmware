@@ -408,7 +408,7 @@ void CoreKinematics::OnHomingSwitchTriggered(size_t axis, bool highEnd, const fl
 
 // Limit the speed and acceleration of a move to values that the mechanics can handle
 // The speeds along individual Cartesian axes have already been limited before this is called, so we need only be concerned with shared motors
-void CoreKinematics::LimitSpeedAndAcceleration(DDA& dda, const float* normalisedDirectionVector, size_t numVisibleAxes, bool continuousRotationShortcut) const noexcept
+void CoreKinematics::LimitSpeedAndAcceleration(DDA& dda, const float *_ecv_array normalisedDirectionVector, size_t numVisibleAxes, bool continuousRotationShortcut) const noexcept
 {
 	// For each shared motor, calculate how much of the total move it contributes
 	float motorMovements[MaxAxes];

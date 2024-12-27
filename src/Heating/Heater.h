@@ -198,7 +198,7 @@ protected:
 	static void ClearCounters() noexcept;
 
 private:
-	static const char* const TuningPhaseText[];
+	static const char *_ecv_array const TuningPhaseText[];
 
 	FopDt model;
 	unsigned int heaterNumber;

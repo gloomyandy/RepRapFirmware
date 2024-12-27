@@ -23,7 +23,7 @@ void ButtonMenuItem::CorePrint(Lcd &_ecv_from lcd) noexcept
 
 void ButtonMenuItem::Draw(Lcd &_ecv_from lcd, PixelNumber rightMargin, bool highlight) noexcept
 {
-	if (IsVisible() && (itemChanged || !drawn || highlight != highlighted) && column < lcd.GetNumCols())
+	if (IsVisible() && (itemChanged || !drawn || highlight != (bool)highlighted) && column < lcd.GetNumCols())
 	{
 		highlighted = highlight;
 		PrintAligned(lcd, rightMargin);
