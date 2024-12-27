@@ -235,6 +235,8 @@ enum dhcp_mode
    NETINFO_DHCP           ///< Dynamic IP configruation from a DHCP sever
 };
 
+#if 0		// this is unused and the declaration of 'dns' clashes with a declaration in an enclosing scope
+
 /**
  * @ingroup DATA_TYPE
  *  Network Information for WIZCHIP
@@ -248,6 +250,8 @@ struct wiz_NetInfo
    uint8_t dns[4];  ///< DNS server IP Address
    dhcp_mode dhcp;  ///< 1 - Static, 2 - DHCP
 };
+
+#endif
 
 /**
  * @ingroup DATA_TYPE

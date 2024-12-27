@@ -78,7 +78,7 @@ unsigned int FilesMenuItem::uListingEntries() const noexcept
 	return bInSubdirectory() ? (1 + m_uHardItemsInDirectory) : m_uHardItemsInDirectory;
 }
 
-void FilesMenuItem::Draw(Lcd& lcd, PixelNumber rightMargin, bool highlight) noexcept
+void FilesMenuItem::Draw(Lcd &_ecv_from lcd, PixelNumber rightMargin, bool highlight) noexcept
 {
 	// The 'highlight' parameter is not used to highlight this item, but it is still used to tell whether this item is selected or not
 	if (!IsVisible())
@@ -141,7 +141,7 @@ void FilesMenuItem::Draw(Lcd& lcd, PixelNumber rightMargin, bool highlight) noex
 	}
 }
 
-void FilesMenuItem::ListFiles(Lcd& lcd, PixelNumber rightMargin, bool highlight) noexcept
+void FilesMenuItem::ListFiles(Lcd &_ecv_from lcd, PixelNumber rightMargin, bool highlight) noexcept
 {
 	lcd.SetFont(fontNumber);
 	lcd.SetRightMargin(rightMargin);
@@ -389,7 +389,7 @@ bool FilesMenuItem::Select(const StringRef& cmd) noexcept
 	return false;
 }
 
-void FilesMenuItem::UpdateWidthAndHeight(Lcd& lcd) noexcept
+void FilesMenuItem::UpdateWidthAndHeight(Lcd &_ecv_from lcd) noexcept
 {
 	// The width is always set for a FilesMenuItem so we just need to determine the height
 	if (height == 0)

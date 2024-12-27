@@ -23,7 +23,7 @@ ValueMenuItem::ValueMenuItem(PixelNumber r, PixelNumber c, PixelNumber w, Alignm
 {
 }
 
-void ValueMenuItem::CorePrint(Lcd& lcd) noexcept
+void ValueMenuItem::CorePrint(Lcd &_ecv_from lcd) noexcept
 {
 	if (adjustable)
 	{
@@ -51,7 +51,7 @@ void ValueMenuItem::CorePrint(Lcd& lcd) noexcept
 	}
 }
 
-void ValueMenuItem::Draw(Lcd& lcd, PixelNumber rightMargin, bool highlight) noexcept
+void ValueMenuItem::Draw(Lcd &_ecv_from lcd, PixelNumber rightMargin, bool highlight) noexcept
 {
 	if (IsVisible())
 	{
@@ -208,7 +208,7 @@ bool ValueMenuItem::Select(const StringRef& cmd) noexcept
 	return false;
 }
 
-void ValueMenuItem::UpdateWidthAndHeight(Lcd& lcd) noexcept
+void ValueMenuItem::UpdateWidthAndHeight(Lcd &_ecv_from lcd) noexcept
 {
 	// The width is always set for a ValueMenuItem so we just need to determine the height
 	if (height == 0)

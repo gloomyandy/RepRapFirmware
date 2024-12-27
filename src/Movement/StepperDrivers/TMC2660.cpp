@@ -428,7 +428,6 @@ static TmcDriverState * volatile currentDriver = nullptr;	// volatile because th
 
 // Initialise the state of the driver and its CS pin
 void TmcDriverState::Init(uint32_t driverNumber, uint32_t p_pin) noexcept
-pre(!driversPowered)
 {
 	axisNumber = driverNumber;												// assume straight through mapping at initialisation
 	driverBit = DriversBitmap::MakeFromBits(driverNumber);

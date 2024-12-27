@@ -366,7 +366,7 @@ unsigned int HeightMap::GetMinimumSegments(float deltaAxis0, float deltaAxis1) c
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE
 
 // Save the grid to file returning true if an error occurred
-bool HeightMap::SaveToFile(FileStore *f, const char *fname, float zOffset) noexcept
+bool HeightMap::SaveToFile(FileStore *f, const char *_ecv_array fname, float zOffset) noexcept
 {
 	String<StringLength500> bufferSpace;
 	const StringRef buf = bufferSpace.GetRef();
@@ -430,7 +430,7 @@ bool HeightMap::SaveToFile(FileStore *f, const char *fname, float zOffset) noexc
 }
 
 // Load the grid from file, returning true if an error occurred with the error reason appended to the buffer
-bool HeightMap::LoadFromFile(FileStore *f, const char *fname, const StringRef& r
+bool HeightMap::LoadFromFile(FileStore *f, const char *_ecv_array fname, const StringRef& r
 # if SUPPORT_PROBE_POINTS_FILE
 							, bool isPointsFile
 # endif

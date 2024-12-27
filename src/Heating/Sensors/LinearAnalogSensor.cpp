@@ -37,7 +37,7 @@ LinearAnalogSensor::LinearAnalogSensor(unsigned int sensorNum) noexcept
 	CalcDerivedParameters();
 }
 
-GCodeResult LinearAnalogSensor::Configure(GCodeBuffer& gb, const StringRef& reply, bool& changed)
+GCodeResult LinearAnalogSensor::Configure(GCodeBuffer& gb, const StringRef& reply, bool& changed) THROWS(GCodeException)
 {
 	if (!ConfigurePort(gb, reply, PinAccess::readAnalog, changed))
 	{

@@ -77,7 +77,7 @@ NamedEnum(Function, unsigned int, abs, acos, asin, atan, atan2, ceil, cos, datet
 const char *const InvalidExistsMessage = "invalid 'exists' expression";
 const char *const ExpectedNonNegativeIntMessage = "expected non-negative integer";
 
-ExpressionParser::ExpressionParser(const GCodeBuffer *_ecv_null p_gb, const char *text, const char *textLimit, int p_column) noexcept
+ExpressionParser::ExpressionParser(const GCodeBuffer *_ecv_null p_gb, const char *_ecv_array text, const char *_ecv_array textLimit, int p_column) noexcept
 	: currentp(text), startp(text), endp(textLimit), gb(p_gb), column(p_column)
 {
 }
@@ -1966,7 +1966,7 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 }
 
 // Parse a string to a DateTime
-time_t ExpressionParser::ParseDateTime(const char *s) const THROWS(GCodeException)
+time_t ExpressionParser::ParseDateTime(const char *_ecv_array s) const THROWS(GCodeException)
 {
 	tm timeInfo;
 	if (SafeStrptime(s, "%Y-%m-%dT%H:%M:%S", &timeInfo) == nullptr)
@@ -2155,17 +2155,17 @@ int ExpressionParser::GetColumn() const noexcept
 	return (column < 0) ? column : (currentp - startp) + column;
 }
 
-void ExpressionParser::ThrowParseException(const char *str) const THROWS(GCodeException)
+void ExpressionParser::ThrowParseException(const char *_ecv_array str) const THROWS(GCodeException)
 {
 	throw GCodeException(gb, GetColumn(), str);
 }
 
-void ExpressionParser::ThrowParseException(const char *str, const char *param) const THROWS(GCodeException)
+void ExpressionParser::ThrowParseException(const char *_ecv_array str, const char *_ecv_array param) const THROWS(GCodeException)
 {
 	throw GCodeException(gb, GetColumn(), str, param);
 }
 
-void ExpressionParser::ThrowParseException(const char *str, uint32_t param) const THROWS(GCodeException)
+void ExpressionParser::ThrowParseException(const char *_ecv_array str, uint32_t param) const THROWS(GCodeException)
 {
 	throw GCodeException(gb, GetColumn(), str, param);
 }

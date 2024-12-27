@@ -53,7 +53,7 @@ ScaraKinematics::ScaraKinematics() noexcept
 }
 
 // Return the name of the current kinematics
-const char *ScaraKinematics::GetName(bool forStatusReport) const noexcept
+const char *_ecv_array ScaraKinematics::GetName(bool forStatusReport) const noexcept
 {
 	return "Scara";
 }

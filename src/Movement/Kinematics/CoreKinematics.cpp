@@ -237,7 +237,7 @@ CoreKinematics::CoreKinematics(KinematicsType k) noexcept : ZLeadscrewKinematics
 }
 
 // Return the name of the current kinematics
-const char* CoreKinematics::GetName(bool forStatusReport) const noexcept
+const char *_ecv_array CoreKinematics::GetName(bool forStatusReport) const noexcept
 {
 	// This reports the original kinematics that was requested. It doesn't allow for the matrix having been patched to change the kinematics.
 	switch (GetKinematicsType())

@@ -16,7 +16,7 @@
 
 namespace SmartDrivers
 {
-	void Init(const Pin[NumDirectDrivers], size_t numTmcDrivers) noexcept
+	void Init(const Pin driverSelectPins[NumDirectDrivers], size_t numTmcDrivers) noexcept
 		pre(numTmcDrivers <= NumDirectDrivers);
 	void Exit() noexcept;
 	void Spin(bool powered) noexcept;

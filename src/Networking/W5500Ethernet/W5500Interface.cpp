@@ -379,9 +379,9 @@ void W5500Interface::Diagnostics(MessageType mtype) noexcept
 	// Report the socket states
 	String<StringLength50> str;
 	str.copy("Socket states:");
-	for (const Socket* skt : sockets)
+	for (const W5500Socket* skt : sockets)
 	{
-		str.catf(" %u", (unsigned int)skt->GetState());
+		str.catf(" %u", skt->GetState());
 	}
 	str.cat('\n');
 	platform.Message(mtype, str.c_str());
@@ -416,7 +416,7 @@ int W5500Interface::EnableState() const noexcept
 	return (GetState() == NetworkState::disabled) ? 0 : 1;
 }
 
-void W5500Interface::UpdateHostname(const char *name) noexcept /*override*/
+void W5500Interface::UpdateHostname(const char *_ecv_array name) noexcept /*override*/
 {
 	mdnsResponder->Announce();
 }

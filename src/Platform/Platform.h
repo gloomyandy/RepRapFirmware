@@ -284,7 +284,7 @@ public:
     bool IsAuxEnabled(size_t auxNumber) const noexcept;				// Any device on the AUX line?
     bool IsAuxRaw(size_t auxNumber) const noexcept;
 #if SUPPORT_PANELDUE_FLASH
-	PanelDueUpdater* GetPanelDueUpdater() noexcept { return panelDueUpdater; }
+	PanelDueUpdater *_ecv_null GetPanelDueUpdater() noexcept { return panelDueUpdater; }
 	void InitPanelDueUpdater() noexcept;
 #endif
 

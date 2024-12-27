@@ -53,7 +53,7 @@ bool GpOutputPort::IsUnused() const noexcept
 		!port.IsValid();
 }
 
-GCodeResult GpOutputPort::Configure(uint32_t gpioNumber, bool isServo, GCodeBuffer &gb, const StringRef &reply)
+GCodeResult GpOutputPort::Configure(uint32_t gpioNumber, bool isServo, GCodeBuffer &gb, const StringRef &reply) THROWS(GCodeException)
 {
 	PwmFrequency freq = 0;
 	const bool seenFreq = gb.Seen('Q');

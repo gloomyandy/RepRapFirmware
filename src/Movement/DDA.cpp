@@ -146,7 +146,7 @@ void PrepParams::DebugPrint() const noexcept
 					(double)totalDistance, (double)accelDistance, (double)decelStartDistance, (double)acceleration, (double)deceleration, accelClocks, steadyClocks, decelClocks);
 }
 
-DDA::DDA(DDA* n) noexcept : next(n), prev(nullptr), state(empty)
+DDA::DDA(DDA *_ecv_null n) noexcept : next(n), prev(nullptr), state(empty)
 {
 	tool = nullptr;						// needed in case we pause before any moves have been done
 
@@ -168,7 +168,6 @@ DDA::DDA(DDA* n) noexcept : next(n), prev(nullptr), state(empty)
 
 // Return the number of clocks this DDA still needs to execute.
 uint32_t DDA::GetTimeLeft() const noexcept
-pre(state == provisional || state == committed)
 {
 	switch (state)
 	{
@@ -1144,7 +1143,6 @@ void DDA::SetDriveCoordinate(int32_t a, size_t drive) noexcept
 
 // Get a Cartesian end coordinate from this move
 float DDA::GetEndCoordinate(size_t drive, bool disableMotorMapping) noexcept
-pre(disableDeltaMapping || drive < MaxAxes)
 {
 	if (disableMotorMapping)
 	{

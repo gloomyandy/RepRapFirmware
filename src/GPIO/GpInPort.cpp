@@ -60,7 +60,7 @@ bool GpInputPort::IsUnused() const noexcept
 		!port.IsValid();
 }
 
-GCodeResult GpInputPort::Configure(uint32_t gpinNumber, GCodeBuffer &gb, const StringRef &reply)
+GCodeResult GpInputPort::Configure(uint32_t gpinNumber, GCodeBuffer &gb, const StringRef &reply) THROWS(GCodeException)
 {
 	if (gb.Seen('C'))
 	{
