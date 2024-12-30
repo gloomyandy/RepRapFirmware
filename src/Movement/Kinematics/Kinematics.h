@@ -183,6 +183,7 @@ public:
 	// Return a bitmap of the motors that cause movement of a particular axis or tower.
 	// This is used to determine which motors we need to enable to move a particular axis, and which motors to monitor for stall detect homing.
 	// For example, the first XY move made by a CoreXY machine may be a diagonal move, and it's important to enable the non-moving motor too.
+	// Also used to determine which logical drives to allocate when allocating an axis or extruder.
 	virtual LogicalDrivesBitmap GetControllingDrives(size_t axis, bool forHoming) const noexcept;
 
 	// Override this virtual destructor if your constructor allocates any dynamic memory

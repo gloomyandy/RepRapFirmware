@@ -427,7 +427,7 @@ void CoreKinematics::LimitSpeedAndAcceleration(DDA& dda, const float *_ecv_array
 // Usually it is just the corresponding motor (hence this default implementation), but CoreXY and similar kinematics move multiple motors to home an individual axis.
 LogicalDrivesBitmap CoreKinematics::GetControllingDrives(size_t axis, bool forHoming) const noexcept
 {
-	return controllingDrivers[axis];
+	return (axis < MaxAxes) ? controllingDrivers[axis] : LogicalDrivesBitmap::MakeFromBits(axis);
 }
 
 // End
