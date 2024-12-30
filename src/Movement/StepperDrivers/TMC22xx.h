@@ -70,7 +70,7 @@ namespace SmartDrivers
 	StandardDriverStatus GetStatus(size_t driver, bool accumulated, bool clearAccumulated) noexcept;
 #if HAS_STALL_DETECT
 	EndstopValidationResult CheckStallDetectionEnabled(size_t driver, float speed) noexcept;
-	DriversBitmap GetStalledDrivers(DriversBitmap driversOfInterest) noexcept;
+	LocalDriversBitmap GetStalledDrivers(LocalDriversBitmap driversOfInterest) noexcept;
 #endif
 #if SUPPORT_TMC2240 && !(SUPPORT_TMC2208 || SUPPORT_TMC2209)
 	float GetDriverTemperature(size_t driver) noexcept;

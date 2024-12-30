@@ -318,9 +318,9 @@ void Move::SetXYCompensation(bool xyCompensation)
 // Calibrate or set the bed equation after probing, returning true if an error occurred
 // sParam is the value of the S parameter in the G30 command that provoked this call.
 // Caller already owns the GCode movement lock.
-bool Move::FinishedBedProbing(int sParam, const StringRef& reply) noexcept
+GCodeResult Move::FinishedBedProbing(MovementState& ms, int sParam, const StringRef& reply) noexcept
 {
-	bool error = false;
+	GCodeResult ret = GCodeResult::ok;
 	const size_t numPoints = probePoints.NumberOfProbePoints();
 
 	if (sParam < 0)
@@ -331,7 +331,7 @@ bool Move::FinishedBedProbing(int sParam, const StringRef& reply) noexcept
 	else if (numPoints < (size_t)sParam)
 	{
 		reply.printf("Bed calibration : %d factor calibration requested but only %d points provided\n", sParam, numPoints);
-		error = true;
+		ret = GCodeResult::error;
 	}
 	else
 	{
@@ -348,23 +348,26 @@ bool Move::FinishedBedProbing(int sParam, const StringRef& reply) noexcept
 		if (!probePoints.GoodProbePoints(numPoints))
 		{
 			reply.copy("Compensation or calibration cancelled due to probing errors");
-			error = true;
+			ret = GCodeResult::error;
 		}
 		else if (kinematics->SupportsAutoCalibration())
 		{
-			error = kinematics->DoAutoCalibration(sParam, probePoints, reply);
+			if (kinematics->DoAutoCalibration(ms, sParam, probePoints, reply))
+			{
+				ret = GCodeResult::error;
+			}
 		}
 		else
 		{
 			reply.copy("This kinematics does not support auto-calibration");
-			error = true;
+			ret = GCodeResult::error;
 		}
 	}
 
 	// Clear out the Z heights so that we don't re-use old points.
 	// This allows us to use different numbers of probe point on different occasions.
 	probePoints.ClearProbeHeights();
-	return error;
+	return ret;
 }
 
 // End

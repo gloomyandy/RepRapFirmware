@@ -45,8 +45,7 @@ enum class KinematicsType : uint8_t
 enum class HomingMode : uint8_t
 {
 	homeCartesianAxes,
-	homeIndividualMotors,
-	homeSharedMotors
+	homeIndividualDrives,
 };
 
 // Return value from limitPosition
@@ -112,7 +111,7 @@ public:
 
 	// Perform auto calibration. Override this implementation in kinematics that support it. Caller already owns the movement lock.
 	// Return true if an error occurred.
-	virtual bool DoAutoCalibration(size_t numFactors, const RandomProbePointSet& probePoints, const StringRef& reply) noexcept
+	virtual bool DoAutoCalibration(MovementState& ms, size_t numFactors, const RandomProbePointSet& probePoints, const StringRef& reply) noexcept
 	pre(SupportsAutoCalibration()) { return false; }
 
 	// Set the default parameters that are changed by auto calibration back to their defaults.
@@ -153,12 +152,11 @@ public:
 	// that some additional axes should be considered not homed.
 	virtual AxesBitmap GetHomingFileName(AxesBitmap toBeHomed, AxesBitmap alreadyHomed, size_t numVisibleAxes, const StringRef& filename) const noexcept;
 
-	// This function is called from the step ISR when an endstop switch is triggered during homing after stopping just one motor or all motors.
-	// Take the action needed to define the current position, normally by calling dda.SetDriveCoordinate() and return false.
-	virtual void OnHomingSwitchTriggered(size_t axis, bool highEnd, const float stepsPerMm[], DDA& dda) const noexcept = 0;
-
 	// Return the type of homing we do
 	virtual HomingMode GetHomingMode() const noexcept = 0;
+
+	// Return the position of a drive at which the homing switch is triggered. Only called if the homing mode is HomingMode::homeIndividualDrives.
+	virtual float GetEndstopPosition(size_t drive, bool highEnd) noexcept;
 
 	// Return the axes that we can assume are homed after executing a G92 command to set the specified axis coordinates
 	// This default is good for Cartesian and Core printers, but not deltas or SCARA
@@ -185,7 +183,7 @@ public:
 	// Return a bitmap of the motors that cause movement of a particular axis or tower.
 	// This is used to determine which motors we need to enable to move a particular axis, and which motors to monitor for stall detect homing.
 	// For example, the first XY move made by a CoreXY machine may be a diagonal move, and it's important to enable the non-moving motor too.
-	virtual AxesBitmap GetControllingDrives(size_t axis, bool forHoming) const noexcept;
+	virtual LogicalDrivesBitmap GetControllingDrives(size_t axis, bool forHoming) const noexcept;
 
 	// Override this virtual destructor if your constructor allocates any dynamic memory
 	virtual ~Kinematics() override { }
@@ -201,6 +199,10 @@ public:
 	float GetSegmentsPerSecond() const noexcept pre(GetSegmentationType().useSegmentation) { return segmentsPerSecond; }
 	float GetMinSegmentLength() const noexcept pre(GetSegmentationType().useSegmentation) { return minSegmentLength; }
 	float GetReciprocalMinSegmentLength() const noexcept pre(GetSegmentationType().useSegmentation) { return reciprocalMinSegmentLength; }
+
+	LogicalDrivesBitmap GetAllDrivesUsed(AxesBitmap axesAndExtruders) const noexcept;
+	AxesBitmap GetAffectedAxes(size_t drive, size_t numAxes) const noexcept;
+	AxesBitmap GetAffectedAxes(LogicalDrivesBitmap drives, size_t numAxes) const noexcept;
 
 protected:
 	DECLARE_OBJECT_MODEL

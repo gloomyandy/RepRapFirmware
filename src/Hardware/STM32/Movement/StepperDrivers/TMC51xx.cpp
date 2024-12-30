@@ -469,7 +469,7 @@ private:
 
 	std::atomic<uint32_t> newRegistersToUpdate;				// bitmap of register indices whose values need to be sent to the driver chip
 	std::atomic<uint32_t> registersToUpdate;								// bitmap of register indices whose values need to be sent to the driver chip
-	DriversBitmap driverBit;								// a bitmap containing just this driver number
+	LocalDriversBitmap driverBit;								// a bitmap containing just this driver number
 	uint32_t axisNumber;									// the axis number of this driver as used to index the DriveMovements in the DDA
 	uint32_t microstepShiftFactor;							// how much we need to shift 1 left by to get the current microstepping
 	uint32_t motorCurrent;									// the configured motor current in mA
@@ -544,7 +544,7 @@ pre(!driversPowered)
 	driverNumber = p_driverNumber;
 	state = DriversState::noPower;
 	axisNumber = p_driverNumber;										// axes are mapped straight through to drivers initially
-	driverBit = DriversBitmap::MakeFromBits(p_driverNumber);
+	driverBit = LocalDriversBitmap::MakeFromBits(p_driverNumber);
 	enabled = false;
 	registersToUpdate.store(0);
 	newRegistersToUpdate.store(0);

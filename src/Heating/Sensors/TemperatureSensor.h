@@ -23,7 +23,7 @@ public:
 
 		const char *_ecv_array GetName() const noexcept { return sensorTypeName; }
 		const SensorTypeDescriptor *_ecv_null GetNext() const noexcept { return next; }
-		TemperatureSensor *Create(unsigned int sensorNum) const noexcept { return createFunction(sensorNum); }
+		TemperatureSensor *_ecv_from Create(unsigned int sensorNum) const noexcept { return createFunction(sensorNum); }
 
 		static const SensorTypeDescriptor *_ecv_null GetRoot() noexcept { return sensorTypeListRoot; }
 
@@ -97,8 +97,8 @@ public:
 	const AutoStringHandle& GetSensorName() const noexcept { return sensorName; }
 
 	// Get/set the next sensor in the linked list
-	TemperatureSensor *_ecv_from GetNext() const noexcept { return next; }
-	void SetNext(TemperatureSensor *_ecv_from n) noexcept { next = n; }
+	TemperatureSensor *_ecv_from _ecv_null GetNext() const noexcept { return next; }
+	void SetNext(TemperatureSensor *_ecv_from _ecv_null n) noexcept { next = n; }
 
 	// Get the time of the last reading
 	uint32_t GetLastReadingTime() const noexcept { return whenLastRead; }

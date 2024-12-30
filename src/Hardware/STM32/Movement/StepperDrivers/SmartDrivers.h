@@ -52,7 +52,7 @@ namespace SmartDrivers
 	void AppendStallConfig(size_t driver, const StringRef& reply) noexcept;
 	void AppendDriverStatus(size_t driver, const StringRef& reply) noexcept;
 	EndstopValidationResult CheckStallDetectionEnabled(size_t driver, float speed) noexcept;
-	DriversBitmap GetStalledDrivers(DriversBitmap driversOfInterest) noexcept;
+	LocalDriversBitmap GetStalledDrivers(LocalDriversBitmap driversOfInterest) noexcept;
 #endif
 	void SetSenseResistor(size_t driver, float value) noexcept;
 	float GetSenseResistor(size_t driver) noexcept;

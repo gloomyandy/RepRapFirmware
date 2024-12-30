@@ -52,6 +52,8 @@ struct EndstopHitDetails
 			 setAxisHigh : 1,		// whether or not to set the axis position to its max
 			 isZProbe : 1;			// whether this is a Z probe
 	DriverId driver;
+
+	static_assert(MaxAxes <= 64);				// because we have allocated 6 bits to hold the axis number
 };
 
 // The values of the following enumeration must tally with the X,Y,... parameters for the M574 command

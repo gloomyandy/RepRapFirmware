@@ -154,7 +154,7 @@ GCodeResult NeoPixelLedStrip::SpiSendData(const LedParams& params) noexcept
 #if STM32
 	const unsigned int bytesPerLed = (isRGBW) ? 4 : 3;
 	unsigned int numLeds = params.numLeds;
-	uint8_t *p = chunkBuffer + (bytesPerLed * numAlreadyInBuffer);
+	uint8_t *_ecv_array p = chunkBuffer + (bytesPerLed * numAlreadyInBuffer);
 	while (numLeds != 0 && p + bytesPerLed <= chunkBuffer + chunkBufferSize)
 	{
 		*p++ = (uint8_t)params.green;

@@ -42,7 +42,6 @@ void DriveMovement::Init(size_t drv) noexcept
 	driversNormallyUsed = driversCurrentlyUsed = driverEndstopsTriggeredAtStart = 0;
 	nextDM = nullptr;
 	segments = nullptr;
-	homingDda = nullptr;
 	isExtruder = false;
 	segmentFlags.Init();
 
@@ -553,9 +552,9 @@ void DriveMovement::TakeStepsAndCalcStepTimeRarely(uint32_t clocksNow) noexcept
 
 #endif
 
-// If the driver is moving, stop it, update the position and pass back the net steps taken in the executing segment.
+// If the logical drive is moving, stop it and update the position.
 // Return true if the drive was moving.
-bool DriveMovement::StopDriver(int32_t& netStepsTaken) noexcept
+bool DriveMovement::StopLogicalDrive(int32_t& netStepsTaken) noexcept
 {
 	AtomicCriticalSectionLocker lock;
 
@@ -567,10 +566,7 @@ bool DriveMovement::StopDriver(int32_t& netStepsTaken) noexcept
 		MoveSegment *seg = nullptr;
 		std::swap(seg, const_cast<MoveSegment*&>(segments));
 		MoveSegment::ReleaseAll(seg);
-		if (homingDda != nullptr)
-		{
-			homingDda->SetDriveCoordinate(currentMotorPosition, drive);
-		}
+		//TODO do we need to update the endpoint anywhere? Or will the caller do this?
 #if STEPS_DEBUG
 		positionRequested = currentMotorPosition;
 #endif
@@ -604,7 +600,7 @@ void DriveMovement::CheckSegment(unsigned int line, MoveSegment *seg) noexcept
 void DriveMovement::StopDriverFromRemote() noexcept
 {
 	int32_t dummy;
-	(void)StopDriver(dummy);
+	(void)StopLogicalDrive(dummy);
 }
 
 #endif

@@ -490,7 +490,7 @@ private:
 	GCodeResult PrintTestReport(GCodeBuffer& gb, const StringRef& reply, OutputBuffer *_ecv_null & buf) const THROWS(GCodeException);
 
 #if HAS_SMART_DRIVERS
-	void ReportDrivers(MessageType mt, DriversBitmap& whichDrivers, const char *_ecv_array text, bool& reported) noexcept;
+	void ReportDrivers(MessageType mt, LocalDriversBitmap& whichDrivers, const char *_ecv_array text, bool& reported) noexcept;
 #endif
 
 #if defined(DUET3_MB6HC)

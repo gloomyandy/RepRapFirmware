@@ -1060,12 +1060,84 @@ void RepRap::EmergencyStop() noexcept
 	platform->StopLogging();
 }
 
-void RepRap::SetDebug(Module m, uint32_t flags) noexcept
+GCodeResult RepRap::ProcessM111(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {
-	if (m.ToBaseType() < NumRealModules)
+	bool seen = false;
+	if (gb.Seen('B'))
 	{
-		debugMaps[m.ToBaseType()].SetFromRaw(flags);
+		if (!Platform::SetDebugBufferSize(gb.GetUIValue()))
+		{
+			reply.copy("B must be a power of 2");
+			return GCodeResult::error;
+		}
+		seen = true;
 	}
+
+	// Debug flags are as set by the D parameter. If D is not specified then S0 means all off, S1 means lower 8 bits on.
+	uint32_t flags;
+	if (gb.TryGetLimitedUIValue('D', flags, seen, 0x00010000))
+	{
+		// nothing to do here
+	}
+	else if (gb.Seen('S'))
+	{
+		flags = (gb.GetUIValue() != 0) ? DefaultDebugFlags : 0;
+		seen = true;
+	}
+	else
+	{
+		flags = 0;
+	}
+
+	uint8_t module = Module::none;
+	if (gb.Seen('P'))
+	{
+		module = gb.GetLimitedUIValue('P', NumRealModules);
+		seen = true;
+	}
+
+	if (seen)
+	{
+		if (module != Module::none)
+		{
+			debugMaps[module].SetFromRaw(flags);
+		}
+		else if (flags != 0)
+		{
+			// Repetier Host sends M111 with various S parameters to enable echo and similar features, which used to turn on all our debugging.
+			// But it's not useful to enable all debugging anyway. So we no longer allow debugging to be enabled without a P parameter.
+			reply.copy("Use P parameter to specify which module to debug");
+			return GCodeResult::error;
+		}
+		else
+		{
+			// M111 S0 with no P parameter still clears all debugging
+			ClearDebug();
+		}
+	}
+
+	// Print the current debug settings
+	const MessageType mt = (MessageType)((uint32_t)gb.GetResponseMessageType() | (uint32_t)PushFlag);
+	platform->Message(mt, "Debugging on for modules:");
+	for (size_t i = 0; i < NumRealModules; i++)
+	{
+		if (debugMaps[i].IsNonEmpty())
+		{
+			platform->MessageF(mt, " %s(%u - %#" PRIx16 ")", Module(i).ToString(), i, debugMaps[i].GetRaw());
+		}
+	}
+
+	platform->Message(mt, "\nDebugging off for modules:");
+	for (size_t i = 0; i < NumRealModules; i++)
+	{
+		if (debugMaps[i].IsEmpty())
+		{
+			platform->MessageF(mt, " %s(%u)", Module(i).ToString(), i);
+		}
+	}
+	platform->Message(mt, "\n");
+
+	return GCodeResult::ok;
 }
 
 void RepRap::ClearDebug() noexcept
@@ -1074,28 +1146,6 @@ void RepRap::ClearDebug() noexcept
 	{
 		dm.Clear();
 	}
-}
-
-void RepRap::PrintDebug(MessageType mt) noexcept
-{
-	platform->Message((MessageType)((uint32_t)mt | (uint32_t)PushFlag), "Debugging enabled for modules:");
-	for (size_t i = 0; i < NumRealModules; i++)
-	{
-		if (debugMaps[i].IsNonEmpty())
-		{
-			platform->MessageF((MessageType)((uint32_t)mt | (uint32_t)PushFlag), " %s(%u - %#" PRIx32 ")", Module(i).ToString(), i, debugMaps[i].GetRaw());
-		}
-	}
-
-	platform->Message((MessageType)(mt | PushFlag), "\nDebugging disabled for modules:");
-	for (size_t i = 0; i < NumRealModules; i++)
-	{
-		if (debugMaps[i].IsEmpty())
-		{
-			platform->MessageF((MessageType)((uint32_t)mt | (uint32_t)PushFlag), " %s(%u)", Module(i).ToString(), i);
-		}
-	}
-	platform->Message(mt, "\n");
 }
 
 void RepRap::Tick() noexcept
@@ -1134,7 +1184,7 @@ void RepRap::Tick() noexcept
 					const uint32_t *_ecv_array stackPtr = _ecv_undefined(const uint32_t *_ecv_array);
 #else
 					__asm volatile("mrs r2, psp");
-					register const uint32_t * stackPtr asm ("r2");				// we want the PSP not the MSP
+					register const uint32_t *_ecv_array stackPtr asm ("r2");	// we want the PSP not the MSP
 #endif
 					relevantStackPtr = stackPtr + 5;							// discard uninteresting registers, keep LR PC PSR
 				}

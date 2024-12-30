@@ -30,10 +30,10 @@ public:
 	bool ShouldReduceAcceleration() const noexcept override { return true; }
 	EndstopValidationResult Validate(const DDA& dda, uint8_t& failingDriver) const noexcept override;
 
-	void SetDrivers(DriversBitmap extruderDrivers) noexcept;	// for setting which local extruder drives are active extruder endstops
+	void SetDrivers(LocalDriversBitmap extruderDrivers) noexcept;	// for setting which local extruder drives are active extruder endstops
 
 private:
-	DriversBitmap driversMonitored;
+	LocalDriversBitmap driversMonitored;
 	unsigned int numDriversLeft;
 	bool individualMotors;
 	bool stopAll;

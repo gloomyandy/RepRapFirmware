@@ -39,7 +39,7 @@ enum class ResponseSource
 	Generic
 };
 
-typedef Bitmap<uint32_t> DebugFlags;
+typedef Bitmap<uint16_t> DebugFlags;
 
 class RepRap final INHERIT_OBJECT_MODEL
 {
@@ -57,9 +57,7 @@ public:
 
 	bool Debug(Module module) const noexcept { return debugMaps[module.ToBaseType()].IsNonEmpty(); }
 	DebugFlags GetDebugFlags(Module m) const noexcept { return debugMaps[m.ToBaseType()]; }
-	void SetDebug(Module m, uint32_t flags) noexcept;
-	void ClearDebug() noexcept;
-	void PrintDebug(MessageType mt) noexcept;
+
 	Module GetSpinningModule() const noexcept;
 
 	const char *_ecv_array GetName() const noexcept;
@@ -75,6 +73,8 @@ public:
 	Network& GetNetwork() const noexcept { return *network; }
 	PrintMonitor& GetPrintMonitor() const noexcept { return *printMonitor; }
 	FansManager& GetFansManager() const noexcept { return *fansManager; }
+
+	GCodeResult ProcessM111(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 
 	// Message box functions
 	uint32_t SendAlert(MessageType mt, const char *_ecv_array p_message, const char *_ecv_array title, int sParam, float tParam, AxesBitmap controls, MessageBoxLimits *_ecv_null limits = nullptr) noexcept;
@@ -168,6 +168,8 @@ public:
 	ReadLockedPointer<const VariableSet> GetGlobalVariablesForReading() noexcept { return globalVariables.GetForReading(); }
 	WriteLockedPointer<VariableSet> GetGlobalVariablesForWriting() noexcept { return globalVariables.GetForWriting(); }
 
+	static constexpr uint16_t DefaultDebugFlags = 0x00FF;
+
 protected:
 	DECLARE_OBJECT_MODEL_WITH_ARRAYS
 
@@ -196,6 +198,7 @@ private:
 	char GetStatusCharacter() const noexcept;
 	const char *_ecv_array GetStatusString() const noexcept;
 	bool RunStartupFile(const char *_ecv_array filename, bool isMainConfigFile) noexcept;
+	void ClearDebug() noexcept;
 
 	static constexpr uint32_t MaxHeatTaskTicksInSpinState = 4000;	// timeout before we reset the processor if the heat task doesn't run
 	static constexpr uint32_t MaxMainTaskTicksInSpinState = 20000;	// timeout before we reset the processor if the main task doesn't run

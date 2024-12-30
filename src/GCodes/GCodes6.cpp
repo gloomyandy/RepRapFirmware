@@ -72,7 +72,7 @@ GCodeResult GCodes::ExecuteG30(GCodeBuffer& gb, const StringRef& reply) THROWS(G
 				reprap.GetMove().SetZBedProbePoint((size_t)g30ProbePointIndex, z, false, false);
 				if (g30SValue >= -1)
 				{
-					return GetGCodeResultFromError(reprap.GetMove().FinishedBedProbing(g30SValue, reply));
+					return reprap.GetMove().FinishedBedProbing(ms, g30SValue, reply);
 				}
 			}
 			else
@@ -540,7 +540,7 @@ void GCodes::ClearBedMapping() noexcept
 	reprap.GetMove().SetIdentityTransform();
 	for (MovementState& ms : moveStates)
 	{
-		reprap.GetMove().GetCurrentUserPosition(ms.coords, ms.GetNumber(), 0, ms.currentTool);
+		reprap.GetMove().GetCurrentUserPosition(ms.coords, ms.GetNumber(), true, ms.currentTool);
 		ToolOffsetInverseTransform(ms);		// update user coordinates to remove any height map offset there was at the current position
 	}
 }

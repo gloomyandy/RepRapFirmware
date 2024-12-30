@@ -252,7 +252,7 @@ int32_t ZProbe::GetReading() const noexcept
 		case ZProbeType::zMotorStall:
 #if HAS_STALL_DETECT
 			{
-				const DriversBitmap zDrivers = reprap.GetMove().GetAxisDriversConfig(Z_AXIS).GetDriversBitmap();
+				const LocalDriversBitmap zDrivers = reprap.GetMove().GetAxisDriversConfig(Z_AXIS).GetLocalDriversBitmap();
 				zProbeVal = (GetStalledDrivers(zDrivers).IsNonEmpty()) ? 1000 : 0;
 			}
 #else

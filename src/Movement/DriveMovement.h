@@ -53,7 +53,7 @@ public:
 	bool CalcNextStepTime(uint32_t now) noexcept SPEED_CRITICAL;
 
 	void DebugPrint() const noexcept;
-	bool StopDriver(int32_t& netStepsTaken) noexcept;					// if the driver is moving, stop it, update the position and pass back the net steps taken
+	bool StopLogicalDrive(int32_t& netStepsTaken) noexcept;					// if the driver is moving, stop it, update the position and pass back the net steps taken
 #if SUPPORT_REMOTE_COMMANDS
 	void StopDriverFromRemote() noexcept;
 #endif
@@ -113,7 +113,6 @@ private:
 	DriveMovement *_ecv_null nextDM ;					// link to next DM that needs a step
 	MoveSegment *volatile _ecv_null segments;			// pointer to the segment list for this driver
 
-	DDA *_ecv_null homingDda;							// if we are checking endstops then this is the DDA that represents the move
 	ExtruderShaper extruderShaper;						// pressure advance control
 
 	DMState state;										// whether this is active or not
