@@ -1761,9 +1761,11 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 #if SUPPORT_ASYNC_MOVES
 				// We already allocated the Z axes to this MS when we began the retraction, so no need to do it here
 #endif
+#if 0			// I don't think the following is needed, but if used it should be before we call SetMoveBufferDefaults in case it causes the machine coordinates to change slightly
+				reprap.GetMove().GetCurrentUserPosition(ms.coords, ms.GetNumber(), true, t);
+#endif
 				SetMoveBufferDefaults(ms);
 				ms.movementTool = t;
-				reprap.GetMove().GetCurrentUserPosition(ms.coords, ms.GetNumber(), true, t);
 				memcpyf(ms.initialCoords, ms.coords, ARRAY_SIZE(ms.initialCoords));
 				const AxesBitmap zAxes = t->GetZAxisMap();
 
@@ -1800,9 +1802,11 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 			const Tool *_ecv_null const t = ms.currentTool;
 			if (t != nullptr && t->DriveCount() != 0)
 			{
+#if 0			// I don't think the following is needed, but if used it should be before we call SetMoveBufferDefaults in case it causes the machine coordinates to change slightly
+				reprap.GetMove().GetCurrentUserPosition(ms.coords, ms.GetNumber(), true, ms.currentTool);
+#endif
 				SetMoveBufferDefaults(ms);
 				ms.movementTool = t;
-				reprap.GetMove().GetCurrentUserPosition(ms.coords, ms.GetNumber(), true, ms.currentTool);
 				for (size_t i = 0; i < t->DriveCount(); ++i)
 				{
 					ms.coords[ExtruderToLogicalDrive(t->GetDrive(i))] = t->GetRetractLength() + t->GetRetractExtra();

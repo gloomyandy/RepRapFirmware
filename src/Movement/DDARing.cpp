@@ -672,6 +672,7 @@ void DDARing::Diagnostics(MessageType mtype, unsigned int ringNumber) noexcept
 									ringNumber, scheduledMoves, completedMoves, numLookaheadErrors, numLookaheadUnderruns, numPrepareUnderruns, numNoMoveUnderruns
 								 );
 	numLookaheadUnderruns = numPrepareUnderruns = numNoMoveUnderruns = numLookaheadErrors = 0;
+	reprap.GetGCodes().GetMovementState(ringNumber).Diagnostics(mtype);
 }
 
 #if SUPPORT_LASER

@@ -10,6 +10,7 @@
 
 #include <RepRapFirmware.h>
 #include <ObjectModel/ObjectModel.h>
+#include <Movement/HomingMode.h>
 
 template<class T> class MathMatrix;
 
@@ -39,13 +40,6 @@ enum class KinematicsType : uint8_t
 	sixAxisDelta,		// reserved for @tkln, see https://forum.duet3d.com/post/314950
 
 	unknown				// this one must be last!
-};
-
-// Class used to define homing mode
-enum class HomingMode : uint8_t
-{
-	homeCartesianAxes,
-	homeIndividualDrives,
 };
 
 // Return value from limitPosition
@@ -202,7 +196,11 @@ public:
 	float GetReciprocalMinSegmentLength() const noexcept pre(GetSegmentationType().useSegmentation) { return reciprocalMinSegmentLength; }
 
 	LogicalDrivesBitmap GetAllDrivesUsed(AxesBitmap axesAndExtruders) const noexcept;
+
+	// Get the set of all axes (but not extruders) that a logical drive affects
 	AxesBitmap GetAffectedAxes(size_t drive, size_t numAxes) const noexcept;
+
+	// Get the set of all axes (but not extruders) that a set of logical drives affects
 	AxesBitmap GetAffectedAxes(LogicalDrivesBitmap drives, size_t numAxes) const noexcept;
 
 protected:

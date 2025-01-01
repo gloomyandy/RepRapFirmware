@@ -226,7 +226,7 @@ LogicalDrivesBitmap Kinematics::GetAllDrivesUsed(AxesBitmap axesAndExtruders) co
 	return result;
 }
 
-// Return a bitmap of all axes affected by a particular drive. Used only for planning raw motor moves, so it doesn't need to be efficient.
+// Return a bitmap of all axes (but not extruders) affected by a particular drive. Used only for planning raw motor moves, so it doesn't need to be efficient.
 AxesBitmap Kinematics::GetAffectedAxes(size_t drive, size_t numAxes) const noexcept
 {
 	AxesBitmap result;
@@ -240,7 +240,7 @@ AxesBitmap Kinematics::GetAffectedAxes(size_t drive, size_t numAxes) const noexc
 	return result;
 }
 
-// Return a bitmap of all axes affected by set of drives
+// Return a bitmap of all axes (but not extruders) affected by set of drives
 AxesBitmap Kinematics::GetAffectedAxes(LogicalDrivesBitmap drives, size_t numAxes) const noexcept
 {
 	AxesBitmap result;

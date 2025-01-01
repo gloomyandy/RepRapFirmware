@@ -240,37 +240,45 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 			return false;												// throw away the move if it couldn't be transformed
 		}
 
-		for (size_t drive = 0; drive < numTotalAxes; drive++)
+		// Note, the following loop iterates over both axes and logical drives
+		for (size_t axisOrDrive = 0; axisOrDrive < numTotalAxes; axisOrDrive++)
 		{
 #if SUPPORT_ASYNC_MOVES
-			if (ownedDrives.IsBitSet(drive))
+			if (nextMove.axesAndExtrudersOwned.IsBitSet(axisOrDrive))
 #endif
 			{
-					const float positionDelta = nextMove.coords[drive] - ring.GetStartCoordinate(drive);
-					ring.SetStartCoordinate(drive, nextMove.coords[drive]);
-					directionVector[drive] = positionDelta;
-					if (positionDelta != 0.0)
+				const float positionDelta = nextMove.coords[axisOrDrive] - ring.GetStartCoordinate(axisOrDrive);
+				ring.SetStartCoordinate(axisOrDrive, nextMove.coords[axisOrDrive]);
+				directionVector[axisOrDrive] = positionDelta;
+				if (positionDelta != 0.0)
+				{
+					if (reprap.GetMove().IsAxisRotational(axisOrDrive))
 					{
-						if (reprap.GetMove().IsAxisRotational(drive) && nextMove.rotationalAxesMentioned)
+						if (nextMove.rotationalAxesMentioned)
 						{
 							rotationalAxesMoving = true;
 						}
-						else if (nextMove.linearAxesMentioned)
-						{
-							linearAxesMoving = true;
-						}
-						if (Tool::GetXAxes(nextMove.movementTool).IsBitSet(drive) || Tool::GetYAxes(nextMove.movementTool).IsBitSet(drive))
+					}
+					else if (nextMove.linearAxesMentioned)
+					{
+						linearAxesMoving = true;
+						if (Tool::GetXAxes(nextMove.movementTool).IsBitSet(axisOrDrive) || Tool::GetYAxes(nextMove.movementTool).IsBitSet(axisOrDrive))
 						{
 							flags.xyMoving = true;				// this move has XY movement in user space, before axis were mapped
 						}
 					}
+				}
 			}
 #if SUPPORT_ASYNC_MOVES
 			else
 			{
 				// This is an axis we don't own, so make sure we don't move it
-				directionVector[drive] = 0.0;
-				endPoint[drive] = prev->endPoint[drive];
+				directionVector[axisOrDrive] = 0.0;
+			}
+
+			if (!ownedDrives.IsBitSet(axisOrDrive))
+			{
+				endPoint[axisOrDrive] = prev->endPoint[axisOrDrive];
 			}
 #endif
 		}
@@ -334,7 +342,7 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 	for (size_t drive = MaxAxesPlusExtruders - reprap.GetGCodes().GetNumExtruders(); drive < MaxAxesPlusExtruders; ++drive)
 	{
 #if SUPPORT_ASYNC_MOVES
-		if (nextMove.axesAndExtrudersOwned.IsBitSet(drive))
+		if (ownedDrives.IsBitSet(drive))
 #endif
 		{
 			// It's an extruder drive. We defer calculating the steps because they may be affected by nonlinear extrusion, which we can't calculate until we

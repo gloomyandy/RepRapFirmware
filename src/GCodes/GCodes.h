@@ -40,6 +40,7 @@ Licence: GPL
 #include "StraightProbeSettings.h"
 #include "SimulationMode.h"
 #include <Movement/BedProbing/Grid.h>
+#include <Movement/HomingMode.h>
 
 #if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
 # include <Storage/CRC32.h>
@@ -276,7 +277,7 @@ public:
 	const MovementState& GetCurrentMovementState(const ObjectExplorationContext& context) const noexcept;
 	const MovementState& GetConstMovementState(const GCodeBuffer& gb) const noexcept;			// Get a reference to the movement state associated with the specified GCode buffer (there is a private non-const version)
 
-	void RecordEndstopTriggered(size_t axis) noexcept;
+	void RecordEndstopTriggered(size_t axis, HomingMode hmode) noexcept;
 
 	bool IsHeaterUsedByDifferentCurrentTool(int heaterNumber, const Tool *tool) const noexcept;	// Check if the specified heater is used by a current tool other than the specified one
 	void MessageBoxClosed(bool cancelled, bool shouldAbort, bool m292, uint32_t seq, ExpressionValue rslt) noexcept;
@@ -583,7 +584,7 @@ private:
 	void AllocateAxes(const GCodeBuffer& gb, MovementState& ms, AxesBitmap axes, ParameterLettersBitmap axLetters) THROWS(GCodeException);		// allocate axes to a movement state
 	void AllocateAxisLetters(const GCodeBuffer& gb, MovementState& ms, ParameterLettersBitmap axLetters) THROWS(GCodeException);				// allocate axes by letter
 	void AllocateAxesDirectFromLetters(const GCodeBuffer& gb, MovementState& ms, ParameterLettersBitmap axLetters) THROWS(GCodeException);		// allocate axes by letter for a special move
-	void AllocateLogicLDrivesFromLetters(const GCodeBuffer& gb, MovementState& ms, ParameterLettersBitmap axLetters) THROWS(GCodeException);	// allocate drivers by letter for a raw motor move
+	void AllocateLogicalDrivesFromLetters(const GCodeBuffer& gb, MovementState& ms, ParameterLettersBitmap axLetters) THROWS(GCodeException);	// allocate drivers by letter for a raw motor move
 	bool IsAxisFree(unsigned int axis) const noexcept;														// test whether an axis is unowned
 	bool DoSync(GCodeBuffer& gb) noexcept;																	// sync with the other stream returning true if done, false if we need to wait for it
 	bool SyncWith(GCodeBuffer& thisGb, const GCodeBuffer& otherGb) noexcept;								// synchronise motion systems
