@@ -339,7 +339,7 @@ GCodeResult SmartDrivers::SetAnyRegister(size_t driver, const StringRef& reply, 
 
 #if HAS_STALL_DETECT
 
-DriversBitmap SmartDrivers::GetStalledDrivers(DriversBitmap driversOfInterest) noexcept
+LocalDriversBitmap SmartDrivers::GetStalledDrivers(LocalDriversBitmap driversOfInterest) noexcept
 {
 #if SUPPORT_TMC22xx
 	return Tmc22xxDriver::GetStalledDrivers(driversOfInterest);

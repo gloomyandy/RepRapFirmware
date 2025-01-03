@@ -78,7 +78,7 @@ int32_t Thermistor::GetRawReading(bool& valid) const noexcept
 		// Filtered ADC channel
 		const volatile ThermistorAveragingFilter& tempFilter = reprap.GetPlatform().GetAdcFilter(adcFilterChannel);
 		valid = tempFilter.IsValid();
-		return tempFilter.GetSum()/(tempFilter.NumAveraged() >> AdcOversampleBits);
+		return tempFilter.GetSum()/(ThermistorAveragingFilter::NumAveraged() >> AdcOversampleBits);
 	}
 
 	// Raw ADC channel

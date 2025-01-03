@@ -464,7 +464,7 @@ void Move::Init() noexcept
 			const float stepsPerMm = (drv >= MaxAxes) ? DefaultEDriveStepsPerUnit
 										: (drv == Z_AXIS) ? DefaultZDriveStepsPerUnit
 											: DefaultAxisDriveStepsPerUnit;
-			SetDriveStepsPerMm(drv, stepsPerMm, 0);
+			driveStepsPerMm[drv] = stepsPerMm;
 		}
 	}
 
@@ -831,7 +831,7 @@ void Move::MoveAvailable() noexcept
 // Tell the lookahead ring we are waiting for it to empty and return true if it is
 bool Move::WaitingForAllMovesFinished(MovementSystemNumber msNumber
 #if SUPPORT_ASYNC_MOVES
-										, AxesBitmap axesAndExtrudersOwned
+										, LogicalDrivesBitmap logicalDrivesOwned
 #endif
 									 ) noexcept
 {
@@ -842,14 +842,8 @@ bool Move::WaitingForAllMovesFinished(MovementSystemNumber msNumber
 
 	// If input shaping is enabled then movement may continue for a little while longer
 #if SUPPORT_ASYNC_MOVES
-	return axesAndExtrudersOwned.IterateWhile([this](unsigned int axisOrExtruder, unsigned int)->bool
+	return logicalDrivesOwned.IterateWhile([this](unsigned int axisOrExtruder, unsigned int)->bool
 												{
-													if (axisOrExtruder < reprap.GetGCodes().GetTotalAxes())
-													{
-														//TODO the following is OK for CoreXY but not for deltas, Scara etc.
-														const AxesBitmap driversUsed = kinematics->GetControllingDrives(axisOrExtruder, false);
-														return driversUsed.IterateWhile([this](unsigned int drive, unsigned int)->bool { return !dms[drive].MotionPending(); });
-													}
 													return !dms[axisOrExtruder].MotionPending();
 												}
 											 );
@@ -921,9 +915,9 @@ bool Move::PausePrint(MovementState& ms) noexcept
 #if HAS_VOLTAGE_MONITOR || HAS_STALL_DETECT
 
 // Pause the print immediately, returning true if we were able to skip or abort any moves and setting up to the move we aborted
-bool Move::LowPowerOrStallPause(unsigned int queueNumber, RestorePoint& rp) noexcept
+bool Move::LowPowerOrStallPause(MovementState& ms) noexcept
 {
-	return rings[queueNumber].LowPowerOrStallPause(rp);
+	return rings[ms.GetNumber()].LowPowerOrStallPause(ms);
 }
 
 // Stop generating steps
@@ -1069,20 +1063,6 @@ void Move::AppendDiagnostics(const StringRef& reply) noexcept
 
 #endif
 
-// Set the current position to be this
-void Move::SetNewPositionOfAllAxes(const MovementState& ms, bool doBedCompensation) noexcept
-{
-	SetNewPositionOfSomeAxes(ms, doBedCompensation, AxesBitmap::MakeLowestNBits(reprap.GetGCodes().GetVisibleAxes()));
-}
-
-void Move::SetNewPositionOfSomeAxes(const MovementState& ms, bool doBedCompensation, AxesBitmap axes) noexcept
-{
-	float newPos[MaxAxesPlusExtruders];
-	memcpyf(newPos, ms.coords, ARRAY_SIZE(newPos));			// copy to local storage because Transform modifies it
-	AxisAndBedTransform(newPos, ms.currentTool, doBedCompensation);
-	SetRawPosition(newPos, ms.GetNumber(), axes);
-}
-
 // Convert distance to steps for a particular drive
 int32_t Move::MotorMovementToSteps(size_t drive, float coord) const noexcept
 {
@@ -1107,8 +1087,7 @@ void Move::MotorStepsToCartesian(const int32_t motorPos[], size_t numVisibleAxes
 // If isCoordinated is false then multi-mode kinematics such as SCARA are allowed to switch mode if necessary to make the specified machine position reachable
 bool Move::CartesianToMotorSteps(const float machinePos[MaxAxes], int32_t motorPos[MaxAxes], bool isCoordinated) const noexcept
 {
-	const bool b = kinematics->CartesianToMotorSteps(machinePos, driveStepsPerMm,
-														reprap.GetGCodes().GetVisibleAxes(), reprap.GetGCodes().GetTotalAxes(), motorPos, isCoordinated);
+	const bool b = kinematics->CartesianToMotorSteps(machinePos, driveStepsPerMm, reprap.GetGCodes().GetVisibleAxes(), reprap.GetGCodes().GetTotalAxes(), motorPos, isCoordinated);
 	if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintTransforms))
 	{
 		if (!b)
@@ -1144,10 +1123,10 @@ float Move::MotorStepsToMovement(size_t drive, int32_t endpoint) const noexcept
 }
 
 // Return the transformed machine coordinates
-void Move::GetCurrentUserPosition(float m[MaxAxes], MovementSystemNumber msNumber, uint8_t moveType, const Tool *tool) const noexcept
+void Move::GetCurrentUserPosition(float m[MaxAxes], MovementSystemNumber msNumber, bool doBedCompensation, const Tool *tool) const noexcept
 {
-	GetCurrentMachinePosition(m, msNumber, IsRawMotorMove(moveType));
-	if (moveType == 0)
+	GetCurrentMachinePosition(m, msNumber);
+	if (doBedCompensation)
 	{
 		InverseAxisAndBedTransform(m, tool);
 	}
@@ -1184,6 +1163,38 @@ void Move::SetMotorPosition(size_t drive, int32_t pos) noexcept
 		});
 	}
 #endif
+}
+
+void Move::SetMotorPositions(LogicalDrivesBitmap drives, const int32_t *positions) noexcept
+{
+	drives.Iterate([this, positions](unsigned int drive, unsigned int count) { SetMotorPosition(drive, positions[drive]); });
+}
+
+void Move::SetLastEndpoints(MovementSystemNumber msNumber, LogicalDrivesBitmap logicalDrives, const int32_t *_ecv_array ep) noexcept
+{
+	rings[msNumber].SetLastEndpoints(logicalDrives, ep);
+}
+
+void Move::GetLastEndpoints(MovementSystemNumber msNumber, LogicalDrivesBitmap logicalDrives, int32_t returnedEndpoints[MaxAxesPlusExtruders]) const noexcept
+{
+	rings[msNumber].GetLastEndpoints(logicalDrives, returnedEndpoints);
+}
+
+int32_t Move::GetLastEndpoint(MovementSystemNumber msNumber, size_t drive) const noexcept
+{
+	return rings[msNumber].GetLastEndpoint(drive);
+}
+
+void Move::ChangeEndpointsAfterHoming(MovementSystemNumber msNumber, LogicalDrivesBitmap drives, const int32_t endpoints[MaxAxes]) noexcept
+{
+	rings[msNumber].SetLastEndpoints(drives, endpoints);
+	SetMotorPositions(drives, endpoints);
+}
+
+void Move::ChangeSingleEndpointAfterHoming(MovementSystemNumber msNumber, size_t drive, int32_t ep) noexcept
+{
+	rings[msNumber].SetLastEndpoint(drive, ep);
+	SetMotorPosition(drive, ep);
 }
 
 // Enter or leave simulation mode
@@ -1314,7 +1325,6 @@ void Move::RevertPosition(const CanMessageRevertPosition& msg) noexcept
 
 	size_t index = 0;
 	bool needSteps = false;
-	const volatile int32_t * const lastMoveStepsTaken = rings[0].GetLastMoveStepsTaken();
 	constexpr size_t numDrivers = min<size_t>(NumDirectDrivers, MaxLinearDriversPerCanSlave);
 	for (size_t driver = 0; driver < numDrivers; ++driver)
 	{
@@ -1322,7 +1332,7 @@ void Move::RevertPosition(const CanMessageRevertPosition& msg) noexcept
 		if (msg.whichDrives & (1u << driver))
 		{
 			const int32_t stepsWanted = msg.finalStepCounts[index++];
-			const int32_t stepsTaken = lastMoveStepsTaken[driver];
+			const int32_t stepsTaken = GetLastMoveStepsTaken(driver);
 			if (((stepsWanted >= 0 && stepsTaken > stepsWanted) || (stepsWanted <= 0 && stepsTaken < stepsWanted)))
 			{
 				steps = stepsWanted - stepsTaken;
@@ -1367,7 +1377,7 @@ void Move::UpdateLiveMachineCoordinates(float coords[MaxAxes], const Tool *_ecv_
 
 	for (size_t i = MaxAxesPlusExtruders - reprap.GetGCodes().GetNumExtruders(); i < MaxAxesPlusExtruders; ++i)
 	{
-		coords[i] = dms[i].currentMotorPosition / driveStepsPerMm[i];
+		coords[i] = (float)dms[i].currentMotorPosition / driveStepsPerMm[i];
 	}
 }
 
@@ -1964,14 +1974,8 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 	}
 }
 
-// Store the DDA that is executing a homing move involving this drive. Called from DDA::Prepare.
-void Move::SetHomingDda(size_t drive, DDA *dda) noexcept
-{
-	dms[drive].homingDda = dda;
-}
-
 // Return true if none of the drives passed has any movement pending
-bool Move::AreDrivesStopped(AxesBitmap drives) const noexcept
+bool Move::AreDrivesStopped(LogicalDrivesBitmap drives) const noexcept
 {
 	return drives.IterateWhile([this](unsigned int drive, unsigned int index)->bool
 								{
@@ -2395,25 +2399,7 @@ void Move::CheckEndstops(bool executingMove) noexcept
 			}
 			else
 			{
-				// Get the DDA associated with the axis that has triggered
-				const size_t axis = hitDetails.axis;
-				if (axis != NO_AXIS)
-				{
-					DDA *_ecv_null homingDda = dms[axis].homingDda;
-					if (homingDda != nullptr && homingDda->IsCommitted() && homingDda->IsCheckingEndstops())
-					{
-						if (hitDetails.setAxisLow)
-						{
-							kinematics->OnHomingSwitchTriggered(hitDetails.axis, false, driveStepsPerMm, *homingDda);
-							reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
-						}
-						else if (hitDetails.setAxisHigh)
-						{
-							kinematics->OnHomingSwitchTriggered(hitDetails.axis, true, driveStepsPerMm, *homingDda);
-							reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
-						}
-					}
-				}
+				reprap.GetGCodes().RecordEndstopTriggered(hitDetails.axis, kinematics->GetHomingMode());
 			}
 
 			if (executingMove)
@@ -2433,23 +2419,8 @@ void Move::CheckEndstops(bool executingMove) noexcept
 #else
 			StopAxisOrExtruder(executingMove, hitDetails.axis);
 #endif
-			{
-				// Get the DDA associated with the axis that has triggered
-				DDA *_ecv_null homingDda = dms[hitDetails.axis].homingDda;
-				if (homingDda != nullptr && homingDda->IsCommitted() && homingDda->IsCheckingEndstops())
-				{
-					if (hitDetails.setAxisLow)
-					{
-						kinematics->OnHomingSwitchTriggered(hitDetails.axis, false, driveStepsPerMm, *homingDda);
-						reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
-					}
-					else if (hitDetails.setAxisHigh)
-					{
-						GetKinematics().OnHomingSwitchTriggered(hitDetails.axis, true, driveStepsPerMm, *homingDda);
-						reprap.GetGCodes().SetAxisIsHomed(hitDetails.axis);
-					}
-				}
-			}
+			reprap.GetGCodes().RecordEndstopTriggered(hitDetails.axis, kinematics->GetHomingMode());
+
 			if (executingMove && !emgr.AnyEndstopsActive())
 			{
 				WakeMoveTaskFromISR();					// wake move task so that it sets the move as finished promptly
@@ -2759,7 +2730,7 @@ bool Move::StopAxisOrExtruder(bool executingMove, size_t logicalDrive) noexcept
 {
 	DriveMovement& dm = dms[logicalDrive];
 	int32_t netStepsTaken;
-	const bool wasMoving = dm.StopDriver(netStepsTaken);
+	const bool wasMoving = dm.StopLogicalDrive(netStepsTaken);
 	bool wakeAsyncSender = false;
 #if SUPPORT_CAN_EXPANSION
 	if (wasMoving)
@@ -2991,7 +2962,7 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 {
 	// Build a bitmap of all the drivers referenced
 	// First looks for explicit driver numbers
-	DriversBitmap drivers;
+	LocalDriversBitmap drivers;
 # if SUPPORT_CAN_EXPANSION
 	CanDriversList canDrivers;
 # endif
@@ -3142,7 +3113,7 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 #  endif
 	   )
 	{
-		drivers = DriversBitmap::MakeLowestNBits(numSmartDrivers);
+		drivers = LocalDriversBitmap::MakeLowestNBits(numSmartDrivers);
 	}
 
 	if (!OutputBuffer::Allocate(buf))
@@ -3195,6 +3166,13 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 void Move::StopDriveFromRemote(size_t drive) noexcept
 {
 	dms[drive].StopDriverFromRemote();
+}
+
+// Get the number of steps taken by the last move, if it was an isolated move
+int32_t Move::GetLastMoveStepsTaken(size_t drive) const noexcept
+{
+	const DriveMovement& dm = dms[drive];
+	return dm.currentMotorPosition - dm.positionAtMoveStart;
 }
 
 #endif
@@ -3266,7 +3244,7 @@ void Move::PollOneDriver(size_t driver) noexcept
 		StandardDriverStatus stat = SmartDrivers::GetStatus(driver, true, true);
 #endif
 #if HAS_SMART_DRIVERS
-		const DriversBitmap mask = DriversBitmap::MakeFromBits(driver);
+		const LocalDriversBitmap mask = LocalDriversBitmap::MakeFromBits(driver);
 		if (stat.ot)
 		{
 			temperatureShutdownDrivers |= mask;
@@ -3415,19 +3393,19 @@ void Move::PollOneDriver(size_t driver) noexcept
 float Move::GetTmcDriversTemperature(unsigned int boardNumber) const noexcept
 {
 #if defined(DUET3MINI)
-	const DriversBitmap mask = DriversBitmap::MakeLowestNBits(7);						// report the 2-driver addon along with the main board
+	const LocalDriversBitmap mask = LocalDriversBitmap::MakeLowestNBits(7);						// report the 2-driver addon along with the main board
 #elif defined(DUET3)
-	const DriversBitmap mask = DriversBitmap::MakeLowestNBits(6);						// there are 6 drivers, only one board
+	const LocalDriversBitmap mask = LocalDriversBitmap::MakeLowestNBits(6);						// there are 6 drivers, only one board
 #elif defined(DUET_NG)
-	const DriversBitmap mask = DriversBitmap::MakeLowestNBits(5).ShiftUp(5 * boardNumber);	// there are 5 drivers on each board
+	const LocalDriversBitmap mask = LocalDriversBitmap::MakeLowestNBits(5).ShiftUp(5 * boardNumber);	// there are 5 drivers on each board
 #elif defined(DUET_M)
-	const DriversBitmap mask = DriversBitmap::MakeLowestNBits(7);						// report the 2-driver addon along with the main board
+	const LocalDriversBitmap mask = LocalDriversBitmap::MakeLowestNBits(7);						// report the 2-driver addon along with the main board
 #elif defined(PCCB_10)
 	const DriversBitmap mask = (boardNumber == 0)
 							? DriversBitmap::MakeLowestNBits(2)							// drivers 0,1 are on-board
 								: DriversBitmap::MakeLowestNBits(5).ShiftUp(2);			// drivers 2-7 are on the DueX5
 #elif STM32
-	const DriversBitmap mask = DriversBitmap::MakeLowestNBits(MaxSmartDrivers);			// All drivers
+	const LocalDriversBitmap mask = LocalDriversBitmap::MakeLowestNBits(MaxSmartDrivers);			// All drivers
 #else
 # error Undefined board
 #endif

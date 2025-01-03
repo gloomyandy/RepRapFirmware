@@ -244,7 +244,7 @@ bool EndstopsManager::EnableExtruderEndstops(ExtrudersBitmap extruders) noexcept
 		{
 			extrudersEndstop = new StallDetectionEndstop;
 		}
-		DriversBitmap drivers;
+		LocalDriversBitmap drivers;
 		while (extruders.IsNonEmpty())
 		{
 			const unsigned int extruder = extruders.LowestSetBit();

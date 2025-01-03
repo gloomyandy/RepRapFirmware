@@ -1591,9 +1591,9 @@ TmcDriverState* Tmc22xxDriver::InitDrive(size_t slot, size_t driveNo) noexcept
 
 #if HAS_STALL_DETECT
 
-DriversBitmap Tmc22xxDriver::GetStalledDrivers(DriversBitmap driversOfInterest) noexcept
+LocalDriversBitmap Tmc22xxDriver::GetStalledDrivers(LocalDriversBitmap driversOfInterest) noexcept
 {
-	DriversBitmap rslt;
+	LocalDriversBitmap rslt;
 	driversOfInterest.Iterate([&rslt](unsigned int driverNumber, unsigned int count)
 								{
 									if (driverNumber < ARRAY_SIZE(DriverDiagPins) && digitalRead(DriverDiagPins[driverNumber]))

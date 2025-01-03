@@ -30,7 +30,7 @@ protected:
 private:
 	const char *_ecv_array text;
 	const char *_ecv_array command;
-	const char *_ecv_array m_acFile;		// used when action ("command") is "menu"
+	const char *_ecv_array m_acFile; // used when action ("command") is "menu"
 };
 
 #endif

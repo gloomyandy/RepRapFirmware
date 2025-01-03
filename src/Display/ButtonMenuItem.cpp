@@ -88,7 +88,7 @@ PixelNumber ButtonMenuItem::GetVisibilityRowOffset(PixelNumber tCurrentOffset, P
 	}
 
 	// Should we move back up?
-	if (row < tCurrentOffset + 3)
+	if (row < tCurrentOffset + 3u)
 	{
 		tOffsetRequest = (row > 3) ? row - 3 : 0;
 	}

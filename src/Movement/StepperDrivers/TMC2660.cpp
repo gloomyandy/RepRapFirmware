@@ -31,7 +31,7 @@
 #endif
 
 constexpr float MaximumMotorCurrent = 2500.0;
-constexpr float MinimumOpenLoadMotorCurrent = 500;			// minimum current in mA for the open load status to be taken seriously
+constexpr float MinimumOpenLoadMotorCurrent = 500.0;		// minimum current in mA for the open load status to be taken seriously
 constexpr uint32_t DefaultMicrosteppingShift = 4;			// x16 microstepping
 constexpr bool DefaultInterpolation = true;					// interpolation enabled
 constexpr int DefaultStallDetectThreshold = 1;
@@ -221,7 +221,7 @@ static inline constexpr uint32_t CurrentToCsBits(float current) noexcept
 
 constexpr uint32_t MinimumOpenLoadCsBits = CurrentToCsBits(MinimumOpenLoadMotorCurrent);
 
-class TmcDriverState
+class TmcDriverState final
 {
 public:
 	void Init(uint32_t driverNumber, uint32_t p_pin) noexcept;
@@ -280,7 +280,6 @@ private:
 	uint32_t pin;											// the pin number that drives the chip select pin of this driver
 	uint32_t configuredChopConfReg;							// the configured chopper control register, in the Enabled state
 	volatile uint32_t registersToUpdate;					// bitmap of register values that need to be sent to the driver chip
-	DriversBitmap driverBit;								// bitmap of just this driver number
 	uint32_t axisNumber;									// the axis number of this driver as used to index the DriveMovements in the DDA
 	uint32_t microstepShiftFactor;							// how much we need to shift 1 left by to get the current microstepping
 	uint32_t maxStallStepInterval;							// maximum interval between full steps to take any notice of stall detection, in step clocks
@@ -289,6 +288,7 @@ private:
 	volatile uint32_t lastReadStatus;						// the status word that we read most recently, updated by the ISR
 	volatile uint32_t accumulatedStatus;
 
+	LocalDriversBitmap driverBit;							// bitmap of just this driver number
 	uint16_t minSgLoadRegister;								// the minimum value of the StallGuard bits we read
 	bool enabled;
 	volatile uint8_t rdselState;							// 0-3 = actual RDSEL value, 0xFF = unknown
@@ -312,7 +312,7 @@ static volatile uint32_t spiDataOut = 0;					// volatile because we care about w
 static volatile uint32_t spiDataIn = 0;						// volatile because the PDC writes it
 
 // Variables used by the ISR
-static TmcDriverState * volatile currentDriver = nullptr;	// volatile because the ISR changes it
+static TmcDriverState *_ecv_null volatile currentDriver = nullptr;	// volatile because the ISR changes it
 
 // Set up the PDC to send a register and receive the status
 /*static*/ inline void TmcDriverState::SetupDMA(uint32_t outVal) noexcept
@@ -430,7 +430,7 @@ static TmcDriverState * volatile currentDriver = nullptr;	// volatile because th
 void TmcDriverState::Init(uint32_t driverNumber, uint32_t p_pin) noexcept
 {
 	axisNumber = driverNumber;												// assume straight through mapping at initialisation
-	driverBit = DriversBitmap::MakeFromBits(driverNumber);
+	driverBit = LocalDriversBitmap::MakeFromBits(driverNumber);
 	pin = p_pin;
 	pinMode(pin, OUTPUT_HIGH);
 	enabled = false;
@@ -871,7 +871,7 @@ extern "C" void TMC2660_SPI_Handler(void) noexcept SPEED_CRITICAL;
 
 void TMC2660_SPI_Handler(void) noexcept
 {
-	TmcDriverState *driver = currentDriver;				// capture volatile variable
+	TmcDriverState *_ecv_array _ecv_null driver = currentDriver;	// capture volatile variable
 	if (driver != nullptr)
 	{
 		driver->TransferDone();							// tidy up after the transfer we just completed
@@ -955,7 +955,7 @@ void SmartDrivers::Init(const Pin driverSelectPins[NumDirectDrivers], size_t num
 #endif
 
 	driversState = DriversState::noPower;
-	EndstopOrZProbe::SetDriversNotStalled(DriversBitmap::MakeLowestNBits(MaxSmartDrivers));
+	EndstopOrZProbe::SetDriversNotStalled(LocalDriversBitmap::MakeLowestNBits(MaxSmartDrivers));
 	for (size_t driver = 0; driver < numTmc2660Drivers; ++driver)
 	{
 		driverStates[driver].Init(driver, driverSelectPins[driver]);		// axes are mapped straight through to drivers initially
@@ -1054,7 +1054,7 @@ void SmartDrivers::Spin(bool powered) noexcept
 		{
 		case DriversState::noPower:
 			// Power to the drivers has been provided or restored, so we need to enable and re-initialise them
-			EndstopOrZProbe::SetDriversNotStalled(DriversBitmap::MakeLowestNBits(MaxSmartDrivers));
+			EndstopOrZProbe::SetDriversNotStalled(LocalDriversBitmap::MakeLowestNBits(MaxSmartDrivers));
 			for (size_t driver = 0; driver < numTmc2660Drivers; ++driver)
 			{
 				driverStates[driver].WriteAll();
@@ -1164,7 +1164,7 @@ void SmartDrivers::Spin(bool powered) noexcept
 	{
 		digitalWrite(GlobalTmc2660EnablePin, HIGH);			// disable the drivers
 		driversState = DriversState::noPower;
-		EndstopOrZProbe::SetDriversNotStalled(DriversBitmap::MakeLowestNBits(MaxSmartDrivers));
+		EndstopOrZProbe::SetDriversNotStalled(LocalDriversBitmap::MakeLowestNBits(MaxSmartDrivers));
 	}
 }
 
@@ -1173,7 +1173,7 @@ void SmartDrivers::TurnDriversOff() noexcept
 {
 	digitalWrite(GlobalTmc2660EnablePin, HIGH);				// disable the drivers
 	driversState = DriversState::noPower;
-	EndstopOrZProbe::SetDriversNotStalled(DriversBitmap::MakeLowestNBits(MaxSmartDrivers));
+	EndstopOrZProbe::SetDriversNotStalled(LocalDriversBitmap::MakeLowestNBits(MaxSmartDrivers));
 }
 
 void SmartDrivers::SetStallThreshold(size_t driver, int sgThreshold) noexcept

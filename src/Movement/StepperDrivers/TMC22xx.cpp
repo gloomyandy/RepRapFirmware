@@ -2523,7 +2523,7 @@ StandardDriverStatus SmartDrivers::GetStatus(size_t driver, bool accumulated, bo
 // So we route them all to CCL input pins instead, which lets us selectively OR them together in 3 groups and generate an interrupt from the resulting events
 
 // Set up to generate interrupts on the specified drivers stalling
-void EnableStallInterrupt(DriversBitmap drivers) noexcept
+void EnableStallInterrupt(LocalDriversBitmap drivers) noexcept
 {
 	// Disable all the Diag event interrupts
 	for (unsigned int i = 1; i < 3; ++i)
@@ -2590,9 +2590,9 @@ static void InitStallDetectionLogic() noexcept
 
 # endif
 
-DriversBitmap SmartDrivers::GetStalledDrivers(DriversBitmap driversOfInterest) noexcept
+LocalDriversBitmap SmartDrivers::GetStalledDrivers(LocalDriversBitmap driversOfInterest) noexcept
 {
-	DriversBitmap rslt;
+	LocalDriversBitmap rslt;
 	driversOfInterest.Iterate([&rslt](unsigned int driverNumber, unsigned int count)
 								{
 									if (driverNumber < ARRAY_SIZE(DriverDiagPins) && digitalRead(DriverDiagPins[driverNumber]))

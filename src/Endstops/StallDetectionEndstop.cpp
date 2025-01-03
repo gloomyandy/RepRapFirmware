@@ -34,9 +34,9 @@ bool StallDetectionEndstop::Stopped() const noexcept
 bool StallDetectionEndstop::Prime(const Kinematics &_ecv_from kin, const AxisDriversConfig& axisDrivers) noexcept
 {
 	// Find which drivers are relevant, and decide whether we stop just the driver, just the axis, or everything
-	stopAll = kin.GetControllingDrives(GetAxis(), true).Intersects(~AxesBitmap::MakeFromBits(GetAxis()));
+	stopAll = kin.GetControllingDrives(GetAxis(), true).Intersects(~LogicalDrivesBitmap::MakeFromBits(GetAxis()));
 	numDriversLeft = axisDrivers.numDrivers;
-	driversMonitored = axisDrivers.GetDriversBitmap();
+	driversMonitored = axisDrivers.GetLocalDriversBitmap();
 
 #if SUPPORT_CAN_EXPANSION
 	//TODO if there any remote stall endstops, check they are set up to report
@@ -50,7 +50,7 @@ bool StallDetectionEndstop::Prime(const Kinematics &_ecv_from kin, const AxisDri
 EndstopHitDetails StallDetectionEndstop::CheckTriggered() noexcept
 {
 	EndstopHitDetails rslt;				// initialised by default constructor
-	const DriversBitmap relevantStalledDrivers = GetStalledDrivers(driversMonitored);
+	const LocalDriversBitmap relevantStalledDrivers = GetStalledDrivers(driversMonitored);
 	if (relevantStalledDrivers.IsNonEmpty())
 	{
 		rslt.axis = GetAxis();
@@ -120,7 +120,7 @@ void StallDetectionEndstop::AppendDetails(const StringRef& str) noexcept
 	str.cat((individualMotors) ? "motor stall (individual motors)" : "motor stall (any motor)");
 }
 
-void StallDetectionEndstop::SetDrivers(DriversBitmap extruderDrivers) noexcept
+void StallDetectionEndstop::SetDrivers(LocalDriversBitmap extruderDrivers) noexcept
 {
 	driversMonitored = extruderDrivers;
 	stopAll = true;

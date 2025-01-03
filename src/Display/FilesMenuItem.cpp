@@ -22,7 +22,7 @@ FilesMenuItem::FilesMenuItem(PixelNumber r, PixelNumber c, PixelNumber w, FontNu
 	}
 
 	initialDirectoryNesting = GetDirectoryNesting();
-	sdCardState = notStarted;
+	sdCardState = CardState::notStarted;
 }
 
 void FilesMenuItem::vResetViewState() noexcept
@@ -83,25 +83,25 @@ void FilesMenuItem::Draw(Lcd &_ecv_from lcd, PixelNumber rightMargin, bool highl
 	// The 'highlight' parameter is not used to highlight this item, but it is still used to tell whether this item is selected or not
 	if (!IsVisible())
 	{
-		sdCardState = notStarted;
+		sdCardState = CardState::notStarted;
 	}
 	else if (!drawn || itemChanged || (bool)highlighted != highlight)
 	{
 		switch (sdCardState)
 		{
-		case notStarted:
+		case CardState::notStarted:
 			if (MassStorage::CheckDriveMounted(currentDirectory.c_str()))
 			{
-				sdCardState = mounted;
+				sdCardState = CardState::mounted;
 				EnterDirectory();
 			}
 			else
 			{
-				sdCardState = mounting;
+				sdCardState = CardState::mounting;
 			}
 			break;
 
-		case mounting:
+		case CardState::mounting:
 			{
 				const size_t card = (isdigit(currentDirectory[0]) && currentDirectory[1] == ':') ? currentDirectory[0] - '0' : 0;
 				String<StringLength50> reply;
@@ -111,7 +111,7 @@ void FilesMenuItem::Draw(Lcd &_ecv_from lcd, PixelNumber rightMargin, bool highl
 					return;
 
 				case GCodeResult::ok:
-					sdCardState = mounted;
+					sdCardState = CardState::mounted;
 					EnterDirectory();
 					break;
 
@@ -119,7 +119,7 @@ void FilesMenuItem::Draw(Lcd &_ecv_from lcd, PixelNumber rightMargin, bool highl
 					reply.copy("Internal error");
 					// no break
 				case GCodeResult::error:
-					sdCardState = error;
+					sdCardState = CardState::error;
 					lcd.SetFont(fontNumber);
 					lcd.SetCursor(row, column);
 					lcd.SetRightMargin(rightMargin);
@@ -131,11 +131,11 @@ void FilesMenuItem::Draw(Lcd &_ecv_from lcd, PixelNumber rightMargin, bool highl
 			}
 			break;
 
-		case mounted:
+		case CardState::mounted:
 			ListFiles(lcd, rightMargin, highlight);
 			break;
 
-		case error:
+		case CardState::error:
 			break;
 		}
 	}

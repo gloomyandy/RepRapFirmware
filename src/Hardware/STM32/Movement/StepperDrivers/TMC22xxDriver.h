@@ -12,6 +12,6 @@ namespace Tmc22xxDriver
 	void TurnDriversOff() noexcept;
 	bool IsReady() noexcept;
     TmcDriverState *InitDrive(size_t slot, size_t driveNo) noexcept;
-    DriversBitmap GetStalledDrivers(DriversBitmap driversOfInterest) noexcept;
+    LocalDriversBitmap GetStalledDrivers(LocalDriversBitmap driversOfInterest) noexcept;
 }
 #endif

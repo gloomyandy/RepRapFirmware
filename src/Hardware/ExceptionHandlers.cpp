@@ -25,7 +25,7 @@
 #endif
 
 // Perform a software reset. 'stk' points to the exception stack (r0 r1 r2 r3 r12 lr pc xPSR) if the cause is an exception, otherwise it is nullptr.
-[[noreturn]] void SoftwareReset(SoftwareResetReason initialReason, const uint32_t *_ecv_array null stk) noexcept
+[[noreturn]] void SoftwareReset(SoftwareResetReason initialReason, const uint32_t *_ecv_array _ecv_null stk) noexcept
 {
 	IrqDisable();								// disable interrupts before we call any flash functions. We don't enable them again.
 	WatchdogReset();							// kick the watchdog
@@ -68,7 +68,7 @@
 #endif
 		}
 		fullReason |= reprap.GetSpinningModule().ToBaseType();
-		if (reprap.GetPlatform().WasDeliberateError())
+		if (Platform::WasDeliberateError())
 		{
 			fullReason |= (uint16_t)SoftwareResetReason::deliberate;
 		}
@@ -97,7 +97,7 @@
 // Exception handlers
 // By default the Usage Fault, Bus Fault and Memory Management fault handlers are not enabled,
 // so they escalate to a Hard Fault and we don't need to provide separate exception handlers for them.
-extern "C" [[noreturn]] __attribute__((externally_visible)) void hardFaultDispatcher(const uint32_t *pulFaultStackAddress) noexcept
+extern "C" [[noreturn]] __attribute__((externally_visible)) void hardFaultDispatcher(const uint32_t *_ecv_array pulFaultStackAddress) noexcept
 {
 	SoftwareReset(SoftwareResetReason::hardFault, pulFaultStackAddress);
 }
@@ -121,7 +121,7 @@ void HardFault_Handler() noexcept
 
 #if USE_MPU
 
-extern "C" [[noreturn]] void memManageDispatcher(const uint32_t *pulFaultStackAddress) noexcept
+extern "C" [[noreturn]] void memManageDispatcher(const uint32_t *_ecv_array pulFaultStackAddress) noexcept
 {
 	SoftwareReset(SoftwareResetReason::memFault, pulFaultStackAddress);
 }
@@ -145,7 +145,7 @@ void MemManage_Handler() noexcept
 
 #endif
 
-extern "C" [[noreturn]] __attribute__((externally_visible)) void wdtFaultDispatcher(const uint32_t *pulFaultStackAddress) noexcept
+extern "C" [[noreturn]] __attribute__((externally_visible)) void wdtFaultDispatcher(const uint32_t *_ecv_array pulFaultStackAddress) noexcept
 {
 	SoftwareReset(SoftwareResetReason::wdtFault, pulFaultStackAddress);
 }
@@ -174,7 +174,7 @@ void WDT_Handler() noexcept
 }
 #endif
 
-extern "C" [[noreturn]] __attribute__((externally_visible)) void otherFaultDispatcher(const uint32_t *pulFaultStackAddress) noexcept
+extern "C" [[noreturn]] __attribute__((externally_visible)) void otherFaultDispatcher(const uint32_t *_ecv_array pulFaultStackAddress) noexcept
 {
 	SoftwareReset(SoftwareResetReason::otherFault, pulFaultStackAddress);
 }
@@ -208,7 +208,7 @@ extern "C" void UsageFault_Handler () noexcept { SoftwareReset(SoftwareResetReas
 extern "C" void DebugMon_Handler   () noexcept __attribute__ ((alias("OtherFault_Handler")));
 
 // FreeRTOS hooks that we need to provide
-extern "C" [[noreturn]] __attribute__((externally_visible)) void stackOverflowDispatcher(const uint32_t *pulFaultStackAddress, char* pcTaskName) noexcept
+extern "C" [[noreturn]] __attribute__((externally_visible)) void stackOverflowDispatcher(const uint32_t *_ecv_array pulFaultStackAddress, char *_ecv_array pcTaskName) noexcept
 {
 	SoftwareReset(SoftwareResetReason::stackOverflow, pulFaultStackAddress);
 }
@@ -228,12 +228,12 @@ void vApplicationStackOverflowHook(TaskHandle_t pxTask, char *pcTaskName) noexce
 	);
 }
 
-extern "C" [[noreturn]] __attribute__((externally_visible)) void assertCalledDispatcher(const uint32_t *pulFaultStackAddress) noexcept
+extern "C" [[noreturn]] __attribute__((externally_visible)) void assertCalledDispatcher(const uint32_t *_ecv_array pulFaultStackAddress) noexcept
 {
 	SoftwareReset(SoftwareResetReason::assertCalled, pulFaultStackAddress);
 }
 
-extern "C" [[noreturn]] void vAssertCalled(uint32_t line, const char *file) noexcept __attribute__((naked));
+extern "C" [[noreturn]] void vAssertCalled(uint32_t line, const char *_ecv_array file) noexcept __attribute__((naked));
 void vAssertCalled(uint32_t line, const char *file) noexcept
 {
 #if 0

@@ -428,7 +428,7 @@ void LinearDeltaKinematics::GetAssumedInitialPosition(size_t numAxes, float posi
 }
 
 // Auto calibrate from a set of probe points returning true if it failed
-bool LinearDeltaKinematics::DoAutoCalibration(size_t numFactors, const RandomProbePointSet& probePoints, const StringRef& reply) noexcept
+bool LinearDeltaKinematics::DoAutoCalibration(MovementState& ms, size_t numFactors, const RandomProbePointSet& probePoints, const StringRef& reply) noexcept
 {
 	constexpr size_t NumDeltaFactors = 9;		// maximum number of delta machine factors we can adjust
 
@@ -573,7 +573,7 @@ bool LinearDeltaKinematics::DoAutoCalibration(size_t numFactors, const RandomPro
 			}
 
 			// Adjust the motor endpoints to allow for the change to endstop adjustments
-			reprap.GetMove().AdjustMotorPositions(heightAdjust, UsualNumTowers);
+			ms.AdjustMotorPositions(heightAdjust, UsualNumTowers);
 		}
 
 		// Calculate the expected probe heights using the new parameters
@@ -1016,31 +1016,21 @@ AxesBitmap LinearDeltaKinematics::GetHomingFileName(AxesBitmap toBeHomed, AxesBi
 	return Kinematics::GetHomingFileName(toBeHomed, alreadyHomed, numVisibleAxes, filename);
 }
 
-// This function is called from the step ISR when an endstop switch is triggered during homing after stopping just one motor or all motors.
-// Take the action needed to define the current position, normally by calling dda.SetDriveCoordinate().
-void LinearDeltaKinematics::OnHomingSwitchTriggered(size_t axis, bool highEnd, const float stepsPerMm[], DDA& dda) const noexcept
+float LinearDeltaKinematics::GetEndstopPosition(size_t drive, bool highEnd) noexcept
 {
-	if (axis < numTowers)
+	if (drive < numTowers && highEnd)
 	{
-		if (highEnd)
-		{
-			dda.SetDriveCoordinate(lrintf(homedCarriageHeights[axis] * stepsPerMm[axis]), axis);
-		}
+		return homedCarriageHeights[drive];
 	}
-	else
-	{
-		// Assume that any additional axes are linear
-		const float hitPoint = (highEnd) ? reprap.GetMove().AxisMaximum(axis) : reprap.GetMove().AxisMinimum(axis);
-		dda.SetDriveCoordinate(lrintf(hitPoint * stepsPerMm[axis]), axis);
-	}
+	return Kinematics::GetEndstopPosition(drive, highEnd);
 }
 
 // Return the drivers that control an axis or tower
-AxesBitmap LinearDeltaKinematics::GetControllingDrives(size_t axis, bool forHoming) const noexcept
+LogicalDrivesBitmap LinearDeltaKinematics::GetControllingDrives(size_t axis, bool forHoming) const noexcept
 {
 	return (forHoming || axis > Z_AXIS)
-			? AxesBitmap::MakeFromBits(axis)
-				: AxesBitmap::MakeLowestNBits(numTowers);
+			? LogicalDrivesBitmap::MakeFromBits(axis)
+				: LogicalDrivesBitmap::MakeLowestNBits(numTowers);
 }
 
 #endif	// SUPPORT_LINEAR_DELTA

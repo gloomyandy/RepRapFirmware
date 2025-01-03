@@ -32,26 +32,26 @@
 
 // Set the microstepping for local drivers, returning true if successful. All drivers for the same axis must use the same microstepping.
 // Caller must deal with remote drivers.
-bool Move::SetMicrostepping(size_t axisOrExtruder, unsigned int microsteps, bool interp, const StringRef& reply) noexcept
+bool Move::SetMicrostepping(size_t drive, unsigned int microsteps, bool interp, const StringRef& reply) noexcept
 {
-	bool ret = SetDriversMicrostepping(axisOrExtruder, microsteps, interp, reply);
+	const bool ret = SetDriversMicrostepping(drive, microsteps, interp, reply);
 	if (ret)
 	{
-		microstepping[axisOrExtruder] = (interp) ? microsteps | 0x8000 : microsteps;
+		microstepping[drive] = (interp) ? microsteps | 0x8000 : microsteps;
 		reprap.MoveUpdated();
 	}
 	return ret;
 }
 
 // Get the microstepping for an axis or extruder
-unsigned int Move::GetMicrostepping(size_t axisOrExtruder, bool& interpolation) const noexcept
+unsigned int Move::GetMicrostepping(size_t drive, bool& interpolation) const noexcept
 {
-	interpolation = (microstepping[axisOrExtruder] & 0x8000) != 0;
-	return microstepping[axisOrExtruder] & 0x7FFF;
+	interpolation = (microstepping[drive] & 0x8000) != 0;
+	return microstepping[drive] & 0x7FFF;
 }
 
-// Set the drive steps per mm. Called when processing M92.
-void Move::SetDriveStepsPerMm(size_t axisOrExtruder, float value, uint32_t requestedMicrostepping) noexcept
+// Set the drive steps per mm. Called when processing M92. Return the new steps/mm divided by the old one.
+float Move::SetDriveStepsPerMm(size_t axisOrExtruder, float value, uint32_t requestedMicrostepping) noexcept
 {
 	if (requestedMicrostepping != 0)
 	{
@@ -63,8 +63,10 @@ void Move::SetDriveStepsPerMm(size_t axisOrExtruder, float value, uint32_t reque
 	}
 
 	value = max<float>(value, MinimumStepsPerMm);					// don't allow zero or negative
+	const float ret = value/driveStepsPerMm[axisOrExtruder];
 	driveStepsPerMm[axisOrExtruder] = value;
 	reprap.MoveUpdated();
+	return ret;
 }
 
 // Process M205 or M566
@@ -325,6 +327,12 @@ GCodeResult Move::ConfigureNonlinearExtrusion(GCodeBuffer& gb, const StringRef& 
 }
 
 #endif
+
+// Return the position of an endstop in steps. Only called for kinematics that home drives individually.
+int32_t Move::GetEndstopPositionSteps(size_t drive, bool highEnd) noexcept
+{
+	return kinematics->GetEndstopPosition(drive, highEnd) * driveStepsPerMm[drive];
+}
 
 // This is called from the step ISR as well as other places, so keep it fast
 // If drive >= MaxAxesPlusExtruders then we are setting an individual motor direction
@@ -878,7 +886,7 @@ void Move::SetEnableValue(size_t driver, int8_t eVal) noexcept
 		if (eVal == -1)
 		{
 			// User has asked to disable status monitoring for this driver, so clear its error bits
-			const DriversBitmap mask = ~DriversBitmap::MakeFromBits(driver);
+			const LocalDriversBitmap mask = ~LocalDriversBitmap::MakeFromBits(driver);
 			temperatureShutdownDrivers &= mask;
 			temperatureWarningDrivers &= mask;
 			shortToGroundDrivers &= mask;
@@ -943,7 +951,7 @@ GCodeResult Move::EutSetStepsPerMmAndMicrostepping(const CanMessageMultipleDrive
 							}
 							else
 							{
-								SetDriveStepsPerMm(driver, msg.values[count].GetStepsPerUnit(), 0);
+								(void)SetDriveStepsPerMm(driver, msg.values[count].GetStepsPerUnit(), 0);
 #if HAS_SMART_DRIVERS
 								const uint16_t rawMicrostepping = msg.values[count].GetMicrostepping();
 								const uint16_t microsteppingOnly = rawMicrostepping & 0x03FF;
@@ -1343,7 +1351,7 @@ GCodeResult Move::EutProcessM915(const CanMessageGeneric& msg, const StringRef& 
 		return GCodeResult::error;
 	}
 
-	const auto drivers = DriversBitmap::MakeFromRaw(driverBits);
+	const auto drivers = LocalDriversBitmap::MakeFromRaw(driverBits);
 
 	bool seen = false;
 	{
@@ -1431,7 +1439,7 @@ void Move::SendDriversStatus(CanMessageBuffer& buf) noexcept
 // Stop some drivers and update the corresponding motor positions
 void Move::StopDriversFromRemote(uint16_t whichDrives) noexcept
 {
-	DriversBitmap dr(whichDrives);
+	LocalDriversBitmap dr(whichDrives);
 	dr.Iterate([this](size_t drive, unsigned int)
 				{
 					StopDriveFromRemote(drive);

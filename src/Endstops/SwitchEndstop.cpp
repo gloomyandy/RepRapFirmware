@@ -136,7 +136,7 @@ bool SwitchEndstop::Stopped() const noexcept
 bool SwitchEndstop::Prime(const Kinematics &_ecv_from kin, const AxisDriversConfig& axisDrivers) noexcept
 {
 	// Decide whether we stop just the driver, just the axis, or everything
-	stopAll = kin.GetControllingDrives(GetAxis(), true).Intersects(~AxesBitmap::MakeFromBits(GetAxis()));
+	stopAll = kin.GetControllingDrives(GetAxis(), true).Intersects(~LogicalDrivesBitmap::MakeFromBits(GetAxis()));
 	numPortsLeftToTrigger = (numPortsUsed != axisDrivers.numDrivers) ? 1 : numPortsUsed;
 	portsLeftToTrigger = PortsBitmap::MakeLowestNBits(numPortsUsed);
 

@@ -174,9 +174,9 @@ int debugLine = 0;
 
 // Global functions
 
-DriversBitmap AxisDriversConfig::GetDriversBitmap() const noexcept
+LocalDriversBitmap AxisDriversConfig::GetLocalDriversBitmap() const noexcept
 {
-	DriversBitmap rslt;
+	LocalDriversBitmap rslt;
 	for (size_t i = 0; i < numDrivers; ++i)
 	{
 #if SUPPORT_CAN_EXPANSION
@@ -1192,7 +1192,7 @@ void Platform::Spin() noexcept
 
 // Report driver status conditions that require attention.
 // Sets 'reported' if we reported anything, else leaves 'reported' alone.
-void Platform::ReportDrivers(MessageType mt, DriversBitmap& whichDrivers, const char *_ecv_array text, bool& reported) noexcept
+void Platform::ReportDrivers(MessageType mt, LocalDriversBitmap& whichDrivers, const char *_ecv_array text, bool& reported) noexcept
 {
 	if (whichDrivers.IsNonEmpty())
 	{
