@@ -1377,7 +1377,7 @@ void Move::UpdateLiveMachineCoordinates(float coords[MaxAxes], const Tool *_ecv_
 
 	for (size_t i = MaxAxesPlusExtruders - reprap.GetGCodes().GetNumExtruders(); i < MaxAxesPlusExtruders; ++i)
 	{
-		coords[i] = dms[i].currentMotorPosition / driveStepsPerMm[i];
+		coords[i] = (float)dms[i].currentMotorPosition / driveStepsPerMm[i];
 	}
 }
 

@@ -7,7 +7,7 @@ extern uint32_t _estack;			// defined in the linker script
 
 
 // Update the firmware. Prerequisites should be checked before calling this.
-void RepRap::RunSdIap(const char * filename) noexcept
+void RepRap::RunSdIap(c_string _ecv_null  filename) noexcept
 {
     debugPrintf("Update firmware from SD card based file\n");
 #if  HAS_MASS_STORAGE
@@ -93,7 +93,7 @@ int32_t RequestFirmwareBlock(uint32_t fileOffset, uint32_t numBytes, uint8_t *bu
 }
 
 // Update the firmware. Prerequisites should be checked before calling this.
-void RepRap::RunCanIap(const char * filenameRef) noexcept
+void RepRap::RunCanIap(c_string _ecv_null  filenameRef) noexcept
 {
     debugPrintf("Update firmware over CAN\n");
     uint32_t start = millis();
