@@ -935,6 +935,7 @@ float DDA::AdvanceBabyStepping(DDARing& ring, size_t axis, float amount) noexcep
 		return 0.0;				// only Z axis babystepping is supported at present
 	}
 
+	// Find the oldest un-prepared move
 	DDA *cdda = this;
 	while (cdda->prev->state == DDAState::provisional)
 	{
@@ -944,15 +945,14 @@ float DDA::AdvanceBabyStepping(DDARing& ring, size_t axis, float amount) noexcep
 	// cdda addresses the earliest un-prepared move, which is the first one we can apply babystepping to
 	// Allow babystepping Z speed up to 10% of the move top speed or up to half the Z jerk rate, whichever is lower
 	float babySteppingDone = 0.0;
-	while(cdda != this)
+	while (cdda != this)
 	{
-		float babySteppingToDo = 0.0;
 		if (amount != 0.0 && cdda->flags.xyMoving)
 		{
 			// Limit the babystepping Z speed to the lower of 0.1 times the original XYZ speed and 0.5 times the Z jerk
 			Move& move = reprap.GetMove();
 			const float maxBabySteppingAmount = cdda->totalDistance * min<float>(0.1, 0.5 * move.GetMaxInstantDv(Z_AXIS)/cdda->topSpeed);
-			babySteppingToDo = constrain<float>(amount, -maxBabySteppingAmount, maxBabySteppingAmount);
+			const float babySteppingToDo = constrain<float>(amount, -maxBabySteppingAmount, maxBabySteppingAmount);
 			cdda->directionVector[Z_AXIS] += babySteppingToDo/cdda->totalDistance;
 			cdda->totalDistance *= cdda->NormaliseLinearMotion(move.GetLinearAxes());
 			cdda->RecalculateMove(ring);

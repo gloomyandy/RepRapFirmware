@@ -384,7 +384,9 @@ bool DDARing::IsIdle() const noexcept
 // Caution! Thus is called with scheduling locked, therefore it must make no FreeRTOS calls, or call anything that makes them
 float DDARing::PushBabyStepping(size_t axis, float amount) noexcept
 {
-	return addPointer->AdvanceBabyStepping(*this, axis, amount);
+	const float ret = addPointer->AdvanceBabyStepping(*this, axis, amount);
+	startCoordinates[axis] += ret;
+	return ret;
 }
 
 // Tell the DDA ring that the caller is waiting for it to empty. Returns true if it is already empty.
