@@ -3985,6 +3985,7 @@ void Platform::SetNonlinearExtrusion(size_t extruder, float a, float b, float li
 		nonlinearExtrusion[extruder].limit = limit;
 		nonlinearExtrusion[extruder].A = a;
 		nonlinearExtrusion[extruder].B = b;
+		reprap.MoveUpdated();
 	}
 }
 
