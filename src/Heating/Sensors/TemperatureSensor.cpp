@@ -75,6 +75,20 @@ TemperatureError TemperatureSensor::GetAdditionalOutput(float& t, uint8_t output
 	return TemperatureError::invalidOutputNumber;
 }
 
+// Configure one of the additional outputs on this sensor. Ignore the A, U and V parameters because those are handled by ConfigureCommonParameters.
+// The output number should already have been range checked before we get here, so no need to return an error if it is out of range.
+// Most sensors either have no additional outputs or the additional outputs don't need additional configuration, so this default implementation does nothing.
+GCodeResult TemperatureSensor::ConfigureAdditionalOutput(GCodeBuffer& gb, const StringRef& reply, bool& changed, uint8_t outputNumber) THROWS(GCodeException)
+{
+	return GCodeResult::ok;
+}
+
+// Report the parameters of an additional output by appending them to the reply
+void TemperatureSensor::AppendAdditionalOutputParameters(const StringRef& reply, uint8_t outputNumber) noexcept
+{
+	// By default there are no parameters to report
+}
+
 // Set the name - normally called only once, so we allow heap memory to be allocated
 void TemperatureSensor::SetSensorName(const char *_ecv_array _ecv_null newName) noexcept
 {
@@ -106,6 +120,12 @@ GCodeResult TemperatureSensor::Configure(const CanMessageGenericParser& parser, 
 		// No parameters were provided, so report the current configuration
 		CopyBasicDetails(reply);
 	}
+	return GCodeResult::ok;
+}
+
+// As above but get the parameters from a CAN message parser
+GCodeResult TemperatureSensor::ConfigureAdditionalOutput(const CanMessageGenericParser& parser, const StringRef& reply, bool& changed, uint8_t outputNumber) noexcept
+{
 	return GCodeResult::ok;
 }
 

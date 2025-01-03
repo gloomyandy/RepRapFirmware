@@ -110,9 +110,8 @@ AdcSensorADS131A02Chan0::AdcSensorADS131A02Chan0(unsigned int sensorNum, bool p_
 // Configure this temperature sensor
 GCodeResult AdcSensorADS131A02Chan0::Configure(GCodeBuffer& gb, const StringRef& reply, bool& changed)
 {
-	size_t numValues = NumChannels;
-	gb.TryGetFloatArray('L', numValues, readingAtMin, changed, true);
-	gb.TryGetFloatArray('H', numValues, readingAtMax, changed, true);
+	gb.TryGetFValue('L', readingAtMin[0], changed);
+	gb.TryGetFValue('H', readingAtMax[0], changed);
 
 	if (!ConfigurePort(gb, reply, changed))
 	{
@@ -123,19 +122,38 @@ GCodeResult AdcSensorADS131A02Chan0::Configure(GCodeBuffer& gb, const StringRef&
 	return FinishConfiguring(changed, reply);
 }
 
+// Configure one of the additional outputs on this sensor. Ignore the A, U and V parameters because those are handled by ConfigureCommonParameters.
+// The output number should have been range checked already, so no need for extensive error handing if it is out of range.
+GCodeResult AdcSensorADS131A02Chan0::ConfigureAdditionalOutput(GCodeBuffer& gb, const StringRef& reply, bool& changed, uint8_t outputNumber) THROWS(GCodeException)
+{
+	if (outputNumber > 0 && outputNumber < NumChannels)
+	{
+		gb.TryGetFValue('L', readingAtMin[outputNumber], changed);
+		gb.TryGetFValue('H', readingAtMax[outputNumber], changed);
+	}
+	return GCodeResult::ok;
+}
+
+// Report the parameters of an additional output by appending them to the reply
+void AdcSensorADS131A02Chan0::AppendAdditionalOutputParameters(const StringRef& reply, uint8_t outputNumber) noexcept
+{
+	if (outputNumber > 0 && outputNumber < NumChannels)
+	{
+		reply.catf(", reading range %.1f to %.1fC", (double)readingAtMin[outputNumber], (double)readingAtMax[outputNumber]);
+	}
+}
+
 #if SUPPORT_REMOTE_COMMANDS
 
 GCodeResult AdcSensorADS131A02Chan0::Configure(const CanMessageGenericParser& parser, const StringRef& reply) noexcept
 {
 	bool seen = false;
-	size_t numValues = NumChannels;
-	if (parser.GetFloatArrayParam('L', numValues, readingAtMin))
+	if (parser.GetFloatParam('L', readingAtMin[0]))
 	{
 		seen = true;
 	}
 
-	numValues = NumChannels;
-	if (parser.GetFloatArrayParam('H', numValues, readingAtMax))
+	if (parser.GetFloatParam('H', readingAtMax[0]))
 	{
 		seen = true;
 	}
@@ -151,6 +169,17 @@ GCodeResult AdcSensorADS131A02Chan0::Configure(const CanMessageGenericParser& pa
 	}
 
 	return FinishConfiguring(seen, reply);
+}
+
+// As above but get the parameters from a CAN message parser, and if none found only report the existing parameters if reportIfNoChange is true
+GCodeResult AdcSensorADS131A02Chan0::ConfigureAdditionalOutput(const CanMessageGenericParser& parser, const StringRef& reply, bool& changed, uint8_t outputNumber) noexcept
+{
+	if (outputNumber > 0 && outputNumber < NumChannels)
+	{
+		if (parser.GetFloatParam('L', readingAtMin[outputNumber])) { changed = true; }
+		if (parser.GetFloatParam('H', readingAtMax[outputNumber])) { changed = true; }
+	}
+	return GCodeResult::ok;
 }
 
 #endif
@@ -191,10 +220,7 @@ GCodeResult AdcSensorADS131A02Chan0::FinishConfiguring(bool changed, const Strin
 	else
 	{
 		CopyBasicDetails(reply);
-		for (unsigned int chan = 0; chan < NumChannels; ++chan)
-		{
-			reply.catf(", channel %u reading range %.1f to %.1fC", chan, (double)readingAtMin[chan], (double)readingAtMax[chan]);
-		}
+		reply.catf(", reading range %.1f to %.1fC", (double)readingAtMin[0], (double)readingAtMax[0]);
 	}
 	return GCodeResult::ok;
 }
@@ -315,9 +341,9 @@ TemperatureError AdcSensorADS131A02Chan0::TakeReading() noexcept
 		for (size_t i = 0; i < NumChannels; ++i)
 		{
 			const int32_t thisReading = (int32_t)readings[i];
-			lastReadings[i] = (bipolar) ? (readingAtMin[i] + readingAtMax[i]) * 0.5 + ldexpf((float)thisReading, -32) * (readingAtMax[i] - readingAtMin[i])
-								: (thisReading <= 0) ? readingAtMin[i]
-									: readingAtMin[i] + ldexpf((float)thisReading, -31) * (readingAtMax[i] - readingAtMin[i]);
+			const float fullScale = (readingAtMax[i] - readingAtMin[i]) * ReadingScalingFactor;
+			lastReadings[i] = (bipolar) ? (readingAtMin[i] + readingAtMax[i]) * 0.5 + ldexpf((float)thisReading, -32) * fullScale
+										: readingAtMin[i] + ldexpf((float)thisReading, -31) * fullScale;
 		}
 
 		// We ignore f_drdy status reports because they just mean that another reading became available and was discarded while we were fetching the previous one

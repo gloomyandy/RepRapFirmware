@@ -39,11 +39,20 @@ GCodeResult AdditionalOutputSensor::Configure(GCodeBuffer& gb, const StringRef& 
 		}
 	}
 
+	const auto parent = reprap.GetHeat().FindSensor(parentSensor);
+	if (parent.IsNotNull())
+	{
+		parent->ConfigureAdditionalOutput(gb, reply, changed, outputNumber);
+	}
 	ConfigureCommonParameters(gb, changed);
 	if (!changed && !gb.Seen('Y'))
 	{
 		// No parameters were provided, so report the current configuration
 		CopyBasicDetails(reply);
+		if (parent.IsNotNull())
+		{
+			parent->AppendAdditionalOutputParameters(reply, outputNumber);
+		}
 	}
 	return rslt;
 }

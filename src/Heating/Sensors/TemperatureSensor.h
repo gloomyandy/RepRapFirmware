@@ -54,6 +54,12 @@ public:
 	// How many additional outputs does this sensor have
 	virtual const uint8_t GetNumAdditionalOutputs() const noexcept { return 0; }
 
+	// Configure one of the additional outputs on this sensor. Ignore the A, U and V parameters because those are handled by ConfigureCommonParameters.
+	virtual GCodeResult ConfigureAdditionalOutput(GCodeBuffer& gb, const StringRef& reply, bool& changed, uint8_t outputNumber) THROWS(GCodeException);
+
+	// Report the parameters of an additional output
+	virtual void AppendAdditionalOutputParameters(const StringRef& reply, uint8_t outputNumber) noexcept;
+
 	// Get the smart drivers channel that this sensor monitors, or -1 if it doesn't
 	virtual int GetSmartDriversChannel() const noexcept { return -1; }
 
@@ -65,9 +71,12 @@ public:
 
 #if SUPPORT_REMOTE_COMMANDS
 	// Configure the sensor from M308 parameters.
-	// If we find any parameters, process them and return true. If an error occurs while processing them, return error and write an error message to 'reply.
+	// If we find any parameters, process them and return ok. If an error occurs while processing them, return error and write an error message to 'reply.
 	// If we find no relevant parameters, report the current parameters to 'reply' and return ok.
 	virtual GCodeResult Configure(const CanMessageGenericParser& parser, const StringRef& reply) noexcept;
+
+	// As above but get the parameters from a CAN message parser
+	virtual GCodeResult ConfigureAdditionalOutput(const CanMessageGenericParser& parser, const StringRef& reply, bool& changed, uint8_t outputNumber) noexcept;
 #endif
 
 #if SUPPORT_CAN_EXPANSION
