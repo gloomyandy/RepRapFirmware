@@ -145,10 +145,10 @@ constexpr size_t NumDirectDrivers = 14;               // The maximum number of d
 
 #include <Duet3Common.h>
 #if STM32H7
-constexpr size_t MaxPortsPerHeater = 2;
+constexpr size_t MaxPortsPerHeater = 3;
 
 constexpr size_t MaxBedHeaters = 12;
-constexpr size_t MaxChamberHeaters = 4;
+constexpr size_t MaxChamberHeaters = 8;
 constexpr int8_t DefaultBedHeater = 0;
 constexpr int8_t DefaultE0Heater = 1;                // Index of the default first extruder heater, used only for the legacy status response
 
