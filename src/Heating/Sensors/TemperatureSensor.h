@@ -90,9 +90,6 @@ public:
 	// Try to get a temperature reading
 	TemperatureError GetLatestTemperature(float& t) noexcept;
 
-	// Return the sensor type
-	const char *_ecv_array GetSensorType() const noexcept { return sensorType; }
-
 	// Return the sensor number
 	unsigned int GetSensorNumber() const noexcept { return sensorNumber; }
 

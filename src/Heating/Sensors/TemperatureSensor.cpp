@@ -123,7 +123,7 @@ GCodeResult TemperatureSensor::Configure(const CanMessageGenericParser& parser, 
 	return GCodeResult::ok;
 }
 
-// As above but get the parameters from a CAN message parser
+// Default implementation to configure parameters for an additional output
 GCodeResult TemperatureSensor::ConfigureAdditionalOutput(const CanMessageGenericParser& parser, const StringRef& reply, bool& changed, uint8_t outputNumber) noexcept
 {
 	return GCodeResult::ok;

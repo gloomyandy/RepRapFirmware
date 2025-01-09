@@ -1806,7 +1806,7 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 					stepErrorDetails.newSegmentStartTime = startTime;
 					stepErrorDetails.timeNow = StepTimer::GetMovementTimerTicks();
 #endif
-					LogStepError(3, logicalDrive);
+					LogStepError(3, logicalDrive, 0.0);
 					RestoreBasePriority(oldPrio);
 					if (reprap.Debug(Module::Move))
 					{

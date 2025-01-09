@@ -80,10 +80,19 @@ GCodeResult AdditionalOutputSensor::Configure(const CanMessageGenericParser& par
 		}
 	}
 
+	const auto parent = reprap.GetHeat().FindSensor(parentSensor);
+	if (parent.IsNotNull())
+	{
+		parent->ConfigureAdditionalOutput(parser, reply, changed, outputNumber);
+	}
 	ConfigureCommonParameters(parser, changed);
-	if (!changed)
+	if (!changed && !parser.HasParameter('Y'))
 	{
 		CopyBasicDetails(reply);
+		if (parent.IsNotNull())
+		{
+			parent->AppendAdditionalOutputParameters(reply, outputNumber);
+		}
 	}
 	return rslt;
 }
@@ -122,6 +131,17 @@ GCodeResult AdditionalOutputSensor::ConfigurePort(const char *_ecv_array portNam
 			reply.printf("Parent sensor %d does not exist", parentSensor);
 			return GCodeResult::error;
 		}
+
+#if SUPPORT_CAN_EXPANSION
+		{
+			const CanAddress parentCanAddr = parent->GetBoardAddress();
+			if (parentCanAddr != CanInterface::GetCanAddress())
+			{
+				reply.printf("Specify parent sensor CAN address %u at the start of the port name", parentCanAddr);
+				return GCodeResult::error;
+			}
+		}
+#endif
 
 		if (enforcePollOrder && parentSensor > GetSensorNumber())
 		{

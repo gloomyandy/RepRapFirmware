@@ -106,6 +106,7 @@ struct StepErrorDetails
 	uint32_t executingDuration;
 	uint32_t newSegmentStartTime;
 	uint32_t timeNow;
+	float extra;
 	uint8_t stepErrorType;
 	uint8_t drive;
 };
@@ -487,7 +488,7 @@ public:
 #endif
 
 	// Movement error handling
-	void LogStepError(uint8_t type, uint8_t drive) noexcept;								// stop all movement because of a step error
+	void LogStepError(uint8_t type, uint8_t drive, float extra) noexcept;					// stop all movement because of a step error
 	StepErrorDetails GetStepErrorDetails() const noexcept { return stepErrorDetails; }
 	bool HasMovementError() const noexcept;
 	void ResetAfterError() noexcept;
@@ -978,10 +979,11 @@ inline void Move::InsertDM(DriveMovement *dm) noexcept
 	*dmp = dm;
 }
 
-inline void Move::LogStepError(uint8_t type, uint8_t drive) noexcept
+inline void Move::LogStepError(uint8_t type, uint8_t drive, float extra) noexcept
 {
 	stepErrorDetails.stepErrorType = type;
 	stepErrorDetails.drive = drive;
+	stepErrorDetails.extra = extra;
 	stepErrorState = StepErrorState::haveError;
 }
 

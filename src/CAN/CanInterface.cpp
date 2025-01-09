@@ -1512,6 +1512,37 @@ GCodeResult CanInterface::ReadRemoteHandles(CanAddress boardAddress, RemoteInput
 	return rslt;
 }
 
+// Process M655 (send request to custom expansion board)
+GCodeResult CanInterface::ProcessM655(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
+{
+	CanAddress addr;
+	if (gb.Seen('B'))
+	{
+		addr = gb.GetUIValue();
+	}
+	else if (gb.Seen('C'))
+	{
+		String<StringLength50> cParam;
+		gb.GetReducedString(cParam.GetRef());
+		addr = IoPort::RemoveBoardAddress(cParam.GetRef());
+	}
+	else
+	{
+		reply.copy("B or C parameter must be provided");
+		return GCodeResult::error;
+	}
+
+	if (addr == GetCanAddress())
+	{
+		reply.copy("Not implemented on main board");
+		return GCodeResult::error;
+	}
+
+	CanMessageGenericConstructor cons(M655Params);
+	cons.PopulateFromCommand(gb);
+	return cons.SendAndGetResponse(CanMessageType::m655, addr, reply, nullptr);
+}
+
 void CanInterface::Diagnostics(MessageType mtype) noexcept
 {
 	Platform& p = reprap.GetPlatform();

@@ -908,8 +908,13 @@ void Platform::Spin() noexcept
 						details.executingStartTime + details.executingDuration - details.newSegmentStartTime,
 						details.timeNow);
 		}
+		else
+		{
+			MessageF(AddError(MessageType::GenericMessage), "Extra info=%.6g\n", (double)details.extra);
+		}
 		move.GenerateMovementErrorDebug();
 		move.ResetAfterError();
+		reprap.GetHeat().SwitchOffAll(true);
 	}
 
 	// Check for debug messages

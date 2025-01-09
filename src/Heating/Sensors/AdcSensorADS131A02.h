@@ -38,6 +38,9 @@ public:
 	static constexpr const char *_ecv_array TypeName_chan0_unipolar = "ads131.chan0.u";
 	static constexpr const char *_ecv_array TypeName_chan0_bipolar = "ads131.chan0.b";
 
+protected:
+	DECLARE_OBJECT_MODEL
+
 private:
 	static SensorTypeDescriptor typeDescriptor_chan0_unipolar;
 	static SensorTypeDescriptor typeDescriptor_chan0_bipolar;

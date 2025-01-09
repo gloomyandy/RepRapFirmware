@@ -3888,6 +3888,12 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 
 			// M650 (set peel move parameters) and M651 (execute peel move) are no longer handled specially. Use macros to specify what they should do.
 
+#if SUPPORT_CAN_EXPANSION
+			case 655:
+				result = CanInterface::ProcessM655(gb, reply);
+				break;
+#endif
+
 #if SUPPORT_LINEAR_DELTA
 			case 665: // Set delta configuration
 				if (!LockAllMovementSystemsAndWaitForStandstill(gb))

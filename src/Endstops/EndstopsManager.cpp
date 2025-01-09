@@ -192,7 +192,7 @@ void EndstopsManager::ClearEndstops() noexcept
 	activeEndstops = nullptr;
 }
 
-// Clear any existing endstops and set up the active endstop list according to the axes commanded to move in a G0/G1 S1/S3 command. Return true if successful.
+// Clear any existing endstops and set up the active endstop list according to the axes commanded to move in a G0/G1 H1/H3/H4 command. Return true if successful.
 bool EndstopsManager::EnableAxisEndstops(AxesBitmap axes, bool forHoming, bool& reduceAcceleration) noexcept
 {
 	activeEndstops = nullptr;
@@ -449,6 +449,8 @@ GCodeResult EndstopsManager::HandleM574(GCodeBuffer& gb, const StringRef& reply,
 			{
 				switch (inputType.ToBaseType())
 				{
+// DC 2025-01-06: Temporarily remove " || SUPPORT_CAN_EXPANSION" until more work has been done because it prevents the MB6XD configuration building
+//#if HAS_STALL_DETECT || SUPPORT_CAN_EXPANSION
 #if HAS_STALL_DETECT
 				case EndStopType::motorStallAny:
 					// Asking for stall detection endstop, so we can delete any existing endstop(s) and create new ones
@@ -467,12 +469,12 @@ GCodeResult EndstopsManager::HandleM574(GCodeBuffer& gb, const StringRef& reply,
 					return GCodeResult::error;
 #endif
 				case EndStopType::zProbeAsEndstop:
-				{
-					// Asking for a ZProbe or stall detection endstop, so we can delete any existing endstop(s) and create new ones
-					const uint32_t zProbeNumber = gb.Seen('K') ? gb.GetUIValue() : 0;
-					ReplaceObject(axisEndstops[axis], new ZProbeEndstop(axis, pos, zProbeNumber));
-					break;
-				}
+					{
+						// Asking for a ZProbe or stall detection endstop, so we can delete any existing endstop(s) and create new ones
+						const uint32_t zProbeNumber = gb.Seen('K') ? gb.GetUIValue() : 0;
+						ReplaceObject(axisEndstops[axis], new ZProbeEndstop(axis, pos, zProbeNumber));
+						break;
+					}
 
 				case EndStopType::inputPin:
 					if (   axisEndstops[axis] == nullptr

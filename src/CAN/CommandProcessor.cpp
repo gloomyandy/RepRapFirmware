@@ -584,6 +584,12 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				rslt = FilamentMonitor::Configure(buf->msg.generic, replyRef);
 				break;
 
+			case CanMessageType::m655:
+				requestId = buf->msg.generic.requestId;
+				reply.copy("not supported by this board");
+				rslt = GCodeResult::error;
+				break;
+
 			default:
 				// We received a message type that we don't recognise. If it's a broadcast, ignore it. If it's addressed to us, send a reply.
 				if (buf->id.Dst() != CanInterface::GetCanAddress())

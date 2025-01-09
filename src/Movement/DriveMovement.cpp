@@ -282,14 +282,14 @@ MoveSegment *_ecv_null DriveMovement::NewSegment(uint32_t now) noexcept
 		seg->DebugPrint();
 #endif
 		motioncalc_t newDcf = distanceCarriedForwards + seg->GetLength();
-		if (fabsm(newDcf) > 1.0)
+		if (fabsm(newDcf) > (motioncalc_t)1.0)
 		{
 			if (reprap.Debug(Module::Move))
 			{
 				debugPrintf("newDcf=%.3e\n", (double)newDcf);
 			}
-			LogStepError(7);
-			newDcf = (motioncalc_t)0.0;							// to prevent the next segment erroring out
+			LogStepError(7, (float)newDcf);
+			newDcf = constrain<motioncalc_t>(newDcf, -1.0, 1.0);	// to prevent the next segment erroring out
 		}
 		distanceCarriedForwards = newDcf;
 		MoveSegment *oldSeg = seg;
@@ -309,7 +309,7 @@ static inline motioncalc_t fastLimSqrtm(motioncalc_t f) noexcept
 }
 
 // Tell the Move class that we had a step error. This always returns false so that CalcNextStepTimeFull can tail-chain to it.
-bool DriveMovement::LogStepError(uint8_t type) noexcept
+bool DriveMovement::LogStepError(uint8_t type, float extra) noexcept
 {
 	state = DMState::stepError;
 	stepErrorType = type;
@@ -319,7 +319,7 @@ bool DriveMovement::LogStepError(uint8_t type) noexcept
 		DebugPrint();
 		MoveSegment::DebugPrintList(segments);
 	}
-	reprap.GetMove().LogStepError(type, drive);
+	reprap.GetMove().LogStepError(type, drive, extra);
 	return false;
 }
 
@@ -341,11 +341,11 @@ pre(stepsTillRecalc == 0; segments != nullptr)
 			distanceCarriedForwards += currentSegment->GetLength() - (motioncalc_t)netStepsThisSegment;
 			if (distanceCarriedForwards > (motioncalc_t)1.0 || distanceCarriedForwards < (motioncalc_t)-1.0)
 			{
-				return LogStepError(5);
+				return LogStepError(5, distanceCarriedForwards);
 			}
 			if (currentMotorPosition - positionAtSegmentStart != netStepsThisSegment)
 			{
-				return LogStepError(6);
+				return LogStepError(6, 0.0);
 			}
 			if (isExtruder)
 			{
@@ -367,7 +367,7 @@ pre(stepsTillRecalc == 0; segments != nullptr)
 
 			if (unlikely((int32_t)(currentSegment->GetStartTime() - prevEndTime) < -10))
 			{
-				return LogStepError(1);
+				return LogStepError(1, (float)(int32_t)(currentSegment->GetStartTime() - prevEndTime));
 			}
 
 			// Leave shiftFactor set to 0 so that we compute a single step time, because the interval will have changed
@@ -449,7 +449,7 @@ pre(stepsTillRecalc == 0; segments != nullptr)
 #if SEGMENT_DEBUG
 		debugPrintf("DMstate %u, quitting\n", (unsigned int)state);
 #endif
-		return LogStepError(4);
+		return LogStepError(4, 0.0);
 	}
 
 	nextCalcStepTime += t0;
@@ -460,7 +460,7 @@ pre(stepsTillRecalc == 0; segments != nullptr)
 		{
 			debugPrintf("nextCalcStepTime=%.3e\n", (double)nextCalcStepTime);
 		}
-		return LogStepError(2);
+		return LogStepError(2, (float)nextCalcStepTime);
 	}
 
 	uint32_t iNextCalcStepTime = (uint32_t)nextCalcStepTime;
