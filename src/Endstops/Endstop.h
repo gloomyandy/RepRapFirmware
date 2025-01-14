@@ -36,8 +36,9 @@ public:
 	virtual bool Stopped() const noexcept = 0;
 	virtual EndstopHitDetails CheckTriggered() noexcept = 0;
 	virtual bool Acknowledge(EndstopHitDetails what) noexcept = 0;
-	virtual EndstopValidationResult Validate(const DDA& dda, uint8_t& failingDriver) const noexcept { return EndstopValidationResult::ok; }		// overridden for stall endstops
-
+#if SUPPORT_CAN_EXPANSION
+	virtual void HandleStalledRemoteDrivers(CanAddress boardAddress, RemoteDriversBitmap driversReportedStalled) noexcept { }		// overridden for stall endstops
+#endif
 	EndstopOrZProbe *_ecv_from _ecv_null GetNext() const noexcept { return next; }
 	void SetNext(EndstopOrZProbe *_ecv_from _ecv_null e) noexcept { next = e; }
 
@@ -106,13 +107,14 @@ public:
 	virtual EndStopType GetEndstopType() const noexcept = 0;
 	virtual bool IsZProbe() const noexcept { return false; }
 	virtual int GetZProbeNumber() const noexcept { return -1; }
-	virtual bool Prime(const Kinematics &_ecv_from kin, const AxisDriversConfig& axisDrivers) noexcept = 0;
+	virtual void PrimeAxis(const Kinematics &_ecv_from kin, const AxisDriversConfig& axisDrivers, float speed) THROWS(GCodeException) = 0;		// Prime an endstop to report when triggered returning true if successful
 	virtual void AppendDetails(const StringRef& str) noexcept = 0;
 	virtual bool ShouldReduceAcceleration() const noexcept { return false; }
 
 #if SUPPORT_CAN_EXPANSION
 	// Process a remote endstop input change that relates to this endstop
 	virtual void HandleRemoteInputChange(CanAddress src, uint8_t handleMinor, bool state) noexcept { }
+	virtual void DeleteRemoteStallEndstops() noexcept { }		// overridden in class StallEndtop
 #endif
 
 	bool GetAtHighEnd() const noexcept { return atHighEnd; }

@@ -313,7 +313,7 @@ bool GCodes::HandleGcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						// Should we queue this code?
 						// Don't queue any GCodes if there are segments not yet picked up by Move, because in the event that a segment corresponds to no movement,
 						// the move gets discarded, which throws out the count of scheduled moves and hence the synchronisation
-						if (gb.CanQueueCodes() && GCodeQueue::ShouldQueueG10(gb))
+						if (gb.CanQueueCodes() && GCodeQueue::ShouldQueueG10(gb, allAxisLetters))
 						{
 							if (GetMovementState(gb).segmentsLeft == 0 && GetMovementState(gb).codeQueue->QueueCode(gb))
 							{

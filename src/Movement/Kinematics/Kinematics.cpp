@@ -105,7 +105,7 @@ bool Kinematics::TryConfigureSegmentation(GCodeBuffer& gb) THROWS(GCodeException
 bool Kinematics::IsReachable(float axesCoords[MaxAxes], AxesBitmap axes) const noexcept
 {
 	const Move& move = reprap.GetMove();
-	return axes.IterateWhile([&move, axesCoords](unsigned int axis, unsigned int count) -> bool {
+	return axes.IterateWhile([&move, axesCoords](unsigned int axis, unsigned int count) noexcept -> bool {
 		if (axesCoords[axis] >= move.AxisMinimum(axis) && axesCoords[axis] <= move.AxisMaximum(axis))
 		{
 			return true;
@@ -222,7 +222,7 @@ LogicalDrivesBitmap Kinematics::GetControllingDrives(size_t axis, bool forHoming
 LogicalDrivesBitmap Kinematics::GetAllDrivesUsed(AxesBitmap axesAndExtruders) const noexcept
 {
 	LogicalDrivesBitmap result;
-	axesAndExtruders.Iterate([this, &result](size_t axis, size_t count) -> void { result |= GetControllingDrives(axis, false); });
+	axesAndExtruders.Iterate([this, &result](size_t axis, size_t count) noexcept { result |= GetControllingDrives(axis, false); });
 	return result;
 }
 

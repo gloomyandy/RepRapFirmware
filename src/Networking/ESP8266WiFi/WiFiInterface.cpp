@@ -260,12 +260,12 @@ static void EspTransferRequestIsr(CallbackParameter) noexcept
 
 static inline void EnableEspInterrupt() noexcept
 {
-	attachInterrupt(EspDataReadyPin, EspTransferRequestIsr, InterruptMode::rising, CallbackParameter(nullptr));
+	AttachPinInterrupt(EspDataReadyPin, EspTransferRequestIsr, InterruptMode::rising, CallbackParameter(nullptr));
 }
 
 static inline void DisableEspInterrupt() noexcept
 {
-	detachInterrupt(EspDataReadyPin);
+	DetachPinInterrupt(EspDataReadyPin);
 }
 
 static const char *_ecv_array GetWiFiAuthFriendlyStr(WiFiAuth auth) noexcept

@@ -14,16 +14,7 @@
 #include <Tools/Tool.h>
 #include <CAN/CanInterface.h>
 #include <CAN/CanDriversData.h>
-
-#if SUPPORT_TMC2660
-# include "Movement/StepperDrivers/TMC2660.h"
-#endif
-#if SUPPORT_TMC22xx
-# include "Movement/StepperDrivers/TMC22xx.h"
-#endif
-#if SUPPORT_TMC51xx
-# include "Movement/StepperDrivers/TMC51xx.h"
-#endif
+#include "StepperDrivers/SmartDrivers.h"
 
 #if SUPPORT_REMOTE_COMMANDS
 # include <CanMessageGenericParser.h>
@@ -811,24 +802,22 @@ void Move::SetIdleCurrentFactor(float f) noexcept
 	reprap.MoveUpdated();
 
 #if SUPPORT_CAN_EXPANSION
-	CanDriversData<float> canDriversToUpdate;
+	CanDriversList canDriversToUpdate;
 #endif
 	for (size_t axisOrExtruder = 0; axisOrExtruder < MaxAxesPlusExtruders; ++axisOrExtruder)
 	{
 		if (driverState[axisOrExtruder] == DriverStatus::idle)
 		{
-			const float requiredCurrent = motorCurrents[axisOrExtruder] * idleCurrentFactor;
 			IterateDrivers(axisOrExtruder,
-							[this, requiredCurrent](uint8_t driver){ UpdateMotorCurrent(driver, requiredCurrent); }
+							[this, axisOrExtruder](uint8_t driver){ UpdateMotorCurrent(driver, motorCurrents[axisOrExtruder] * idleCurrentFactor); }
 #if SUPPORT_CAN_EXPANSION
-								, [this, requiredCurrent, &canDriversToUpdate](DriverId driver) { canDriversToUpdate.AddEntry(driver, (uint16_t)requiredCurrent); }
+							, [this, &canDriversToUpdate](DriverId driver) { canDriversToUpdate.AddEntry(driver); }
 #endif
 						  );
 		}
 	}
 #if SUPPORT_CAN_EXPANSION
-	String<1> dummy;
-	(void)CanInterface::SetRemoteDriverCurrents(canDriversToUpdate, dummy.GetRef());
+	CanInterface::SetRemoteDriversIdle(canDriversToUpdate, idleCurrentFactor);
 #endif
 }
 
@@ -912,7 +901,7 @@ GCodeResult Move::EutSetMotorCurrents(const CanMessageMultipleDrivesRequest<floa
 	}
 
 	GCodeResult rslt = GCodeResult::ok;
-	drivers.Iterate([this, &msg, &reply, &rslt](unsigned int driver, unsigned int count) -> void
+	drivers.Iterate([this, &msg, &reply, &rslt](unsigned int driver, unsigned int count) noexcept
 						{
 							if (driver >= NumDirectDrivers)
 							{
@@ -942,7 +931,7 @@ GCodeResult Move::EutSetStepsPerMmAndMicrostepping(const CanMessageMultipleDrive
 	}
 
 	GCodeResult rslt = GCodeResult::ok;
-	drivers.Iterate([this, &msg, &reply, &rslt](unsigned int driver, unsigned int count) -> void
+	drivers.Iterate([this, &msg, &reply, &rslt](unsigned int driver, unsigned int count) noexcept
 						{
 							if (driver >= NumDirectDrivers)
 							{
@@ -968,7 +957,7 @@ GCodeResult Move::EutHandleSetDriverStates(const CanMessageMultipleDrivesRequest
 {
 	//TODO check message is long enough for the number of drivers specified
 	const auto drivers = Bitmap<uint16_t>::MakeFromRaw(msg.driversToUpdate);
-	drivers.Iterate([this, &msg](unsigned int driver, unsigned int count) -> void
+	drivers.Iterate([this, &msg](unsigned int driver, unsigned int count) noexcept
 		{
 			switch (msg.values[count].mode)
 			{
@@ -1440,11 +1429,22 @@ void Move::SendDriversStatus(CanMessageBuffer& buf) noexcept
 void Move::StopDriversFromRemote(uint16_t whichDrives) noexcept
 {
 	LocalDriversBitmap dr(whichDrives);
-	dr.Iterate([this](size_t drive, unsigned int)
+	dr.Iterate([this](size_t drive, unsigned int) noexcept
 				{
 					StopDriveFromRemote(drive);
 				}
 			  );
+}
+
+// Stall endstops
+GCodeResult Move::SetStallEndstopReporting(const CanMessageEnableStallEndstop& msg, const StringRef& reply) noexcept
+{
+#if HAS_SMART_DRIVERS
+	return SmartDrivers::SetStallEndstopReporting(msg.driverNumber, msg.speed, reply);
+#else
+	reply.printf("stall detection not supported on board %u", CanInterface::GetCanAddress());
+	return GCodeResult::error;
+#endif
 }
 
 #endif	// SUPPORT_REMOTE_COMMANDS

@@ -19,19 +19,10 @@
 #include <PrintMonitor/PrintMonitor.h>
 #include <Platform/Tasks.h>
 #include <Hardware/I2C.h>
+#include <Movement/StepperDrivers/SmartDrivers.h>
 
 #if HAS_WIFI_NETWORKING || HAS_AUX_DEVICES || HAS_MASS_STORAGE || HAS_SBC_INTERFACE
 # include <Comms/FirmwareUpdater.h>
-#endif
-
-#if SUPPORT_TMC2660
-# include <Movement/StepperDrivers/TMC2660.h>
-#endif
-#if SUPPORT_TMC22xx
-# include <Movement/StepperDrivers/TMC22xx.h>
-#endif
-#if SUPPORT_TMC51xx
-# include <Movement/StepperDrivers/TMC51xx.h>
 #endif
 
 #if SUPPORT_CAN_EXPANSION
@@ -385,13 +376,13 @@ GCodeResult GCodes::WaitForPin(GCodeBuffer& gb, const StringRef &reply) THROWS(G
 
 	const bool activeHigh = (!gb.Seen('S') || gb.GetUIValue() >= 1);
 	Platform& pfm = platform;
-	const bool ok = endstopsToWaitFor.IterateWhile([&pfm, activeHigh](unsigned int axis, unsigned int)->bool
+	const bool ok = endstopsToWaitFor.IterateWhile([&pfm, activeHigh](unsigned int axis, unsigned int) noexcept -> bool
 								{
 									const bool stopped = pfm.GetEndstops().Stopped(axis);
 									return stopped == activeHigh;
 								}
 							 )
-				&& portsToWaitFor.IterateWhile([&pfm, activeHigh](unsigned int port, unsigned int)->bool
+				&& portsToWaitFor.IterateWhile([&pfm, activeHigh](unsigned int port, unsigned int) noexcept -> bool
 								{
 									return (port >= MaxGpInPorts || pfm.GetGpInPort(port).GetState() == activeHigh);
 								}

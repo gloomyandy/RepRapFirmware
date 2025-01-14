@@ -11,7 +11,7 @@ static inline void DisableSpi() noexcept
     if (spiDevice != nullptr)
     {
         spiDevice->disable();
-        detachInterrupt(SamCsPin);
+        DetachPinInterrupt(SamCsPin);
     }
 
 }
@@ -78,7 +78,7 @@ static void SpiCSInterrupt(CallbackParameter) noexcept
 // Set up the SPI system
 void WiFiInterface::SetupSpi() noexcept
 {
-    attachInterrupt(SamCsPin, SpiCSInterrupt, InterruptMode::rising, CallbackParameter(nullptr));
+    AttachPinInterrupt(SamCsPin, SpiCSInterrupt, InterruptMode::rising, CallbackParameter(nullptr));
     spiDevice = (HardwareSPI *) SPI::getSSPDevice(WiFiSpiChannel);
     spiDevice->configureDevice(SPI_MODE_SLAVE, 8, (uint8_t)SPI_MODE_1, 100000000);
 }

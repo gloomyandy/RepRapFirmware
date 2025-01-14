@@ -33,11 +33,15 @@
 # include "SBC/SbcInterface.h"
 #endif
 
+# if SUPPORT_SPICAN
+#  include "CanSpi.h"
+#endif
+
 #if SUPPORT_REMOTE_COMMANDS
 # include <Version.h>
 # include <InputMonitors/InputMonitor.h>
-# if SUPPORT_SPICAN
-#  include "CanSpi.h"
+# if HAS_STALL_DETECT
+#  include <Movement/StepperDrivers/SmartDrivers.h>			// for extern declaration of driverStallsToNotify
 # endif
 #endif
 
@@ -97,10 +101,6 @@ static uint16_t longestWaitMessageType = 0;
 
 static uint32_t peakTimeSyncTxDelay = 0;
 
-#if SUPPORT_REMOTE_COMMANDS
-static unsigned int messagesIgnored = 0;
-#endif
-
 // Debug
 static unsigned int goodTimeStamps = 0;
 static unsigned int badTimeStamps = 0;
@@ -124,6 +124,7 @@ static CanAddress myAddress =
 static uint8_t currentTimeSyncMarker = 0xFF;
 
 #if SUPPORT_REMOTE_COMMANDS
+static unsigned int messagesIgnored = 0;
 static bool inExpansionMode = false;
 static bool inTestMode = false;
 static bool mainBoardAcknowledgedAnnounce = false;
@@ -576,7 +577,6 @@ static void SendCanMessage(CanDevice::TxBufferNumber whichBuffer, uint32_t timeo
 	}
 }
 
-//TODO can we get rid of the CanSender task if we send movement messages via the Tx FIFO?
 // This task picks up motion messages and sends them
 extern "C" [[noreturn]] void CanSenderLoop(void *) noexcept
 {
@@ -591,6 +591,15 @@ extern "C" [[noreturn]] void CanSenderLoop(void *) noexcept
 			msg->states = 0;
 			msg->numHandles = 0;
 
+#if HAS_STALL_DETECT
+			// Start by adding any stall detect endstops pending. Do this first so that it must succeed.
+			const uint16_t stallNotifications = SmartDrivers::driverStallsToNotify.exchange(0);
+			if (stallNotifications != 0)
+			{
+				constexpr RemoteInputHandle h(RemoteInputHandle::typeStallEndstop, 0, 0);
+				(void)msg->AddEntry(h.asU16(), (uint32_t)stallNotifications, true);
+			}
+#endif
 			const uint32_t timeToWait = InputMonitor::AddStateChanges(msg);
 			if (msg->numHandles != 0)
 			{
@@ -1271,6 +1280,46 @@ GCodeResult CanInterface::GetSetRemoteDriverStallParameters(const CanDriversList
 		}
 	}
 	return GCodeResult::ok;
+}
+
+// Enable a stall endstop on a remote board
+void CanInterface::EnableRemoteStallEndstop(DriverId did, float speed) THROWS(GCodeException)
+{
+	CanMessageBuffer * const buf = CanMessageBuffer::Allocate();
+	if (buf == nullptr)
+	{
+		return ThrowGCodeException("no CAN buffer available");
+	}
+	const CanRequestId rid = CanInterface::AllocateRequestId(did.boardAddress, buf);
+	auto msg = buf->SetupRequestMessage<CanMessageEnableStallEndstop>(rid, CanInterface::GetCanAddress(), did.boardAddress);
+	msg->driverNumber = did.localDriver;
+	msg->speed = speed;
+
+	// Static buffer to allow a string to be stored that is referred to by a thrown exception.
+	// This isn't ideal, however I consider it unlikely that both motion systems will execute homing moves involving remote drivers at the same time.
+	// An alternative would be to enlarge the GCodeException class to store a copy of the string instead of a pointer to it.
+	static String<StringLength50> enableEndstopsReply;
+	enableEndstopsReply.Clear();
+	if (CanInterface::SendRequestAndGetStandardReply(buf, rid, enableEndstopsReply.GetRef(), nullptr) != GCodeResult::ok)
+	{
+		ThrowGCodeException(enableEndstopsReply.c_str());
+	}
+}
+
+// Disable all stall endstops on a remote board
+void CanInterface::DisableRemoteStallEndstops(CanAddress boardId) noexcept
+{
+	CanMessageBuffer * const buf = CanMessageBuffer::Allocate();
+	if (buf == nullptr)
+	{
+		return;								// there's very little we can do here in terms of error handling
+	}
+	const CanRequestId rid = CanInterface::AllocateRequestId(boardId, buf);
+	auto msg = buf->SetupRequestMessage<CanMessageEnableStallEndstop>(rid, CanInterface::GetCanAddress(), boardId);
+	msg->driverNumber = CanMessageEnableStallEndstop::disableAll;
+	msg->speed = 0.0;
+	String<1> reply;
+	(void)CanInterface::SendRequestAndGetStandardReply(buf, rid, reply.GetRef(), nullptr);
 }
 
 static GCodeResult GetRemoteInfo(uint8_t infoType, uint32_t boardAddress, uint8_t param, GCodeBuffer& gb, const StringRef& reply, uint8_t *extra = nullptr) THROWS(GCodeException)

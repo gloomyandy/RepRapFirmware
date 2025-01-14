@@ -44,7 +44,7 @@
 #include <Endstops/ZProbe.h>
 #include <Platform/TaskPriorities.h>
 #include <AppNotifyIndices.h>
-#include <limits>
+#include "StepperDrivers/SmartDrivers.h"
 
 #if SUPPORT_IOBITS
 # include <Platform/PortControl.h>
@@ -55,19 +55,11 @@
 # include <CAN/CanInterface.h>
 #endif
 
-#if SUPPORT_TMC2660
-# include "Movement/StepperDrivers/TMC2660.h"
-#endif
-#if SUPPORT_TMC22xx
-# include "Movement/StepperDrivers/TMC22xx.h"
-#endif
-#if SUPPORT_TMC51xx
-# include "Movement/StepperDrivers/TMC51xx.h"
-#endif
-
 #ifdef DUET3_MB6XD
 # include <pmc/pmc.h>
 #endif
+
+#include <limits>
 
 constexpr float MinStepPulseTiming = 0.2;												// we assume that we always generate step high and low times at least this wide without special action
 
@@ -842,7 +834,7 @@ bool Move::WaitingForAllMovesFinished(MovementSystemNumber msNumber
 
 	// If input shaping is enabled then movement may continue for a little while longer
 #if SUPPORT_ASYNC_MOVES
-	return logicalDrivesOwned.IterateWhile([this](unsigned int axisOrExtruder, unsigned int)->bool
+	return logicalDrivesOwned.IterateWhile([this](unsigned int axisOrExtruder, unsigned int) noexcept -> bool
 												{
 													return !dms[axisOrExtruder].MotionPending();
 												}
@@ -1167,7 +1159,7 @@ void Move::SetMotorPosition(size_t drive, int32_t pos) noexcept
 
 void Move::SetMotorPositions(LogicalDrivesBitmap drives, const int32_t *positions) noexcept
 {
-	drives.Iterate([this, positions](unsigned int drive, unsigned int count) { SetMotorPosition(drive, positions[drive]); });
+	drives.Iterate([this, positions](unsigned int drive, unsigned int count) noexcept { SetMotorPosition(drive, positions[drive]); });
 }
 
 void Move::SetLastEndpoints(MovementSystemNumber msNumber, LogicalDrivesBitmap logicalDrives, const int32_t *_ecv_array ep) noexcept
@@ -1290,7 +1282,7 @@ GCodeResult Move::EutSetRemotePressureAdvance(const CanMessageMultipleDrivesRequ
 	}
 
 	GCodeResult rslt = GCodeResult::ok;
-	drivers.Iterate([this, &msg, &reply, &rslt](unsigned int driver, unsigned int count) -> void
+	drivers.Iterate([this, &msg, &reply, &rslt](unsigned int driver, unsigned int count) noexcept
 						{
 							if (driver >= NumDirectDrivers)
 							{
@@ -1977,7 +1969,7 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 // Return true if none of the drives passed has any movement pending
 bool Move::AreDrivesStopped(LogicalDrivesBitmap drives) const noexcept
 {
-	return drives.IterateWhile([this](unsigned int drive, unsigned int index)->bool
+	return drives.IterateWhile([this](unsigned int drive, unsigned int index) noexcept -> bool
 								{
 									return dms[drive].segments == nullptr;
 								}
@@ -1986,20 +1978,13 @@ bool Move::AreDrivesStopped(LogicalDrivesBitmap drives) const noexcept
 
 #if HAS_STALL_DETECT
 
-EndstopValidationResult Move::CheckStallDetectionEnabled(uint8_t axisOrExtruder, float speed, uint8_t& failingDriver) noexcept
+void Move::CheckStallDetectionViable(uint8_t localDriver, float speed) const THROWS(GCodeException)
 {
-	EndstopValidationResult rslt = EndstopValidationResult::ok;
-	IterateLocalDrivers(axisOrExtruder,
-							[speed, &rslt, &failingDriver](uint8_t driver)
-							{
-								if (rslt == EndstopValidationResult::ok)
-								{
-									rslt = SmartDrivers::CheckStallDetectionEnabled(driver, speed);
-									failingDriver = driver;
-								}
-							}
-						);
-	return rslt;
+	const char *_ecv_array _ecv_null msg = SmartDrivers::CheckStallDetectionEnabled(localDriver, fabsf(speed));
+	if (msg != nullptr)
+	{
+		ThrowGCodeException(msg, localDriver);
+	}
 }
 
 #endif
@@ -3401,11 +3386,11 @@ float Move::GetTmcDriversTemperature(unsigned int boardNumber) const noexcept
 #elif defined(DUET_M)
 	const LocalDriversBitmap mask = LocalDriversBitmap::MakeLowestNBits(7);						// report the 2-driver addon along with the main board
 #elif defined(PCCB_10)
-	const DriversBitmap mask = (boardNumber == 0)
-							? DriversBitmap::MakeLowestNBits(2)							// drivers 0,1 are on-board
-								: DriversBitmap::MakeLowestNBits(5).ShiftUp(2);			// drivers 2-7 are on the DueX5
+	const LocalDriversBitmap mask = (boardNumber == 0)
+							? LocalDriversBitmap::MakeLowestNBits(2)							// drivers 0,1 are on-board
+								: LocalDriversBitmap::MakeLowestNBits(5).ShiftUp(2);			// drivers 2-7 are on the DueX5
 #elif STM32
-	const LocalDriversBitmap mask = LocalDriversBitmap::MakeLowestNBits(MaxSmartDrivers);			// All drivers
+	const LocalDriversBitmap mask = LocalDriversBitmap::MakeLowestNBits(MaxSmartDrivers);		// All drivers
 #else
 # error Undefined board
 #endif

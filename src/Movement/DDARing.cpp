@@ -409,7 +409,7 @@ void DDARing::GetCurrentMachinePosition(float m[MaxAxes]) const noexcept
 
 void DDARing::GetLastEndpoints(LogicalDrivesBitmap logicalDrives, int32_t returnedEndpoints[MaxAxesPlusExtruders]) const noexcept
 {
-	logicalDrives.Iterate([this, returnedEndpoints](unsigned int drive, unsigned int count) { returnedEndpoints[drive] = addPointer->GetPrevious()->DriveCoordinates()[drive]; } );
+	logicalDrives.Iterate([this, returnedEndpoints](unsigned int drive, unsigned int count) noexcept { returnedEndpoints[drive] = addPointer->GetPrevious()->DriveCoordinates()[drive]; } );
 }
 
 int32_t DDARing::GetLastEndpoint(size_t drive) const noexcept
@@ -421,7 +421,7 @@ int32_t DDARing::GetLastEndpoint(size_t drive) const noexcept
 void DDARing::SetLastEndpoints(LogicalDrivesBitmap logicalDrives, const int32_t *_ecv_array ep) noexcept
 {
 	DDA *prev = addPointer->GetPrevious();
-	logicalDrives.Iterate([prev, ep](unsigned int drive, unsigned int count)
+	logicalDrives.Iterate([prev, ep](unsigned int drive, unsigned int count) noexcept
 							{
 								prev->SetDriveCoordinate(drive, ep[drive]);
 							});

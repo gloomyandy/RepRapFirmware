@@ -387,7 +387,7 @@ uint16_t Tool::numToolsToReport = 0;
 	return false;
 }
 
-// If there are any tool numbers flagged foe cold extrusion warnings, display the warning messages, clear them and return true
+// If there are any tool numbers flagged for cold extrusion warnings, display the warning messages, clear them and return true
 /*static*/ bool Tool::DisplayColdExtrusionWarnings() noexcept
 {
 	if (prohibitedExtrusionTools.IsEmpty())
@@ -396,7 +396,7 @@ uint16_t Tool::numToolsToReport = 0;
 	}
 
 	prohibitedExtrusionTools.Iterate
-		([](unsigned int index, unsigned int count) -> void
+		([](unsigned int index, unsigned int count) noexcept -> void
 			{
 				reprap.GetPlatform().MessageF(WarningMessage, "Tool %u was not driven because its heater temperatures were not high enough or it has a heater fault\n", index);
 			}

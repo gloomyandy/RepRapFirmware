@@ -224,7 +224,7 @@ constexpr uint32_t MinimumOpenLoadCsBits = CurrentToCsBits(MinimumOpenLoadMotorC
 class TmcDriverState final
 {
 public:
-	void Init(uint32_t driverNumber, uint32_t p_pin) noexcept;
+	void Init(uint8_t p_driverNumber, Pin p_pin) noexcept;
 	void SetAxisNumber(size_t p_axisNumber) noexcept;
 	void WriteAll() noexcept;
 	bool UpdatePending() const noexcept { return registersToUpdate != 0; }
@@ -240,7 +240,7 @@ public:
 	void SetStallDetectThreshold(int sgThreshold) noexcept;
 	void SetStallDetectFilter(bool sgFilter) noexcept;
 	void SetStallMinimumStepsPerSecond(unsigned int stepsPerSecond) noexcept;
-	EndstopValidationResult CheckStallDetectionEnabled(float speed) noexcept;
+	const char *_ecv_array _ecv_null CheckStallDetectionEnabled(float speed) noexcept;
 
 	void AppendStallConfig(const StringRef& reply) const noexcept;
 	void AppendDriverStatus(const StringRef& reply) noexcept;
@@ -277,11 +277,8 @@ private:
 
 	static constexpr uint32_t UpdateAllRegisters = (1u << NumRegisters) - 1;	// bitmap in registersToUpdate for all registers
 
-	uint32_t pin;											// the pin number that drives the chip select pin of this driver
 	uint32_t configuredChopConfReg;							// the configured chopper control register, in the Enabled state
 	volatile uint32_t registersToUpdate;					// bitmap of register values that need to be sent to the driver chip
-	uint32_t axisNumber;									// the axis number of this driver as used to index the DriveMovements in the DDA
-	uint32_t microstepShiftFactor;							// how much we need to shift 1 left by to get the current microstepping
 	uint32_t maxStallStepInterval;							// maximum interval between full steps to take any notice of stall detection, in step clocks
 	uint32_t mstepPosition;									// the current microstep position, or 0xFFFFFFFF if unknown
 
@@ -290,6 +287,11 @@ private:
 
 	LocalDriversBitmap driverBit;							// bitmap of just this driver number
 	uint16_t minSgLoadRegister;								// the minimum value of the StallGuard bits we read
+
+	Pin pin;												// the pin number that drives the chip select pin of this driver
+	uint8_t driverNumber;
+	uint8_t logicalDriveNumber;										// the axis number of this driver as used to index the DriveMovements in the DDA
+	uint8_t microstepShiftFactor;							// how much we need to shift 1 left by to get the current microstepping
 	bool enabled;
 	volatile uint8_t rdselState;							// 0-3 = actual RDSEL value, 0xFF = unknown
 };
@@ -427,10 +429,10 @@ static TmcDriverState *_ecv_null volatile currentDriver = nullptr;	// volatile b
 }
 
 // Initialise the state of the driver and its CS pin
-void TmcDriverState::Init(uint32_t driverNumber, uint32_t p_pin) noexcept
+void TmcDriverState::Init(uint8_t p_driverNumber, Pin p_pin) noexcept
 {
-	axisNumber = driverNumber;												// assume straight through mapping at initialisation
-	driverBit = LocalDriversBitmap::MakeFromBits(driverNumber);
+	logicalDriveNumber = driverNumber = p_driverNumber;								// assume straight through mapping at initialisation
+	driverBit = LocalDriversBitmap::MakeFromBits(p_driverNumber);
 	pin = p_pin;
 	pinMode(pin, OUTPUT_HIGH);
 	enabled = false;
@@ -454,7 +456,7 @@ void TmcDriverState::Init(uint32_t driverNumber, uint32_t p_pin) noexcept
 
 inline void TmcDriverState::SetAxisNumber(size_t p_axisNumber) noexcept
 {
-	axisNumber = p_axisNumber;
+	logicalDriveNumber = p_axisNumber;
 }
 
 // Write all registers. This is called when the drivers are known to be powered up.
@@ -708,7 +710,7 @@ void TmcDriverState::AppendStallConfig(const StringRef& reply) const noexcept
 		threshold -= 128;
 	}
 	const uint32_t fullstepsPerSecond = StepClockRate/maxStallStepInterval;
-	const float stepsPerMm = reprap.GetMove().DriveStepsPerMm(axisNumber);
+	const float stepsPerMm = reprap.GetMove().DriveStepsPerMm(logicalDriveNumber);
 	const float speed = (float)(fullstepsPerSecond << microstepShiftFactor)/stepsPerMm;
 	reply.catf("stall threshold %d, filter %s, full steps/sec %" PRIu32 " (%.1f mm/sec), coolstep %" PRIx32,
 				threshold, ((filtered) ? "on" : "off"), fullstepsPerSecond, (double)speed, registers[SmartEnable] & 0xFFFF);
@@ -736,13 +738,13 @@ unsigned int TmcDriverState::GetMicrostepping(bool& interpolation) const noexcep
 }
 
 // Check that stall detection can occur at the specified speed
-EndstopValidationResult TmcDriverState::CheckStallDetectionEnabled(float speed) noexcept
+const char *_ecv_array _ecv_null TmcDriverState::CheckStallDetectionEnabled(float speed) noexcept
 {
 	if (speed * (float)maxStallStepInterval < (float)(1u << microstepShiftFactor) * 1.2)
 	{
-		return EndstopValidationResult::moveTooSlow;
+		return "move is too slow for driver %u to detect stall";
 	}
-	return EndstopValidationResult::ok;
+	return nullptr;
 }
 
 // This is called by the ISR when the SPI transfer has completed
@@ -753,7 +755,7 @@ inline void TmcDriverState::TransferDone() noexcept
 	{
 		Cache::InvalidateAfterDMAReceive(&spiDataIn, sizeof(spiDataIn));
 		uint32_t status = be32_to_cpu(spiDataIn) >> 12;			// get the status
-		const uint32_t interval = reprap.GetMove().GetStepInterval(axisNumber, microstepShiftFactor);		// get the full step interval
+		const uint32_t interval = reprap.GetMove().GetStepInterval(logicalDriveNumber, microstepShiftFactor);		// get the full step interval
 		if (interval == 0 || interval > maxStallStepInterval)	// if the motor speed is too low to get reliable stall indication
 		{
 			status &= ~TMC_RR_SG;								// remove the stall status bit
@@ -1247,9 +1249,12 @@ StandardDriverStatus SmartDrivers::GetStatus(size_t driver, bool accumulated, bo
 	return rslt;
 }
 
-EndstopValidationResult SmartDrivers::CheckStallDetectionEnabled(size_t driver, float speed) noexcept
+// Check whether stall detection is viable. If yes, return nullptr. If no, return a message string in flash memory containing a single %u placeholder for the driver number.
+const char *_ecv_array _ecv_null SmartDrivers::CheckStallDetectionEnabled(size_t driver, float speed) noexcept
 {
-	return (driver < numTmc2660Drivers) ? driverStates[driver].CheckStallDetectionEnabled(speed) : EndstopValidationResult::stallDetectionNotSupported;
+	return (driver < numTmc2660Drivers)
+			? driverStates[driver].CheckStallDetectionEnabled(speed)
+				: "driver %u does not support stall detection";
 }
 
 #endif

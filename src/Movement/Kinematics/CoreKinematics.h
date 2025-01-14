@@ -24,6 +24,7 @@ public:
 	HomingMode GetHomingMode() const noexcept override { return HomingMode::homeCartesianAxes; }
 	void LimitSpeedAndAcceleration(DDA& dda, const float *_ecv_array normalisedDirectionVector, size_t numVisibleAxes, bool continuousRotationShortcut) const noexcept override;
 	LogicalDrivesBitmap GetControllingDrives(size_t axis, bool forHoming) const noexcept override;
+	void ConvertAxisAmountsToLogicalDriveAmounts(float amounts[MaxAxes], size_t numVisibleAxes, size_t numTotalAxes) const noexcept override;
 
 protected:
 	DECLARE_OBJECT_MODEL_WITH_ARRAYS

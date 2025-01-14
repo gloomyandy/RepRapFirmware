@@ -92,10 +92,10 @@ float Move::ComputeHeightCorrection(float xyzPoint[MaxAxes], const Tool *_ecv_nu
 
 	// Transform the Z coordinate based on the average correction for each axis used as an X or Y axis.
 	Tool::GetAxisMapping(tool, grid.GetAxisNumber(0))
-		.Iterate([this, xyzPoint, tool, axis1Axes, &zCorrection, &numCorrections](unsigned int axis0Axis, unsigned int)
+		.Iterate([this, xyzPoint, tool, axis1Axes, &zCorrection, &numCorrections](unsigned int axis0Axis, unsigned int) noexcept
 					{
 						const float axis0Coord = xyzPoint[axis0Axis] + Tool::GetOffset(tool, axis0Axis);
-						axis1Axes.Iterate([this, xyzPoint, tool, axis0Coord, &zCorrection, &numCorrections](unsigned int axis1Axis, unsigned int)
+						axis1Axes.Iterate([this, xyzPoint, tool, axis0Coord, &zCorrection, &numCorrections](unsigned int axis1Axis, unsigned int) noexcept
 											{
 												const float axis1Coord = xyzPoint[axis1Axis] + Tool::GetOffset(tool, axis1Axis);
 												zCorrection += heightMap.GetInterpolatedHeightError(axis0Coord, axis1Coord);

@@ -267,7 +267,7 @@ bool LISAccelerometer:: StartCollecting(uint8_t axes) noexcept
 	}
 
 	const bool ok = WriteRegister(LisRegister::Ctrl_0x20, ctrlRegValue);
-	return ok && attachInterrupt(int1Pin, Int1Interrupt, InterruptMode::rising, CallbackParameter(this));
+	return ok && AttachPinInterrupt(int1Pin, Int1Interrupt, InterruptMode::rising, CallbackParameter(this));
 }
 
 // Collect some data from the FIFO, suspending until the data is available

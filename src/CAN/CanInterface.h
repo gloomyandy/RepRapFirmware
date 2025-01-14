@@ -89,6 +89,9 @@ namespace CanInterface
 	GCodeResult SetRemoteDriverStepsPerMmAndMicrostepping(const CanDriversData<StepsPerUnitAndMicrostepping>& data, const StringRef& reply) noexcept;
 	GCodeResult ConfigureRemoteDriver(DriverId driver, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 	GCodeResult GetSetRemoteDriverStallParameters(const CanDriversList& drivers, GCodeBuffer& gb, const StringRef& reply, OutputBuffer *& buf) THROWS(GCodeException);
+	void EnableRemoteStallEndstop(DriverId did, float speed) THROWS(GCodeException) pre(did.IsRemote());
+	void DisableRemoteStallEndstops(CanAddress boardId) noexcept;
+
 #if 0	// not currently used
 	unsigned int GetNumPendingMotionMessages() noexcept;
 #endif

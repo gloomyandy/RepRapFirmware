@@ -138,7 +138,6 @@ public:
 	uint32_t GetMoveStartTime() const noexcept { return afterPrepare.moveStartTime; }
 	uint32_t GetMoveFinishTime() const noexcept { return afterPrepare.moveStartTime + clocksNeeded; }
 
-	float GetMotorTopSpeed(uint8_t axis) const noexcept;							// Return the top speed in microsteps/sec for the specified motor
 	float GetAverageExtrusionSpeed() const noexcept pre(IsCommitted()) { return afterPrepare.averageExtrusionSpeed; }
 	bool HaveDoneIoBits() const noexcept { return flags.doneIoBits; }
 	bool HaveDoneFeedForward() const noexcept { return flags.doneFeedForward; }

@@ -24,20 +24,11 @@
 #include <Hardware/ExceptionHandlers.h>
 #include <Accelerometers/Accelerometers.h>
 #include <CoreNotifyIndices.h>
+#include <Movement/StepperDrivers/SmartDrivers.h>
 #include "Version.h"
 
 #ifdef DUET_NG
 # include "DueXn.h"
-#endif
-
-#if SUPPORT_TMC2660
-# include <Movement/StepperDrivers/TMC2660.h>
-#endif
-#if SUPPORT_TMC22xx
-# include <Movement/StepperDrivers/TMC22xx.h>
-#endif
-#if SUPPORT_TMC51xx
-# include <Movement/StepperDrivers/TMC51xx.h>
 #endif
 
 #if SUPPORT_IOBITS
@@ -2648,7 +2639,11 @@ void RepRap::PrepareToLoadIap() noexcept
 
 	// Allow time for the firmware update message to be sent
 	const uint32_t now = millis();
-	while (platform->FlushMessages() && millis() - now < 2000) { }
+	do
+	{
+		(void)platform->FlushMessages();	// make sure the USB and aux messages get sent
+		RTOSIface::Yield();					// let the network task have the CPU so that it can fetch the status
+	} while (millis() - now < 1000);
 
 	// The machine will be unresponsive for a few seconds, don't risk damaging the heaters.
 	// This also shuts down tasks and interrupts that might make use of the RAM that we are about to load the IAP binary into.

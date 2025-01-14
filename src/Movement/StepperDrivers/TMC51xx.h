@@ -4,10 +4,6 @@
  *  Created on: 26 Aug 2018
  *      Author: David
  */
-// Ugly hack to make sure we use the STM32 version
-#if STM32
-#include "Hardware/STM32/Movement/StepperDrivers/TMC51xx.h"
-#else
 #ifndef SRC_MOVEMENT_STEPPERDRIVERS_TMC51XX_H_
 #define SRC_MOVEMENT_STEPPERDRIVERS_TMC51XX_H_
 
@@ -17,6 +13,7 @@
 
 #include "DriverMode.h"
 #include <Endstops/EndstopDefs.h>
+#include <atomic>
 
 namespace SmartDrivers
 {
@@ -31,6 +28,7 @@ namespace SmartDrivers
 	void EnableDrive(size_t driver, bool en) noexcept;
 	bool SetMicrostepping(size_t drive, unsigned int microsteps, bool interpolation) noexcept;
 	unsigned int GetMicrostepping(size_t drive, bool& interpolation) noexcept;
+
 #if SUPPORT_PHASE_STEPPING
 	bool EnablePhaseStepping(size_t driver, bool enable) noexcept;
 	bool IsPhaseSteppingEnabled(size_t driver) noexcept;
@@ -40,6 +38,7 @@ namespace SmartDrivers
 	void SetTmcExternalClock(uint32_t frequency) noexcept;
 	bool SetMotorPhases(size_t driver, uint32_t regVal) noexcept;
 #endif
+
 	bool SetDriverMode(size_t driver, unsigned int mode) noexcept;
 	DriverMode GetDriverMode(size_t driver) noexcept;
 	void SetStallThreshold(size_t driver, int sgThreshold) noexcept;
@@ -59,10 +58,14 @@ namespace SmartDrivers
 	GCodeResult GetAnyRegister(size_t driver, const StringRef& reply, uint8_t regNum) noexcept;
 	GCodeResult SetAnyRegister(size_t driver, const StringRef& reply, uint8_t regNum, uint32_t regVal) noexcept;
 	StandardDriverStatus GetStatus(size_t driver, bool accumulated, bool clearAccumulated) noexcept;
-	EndstopValidationResult CheckStallDetectionEnabled(size_t driver, float speed) noexcept;
+	const char *_ecv_array _ecv_null CheckStallDetectionEnabled(size_t driver, float speed) noexcept;
+
+#if SUPPORT_REMOTE_COMMANDS
+	GCodeResult SetStallEndstopReporting(uint16_t driverNumber, float speed, const StringRef& reply) noexcept;
+	extern std::atomic<uint16_t> driverStallsToNotify;
+#endif
 }
 
 #endif
 
 #endif /* SRC_MOVEMENT_STEPPERDRIVERS_TMC51XX_H_ */
-#endif

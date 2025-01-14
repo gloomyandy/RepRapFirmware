@@ -285,9 +285,9 @@ void ExpansionManager::ProcessBoardStatusReport(const CanMessageBuffer *buf) noe
 		memcpy(&data, (const uint8_t*)&msg + offset, sizeof(AnalogHandleData));
 		offset += sizeof(AnalogHandleData);
 		// Currently only Z probes use analog handles, so ask the EndstopsManager to deal with it
-		if (data.handle.u.parts.type == RemoteInputHandle::typeZprobe)
+		if (data.handle.parts.type == RemoteInputHandle::typeZprobe)
 		{
-			reprap.GetPlatform().GetEndstops().HandleRemoteAnalogZProbeValueChange(address, data.handle.u.parts.major, data.handle.u.parts.minor, data.reading);
+			reprap.GetPlatform().GetEndstops().HandleRemoteAnalogZProbeValueChange(address, data.handle.parts.major, data.handle.parts.minor, data.reading);
 		}
 	}
 }

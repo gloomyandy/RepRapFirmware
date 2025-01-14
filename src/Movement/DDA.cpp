@@ -527,15 +527,6 @@ bool DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorM
 
 	RecalculateMove(ring);
 
-	// 8. If we are checking endstops, validate any stall endstops.
-	if (flags.checkEndstops)
-	{
-		if (!reprap.GetPlatform().GetEndstops().ValidateEndstops(*this))
-		{
-			return false;
-		}
-	}
-
 	state = provisional;
 	return true;
 }
@@ -1444,7 +1435,7 @@ float DDA::NormaliseLinearMotion(AxesBitmap linearAxes) noexcept
 	const AxesBitmap xAxes = Tool::GetXAxes(tool);
 	const AxesBitmap yAxes = Tool::GetYAxes(tool);
 	const float *_ecv_array const dv = directionVector;
-	linearAxes.Iterate([&xMagSquared, &yMagSquared, &magSquared, &numXaxes, &numYaxes, xAxes, yAxes, dv](unsigned int axis, unsigned int count)
+	linearAxes.Iterate([&xMagSquared, &yMagSquared, &magSquared, &numXaxes, &numYaxes, xAxes, yAxes, dv](unsigned int axis, unsigned int count) noexcept
 						{
 							const float dv2 = fsquare(dv[axis]);
 							if (xAxes.IsBitSet(axis))
@@ -1486,7 +1477,7 @@ float DDA::NormaliseLinearMotion(AxesBitmap linearAxes) noexcept
 /*static*/ float DDA::Magnitude(const float v[], AxesBitmap axes) noexcept
 {
 	float magnitude = 0.0;
-	axes.Iterate([&magnitude, v](unsigned int axis, unsigned int count) { magnitude += fsquare(v[axis]); });
+	axes.Iterate([&magnitude, v](unsigned int axis, unsigned int count) noexcept { magnitude += fsquare(v[axis]); });
 	return fastSqrtf(magnitude);
 }
 
@@ -1549,12 +1540,6 @@ float DDA::GetTotalExtrusionRate() const noexcept
 		fraction += directionVector[i];
 	}
 	return fraction * InverseConvertSpeedToMmPerSec(topSpeed);
-}
-
-// Return the top speed in microsteps/step clock for the specified motor
-float DDA::GetMotorTopSpeed(uint8_t axis) const noexcept
-{
-	return topSpeed * directionVector[axis] * reprap.GetMove().DriveStepsPerMm(axis);
 }
 
 #if SUPPORT_LASER

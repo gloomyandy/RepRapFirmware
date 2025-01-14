@@ -766,10 +766,19 @@ bool GCodes::SetupM585ProbingMove(GCodeBuffer& gb) noexcept
 		}
 		reduceAcceleration = true;
 	}
-	else if (!platform.GetEndstops().EnableAxisEndstops(AxesBitmap::MakeFromBits(m585Settings.axisNumber), false, reduceAcceleration))
+	else
 	{
-		gb.LatestMachineState().SetError("Failed to enable endstop");
-		return false;
+		float speeds[MaxAxes];
+		speeds[m585Settings.axisNumber] = m585Settings.feedRate;
+		try
+		{
+			platform.GetEndstops().EnableAxisEndstops(AxesBitmap::MakeFromBits(m585Settings.axisNumber), speeds, false, reduceAcceleration);
+		}
+		catch (GCodeException& exc)
+		{
+			gb.LatestMachineState().SetError(exc);
+			return false;
+		}
 	}
 
 	MovementState& ms = GetMovementState(gb);

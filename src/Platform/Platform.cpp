@@ -2459,6 +2459,7 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 		return GCodeResult::error;
 	}
 
+#if HAS_AUX_DEVICES
 	size_t auxChannel = 0;
 	if (gb.GetCommandFraction() > 0)
 	{
@@ -2469,6 +2470,7 @@ GCodeResult Platform::SendI2cOrModbus(GCodeBuffer& gb, const StringRef &reply) T
 			return GCodeResult::error;
 		}
 	}
+#endif
 
 	switch (gb.GetCommandFraction())
 	{
@@ -2782,6 +2784,7 @@ GCodeResult Platform::ReceiveI2cOrModbus(GCodeBuffer& gb, const StringRef &reply
 	const uint32_t numValues = gb.GetLimitedUIValue('B', 0, MaxI2cOrModbusValues + 1);
 	Variable *_ecv_null const resultVar = GetResultVariable(gb);
 
+#if HAS_AUX_DEVICES
 	size_t auxChannel = 0;
 	if (gb.GetCommandFraction() > 0)
 	{
@@ -2792,6 +2795,7 @@ GCodeResult Platform::ReceiveI2cOrModbus(GCodeBuffer& gb, const StringRef &reply
 			return GCodeResult::error;
 		}
 	}
+#endif
 
 	switch (gb.GetCommandFraction())
 	{

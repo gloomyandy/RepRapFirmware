@@ -195,7 +195,7 @@ bool ObjectTracker::WriteObjectDirectory(FileStore *f) const noexcept
 	if (ok)
 	{
 		// Write which objects have been cancelled
-		ok = objectsCancelled.IterateWhile([f](unsigned int index, bool first) -> bool
+		ok = objectsCancelled.IterateWhile([f](unsigned int index, bool first) noexcept -> bool
 											{
 												String<StringLength20> buf;
 												buf.printf("M486 P%u\n", index);

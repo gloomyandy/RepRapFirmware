@@ -352,6 +352,9 @@ public:
 		return axisShaper.EutSetInputShaping(msg, dataLength, reply);
 	}
 
+	// Stall endstops
+	GCodeResult SetStallEndstopReporting(const CanMessageEnableStallEndstop& msg, const StringRef& reply) noexcept;
+
 	void AppendDiagnostics(const StringRef& reply) noexcept;
 #endif
 
@@ -484,7 +487,7 @@ public:
 	void DeactivateDM(DriveMovement *dmToRemove) noexcept;									// remove a DM from the active list
 
 #if HAS_STALL_DETECT
-	EndstopValidationResult CheckStallDetectionEnabled(uint8_t axisOrExtruder, float speed, uint8_t& failingDriver) noexcept;	// check that stall detection will work at this speed
+	void CheckStallDetectionViable(uint8_t localDriver, float speed) const THROWS(GCodeException);		// check that stall detection will work at this speed
 #endif
 
 	// Movement error handling
