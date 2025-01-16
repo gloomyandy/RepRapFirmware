@@ -6,8 +6,8 @@
  */
 
 
-#ifndef SRC_MOVEMENT_STEPPERDRIVERS_SMARTDRIVERS_H_
-#define SRC_MOVEMENT_STEPPERDRIVERS_SMARTDRIVERS_H_
+#ifndef STM32_MOVEMENT_STEPPERDRIVERS_SMARTDRIVERS_H_
+#define STM32_MOVEMENT_STEPPERDRIVERS_SMARTDRIVERS_H_
 
 #include "RepRapFirmware.h"
 
@@ -15,6 +15,7 @@
 
 #include "StepperDrivers/DriverMode.h"
 #include <Endstops/EndstopDefs.h>
+#include <atomic>
 
 namespace SmartDrivers
 {
@@ -51,7 +52,7 @@ namespace SmartDrivers
 	void SetStallMinimumStepsPerSecond(size_t driver, unsigned int stepsPerSecond) noexcept;
 	void AppendStallConfig(size_t driver, const StringRef& reply) noexcept;
 	void AppendDriverStatus(size_t driver, const StringRef& reply) noexcept;
-	EndstopValidationResult CheckStallDetectionEnabled(size_t driver, float speed) noexcept;
+	const char *_ecv_array _ecv_null CheckStallDetectionEnabled(size_t driver, float speed) noexcept;
 	LocalDriversBitmap GetStalledDrivers(LocalDriversBitmap driversOfInterest) noexcept;
 #endif
 	void SetSenseResistor(size_t driver, float value) noexcept;
@@ -69,6 +70,13 @@ namespace SmartDrivers
 	uint16_t GetMicrostepPosition(size_t driver) noexcept;
 	bool SetMotorPhases(size_t driver, uint32_t regVal) noexcept;
 #endif
+#if SUPPORT_REMOTE_COMMANDS
+	GCodeResult SetStallEndstopReporting(uint16_t driver, float speed, const StringRef& reply) noexcept;
+	void NotifyStalls() noexcept;
+	extern std::atomic<uint16_t> driverStallsToNotify;
+	extern LocalDriversBitmap stallEndstopsEnabled;
+#endif
+
 };
 
 #endif

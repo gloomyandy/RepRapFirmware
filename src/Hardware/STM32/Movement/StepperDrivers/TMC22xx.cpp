@@ -412,7 +412,7 @@ public:
 	void SetStallMinimumStepsPerSecond(unsigned int stepsPerSecond) noexcept;
 	void SetStallDetectFilter(bool sgFilter) noexcept {};
 	void AppendStallConfig(const StringRef& reply) const noexcept;
-	EndstopValidationResult CheckStallDetectionEnabled(float speed) noexcept;
+	const char *_ecv_array _ecv_null  CheckStallDetectionEnabled(float speed) noexcept;
 #endif
 	StandardDriverStatus GetStatus(bool accumulated, bool clearAccumulated) noexcept;
 	float GetSenseResistor() const noexcept;
@@ -445,6 +445,9 @@ public:
 	DriversState SetupDriver(bool reset) noexcept;
 	bool inline IsActive() noexcept {return state >= DriversState::initialising;}
 	bool inline IsReady() noexcept {return state == DriversState::ready;}
+#if SUPPORT_REMOTE_COMMANDS
+	GCodeResult SetStallEndstopReporting(float speed, const StringRef& reply) noexcept;
+#endif
 
 private:
 	bool IsStealthChop() const noexcept;
@@ -798,17 +801,17 @@ void Tmc22xxDriverState::AppendStallConfig(const StringRef& reply) const noexcep
 }
 
 // Check that stall detection can occur at the specified speed
-EndstopValidationResult Tmc22xxDriverState::CheckStallDetectionEnabled(float speed) noexcept
+const char *_ecv_array _ecv_null Tmc22xxDriverState::CheckStallDetectionEnabled(float speed) noexcept
 {
 	if (!IsStealthChop())
 	{
-		return EndstopValidationResult::driverNotInStealthChopMode;
+		return "driver %u is not in stealthChop mode";
 	}
 	if (speed * (float)StepClockRate < ((12500000/256) << microstepShiftFactor) / writeRegisters[WriteTcoolthrs])
 	{
-		return EndstopValidationResult::moveTooSlow;
+		return "move is too slow for driver %u to detect stall";
 	}
-	return EndstopValidationResult::ok;
+	return nullptr;
 }
 
 #endif
@@ -1500,7 +1503,6 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 						driverStates[i].TransferDone();
 					else
 						driverStates[i].TransferTimedOut();
-
 				}
 			}
 			// Give other tasks a chance to run.

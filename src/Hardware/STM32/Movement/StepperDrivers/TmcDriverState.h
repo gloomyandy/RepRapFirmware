@@ -4,6 +4,7 @@
 #if HAS_STALL_DETECT
 #include <Endstops/EndstopDefs.h>
 #endif
+#include <atomic>
 
 class TmcDriverState
 {
@@ -22,7 +23,7 @@ public:
 	virtual void SetStallDetectFilter(bool sgFilter) noexcept = 0;
 	virtual void SetStallMinimumStepsPerSecond(unsigned int stepsPerSecond) noexcept = 0;
 	virtual void AppendStallConfig(const StringRef& reply) const noexcept = 0;
-	virtual EndstopValidationResult CheckStallDetectionEnabled(float speed) noexcept = 0;
+	virtual const char *_ecv_array _ecv_null CheckStallDetectionEnabled(float speed) noexcept = 0;
 #endif
 	virtual bool SetRegister(SmartDriverRegister reg, uint32_t regVal) noexcept = 0;
 	virtual uint32_t GetRegister(SmartDriverRegister reg) const noexcept = 0;
@@ -55,6 +56,5 @@ public:
 	virtual uint16_t GetMicrostepPosition() const noexcept = 0;
 	virtual bool SetXdirect(uint32_t regVal) noexcept = 0;
 #endif
-
 };
 #endif

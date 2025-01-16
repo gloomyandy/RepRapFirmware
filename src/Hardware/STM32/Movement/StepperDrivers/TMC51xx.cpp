@@ -22,6 +22,9 @@
 #include <Endstops/Endstop.h>
 #include "TmcDriverState.h"
 #include "TMC51xxDriver.h"
+#if HAS_STALL_DETECT && SUPPORT_REMOTE_COMMANDS
+# include <CAN/CanInterface.h>
+#endif
 // On some processors we need to ensure that memory mapped I/O operations are synced to the hardware
 # if STM32H7
 # define SYNC_GPIO() __DSB()
@@ -337,6 +340,11 @@ enum class DriversState : uint8_t
 
 static DriversState driversState = DriversState::shutDown;
 
+#if SUPPORT_REMOTE_COMMANDS
+static LocalDriversBitmap stallEndstopsEnabled;
+std::atomic<uint16_t> SmartDrivers::driverStallsToNotify(0);
+#endif
+
 //----------------------------------------------------------------------------------------------------------------------------------
 // Private types and methods
 
@@ -378,7 +386,7 @@ public:
 	void SetStallDetectFilter(bool sgFilter) noexcept;
 	void SetStallMinimumStepsPerSecond(unsigned int stepsPerSecond) noexcept;
 	void AppendStallConfig(const StringRef& reply) const noexcept;
-	EndstopValidationResult CheckStallDetectionEnabled(float speed) noexcept;
+	const char *_ecv_array _ecv_null  CheckStallDetectionEnabled(float speed) noexcept;
 #endif
 
 	bool SetRegister(SmartDriverRegister reg, uint32_t regVal) noexcept;
@@ -666,17 +674,17 @@ unsigned int Tmc51xxDriverState::GetMicrostepping(bool& interpolation) const noe
 }
 
 // Check that stall detection can occur at the specified speed
-EndstopValidationResult Tmc51xxDriverState::CheckStallDetectionEnabled(float speed) noexcept
+const char *_ecv_array _ecv_null Tmc51xxDriverState::CheckStallDetectionEnabled(float speed) noexcept
 {
 	if (GetDriverMode() > DriverMode::spreadCycle)			// if in stealthChop or direct mode
 	{
-		return EndstopValidationResult::driverNotInSpreadCycleMode;
+		return "driver %u is not in spreadCycle mode";
 	}
 	if (speed * (float)maxStallStepInterval < (float)(1u << microstepShiftFactor))
 	{
-		return EndstopValidationResult::moveTooSlow;
+		return "move is too slow for driver %u to detect stall";
 	}
-	return EndstopValidationResult::ok;
+	return nullptr;
 }
 
 bool Tmc51xxDriverState::SetRegister(SmartDriverRegister reg, uint32_t regVal) noexcept
@@ -1250,7 +1258,21 @@ void Tmc51xxDriverState::TransferSucceeded(const uint8_t *rcvDataBlock) noexcept
 	{
 		readRegisters[ReadDrvStat] |= TMC_RR_SG;
 		accumulatedDriveStatus |= TMC_RR_SG;
-		EndstopOrZProbe::SetDriversStalled(driverBit);
+#if SUPPORT_REMOTE_COMMANDS
+		if (CanInterface::InExpansionMode())
+		{
+			if (stallEndstopsEnabled.IsBitSet(driverNumber))
+			{
+				SmartDrivers::stallEndstopsEnabled.ClearBit(driverNumber);
+				SmartDrivers::driverStallsToNotify |= 1u << driverNumber;
+				CanInterface::WakeAsyncSender();
+			}
+		}
+		else
+#endif
+		{
+			EndstopOrZProbe::SetDriversStalled(driverBit);
+		}
 	}
 	else
 	{

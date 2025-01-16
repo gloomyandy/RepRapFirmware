@@ -2467,7 +2467,13 @@ void Move::StepDrivers(uint32_t now) noexcept
 		flags |= dm->segmentFlags;
 		dm = dm->nextDM;
 	}
-
+#if SUPPORT_REMOTE_COMMANDS && STM32
+	// We don't have interrupt driven stall detection on the STM32, so poll it here.
+	if (SmartDrivers::stallEndstopsEnabled.IsNonEmpty())
+	{
+		SmartDrivers::NotifyStalls();
+	}
+#endif
 	if (flags.checkEndstops)
 	{
 #if SUPPORT_CAN_EXPANSION

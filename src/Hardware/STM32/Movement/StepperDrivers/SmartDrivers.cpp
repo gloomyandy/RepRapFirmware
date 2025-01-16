@@ -10,6 +10,13 @@
 #if SUPPORT_TMC22xx
 #include "TMC22xxDriver.h"
 #endif
+
+#if HAS_STALL_DETECT && SUPPORT_REMOTE_COMMANDS
+# include <CAN/CanInterface.h>
+LocalDriversBitmap SmartDrivers::stallEndstopsEnabled;
+std::atomic<uint16_t> SmartDrivers::driverStallsToNotify(0);
+#endif
+
 static TmcDriverState **driverStates;
 static size_t numDrivers;
 
@@ -250,7 +257,7 @@ void SmartDrivers::AppendStallConfig(size_t driver, const StringRef& reply) noex
 #endif
 }
 
-EndstopValidationResult SmartDrivers::CheckStallDetectionEnabled(size_t driver, float speed) noexcept
+const char *_ecv_array _ecv_null SmartDrivers::CheckStallDetectionEnabled(size_t driver, float speed) noexcept
 {
 #if HAS_STALL_DETECT
 	if (driver < numDrivers)
@@ -258,7 +265,7 @@ EndstopValidationResult SmartDrivers::CheckStallDetectionEnabled(size_t driver, 
 		return driverStates[driver]->CheckStallDetectionEnabled(speed);
 	}
 #endif
-	return EndstopValidationResult::stallDetectionNotSupported;
+	return "driver %u does not support stall detection";
 }
 
 void SmartDrivers::AppendDriverStatus(size_t drive, const StringRef& reply) noexcept
@@ -409,9 +416,45 @@ uint16_t SmartDrivers::GetMicrostepPosition(size_t driver) noexcept
 // Returns true if request is scheduled. Will not schedule a request if it is equal to the current value.
 bool SmartDrivers::SetMotorPhases(size_t driver, uint32_t regVal) noexcept
 {
-		return (driver < numDrivers ? driverStates[driver]->SetXdirect(regVal) : false);
+	return (driver < numDrivers ? driverStates[driver]->SetXdirect(regVal) : false);
 }
 
 #endif
+
+#if SUPPORT_REMOTE_COMMANDS
+GCodeResult SmartDrivers::SetStallEndstopReporting(uint16_t driver, float speed, const StringRef& reply) noexcept
+{
+	if (driver < numDrivers)
+	{
+		const char *_ecv_array _ecv_null const msg = driverStates[driver]->CheckStallDetectionEnabled(speed);
+		if (msg == nullptr)
+		{
+			stallEndstopsEnabled.SetBit(driver);
+			return GCodeResult::ok;
+		}
+		reply.printf(msg, driver);
+		return GCodeResult::error;
+	}
+	else
+	{
+		stallEndstopsEnabled.Clear();
+		driverStallsToNotify = 0;
+		return GCodeResult::ok;
+	}
+}
+
+void SmartDrivers::NotifyStalls() noexcept
+{
+	const LocalDriversBitmap stalledDrivers = Tmc22xxDriver::GetStalledDrivers(SmartDrivers::stallEndstopsEnabled);
+	if (stalledDrivers.IsNonEmpty())
+	{
+		SmartDrivers::stallEndstopsEnabled &= ~stalledDrivers;
+		SmartDrivers::driverStallsToNotify |= stalledDrivers.GetRaw();
+		CanInterface::WakeAsyncSender();
+	}
+}
+
+#endif
+
 #endif
 
