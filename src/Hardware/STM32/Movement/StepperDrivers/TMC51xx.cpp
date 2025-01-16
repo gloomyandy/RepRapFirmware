@@ -5,6 +5,7 @@
  *      Author: David
  *  Purpose:
  *  	Support for TMC5130, TMC5160 and TMC5161 stepper drivers
+ * 		Andy added support for TMC2240 drivers
  */
 
 #include "SmartDrivers.h"
@@ -48,7 +49,9 @@ constexpr bool DefaultStallDetectFiltered = false;
 constexpr unsigned int DefaultMinimumStepsPerSecond = 200;	// for stall detection: 1 rev per second assuming 1.8deg/step, as per the TMC5160 datasheet
 constexpr uint32_t DefaultTcoolthrs = 2000;					// max interval between 1/256 microsteps for stall detection to be enabled
 constexpr uint32_t DefaultThigh = 200;
-constexpr uint32_t DefaultHighestTmcClockSpeed = 12500000;	// the highest speed at which the TMC driver is clocked internally
+constexpr uint32_t LowestTmcClockSpeed = 11500000;			// the lowest speed at which the TMC driver is clocked internally
+constexpr uint32_t NominalTmcClockSpeed = 120000000;		// the nominal speed at which the TMC driver is clocked internally
+constexpr uint32_t HighestTmcClockSpeed = 12600000;			// the highest speed at which the TMC driver is clocked internally
 constexpr float Tmc2240Rref = 12.3;							// TMC2240 reference resistor on Fly boards, in Kohms
 constexpr float Tmc2240FullScaleCurrent = 36000/Tmc2240Rref;// in mA, assuming we set the range bits in the DRV_CONF register to 01b
 constexpr float Tmc2240CsMultiplier = 32.0/Tmc2240FullScaleCurrent;
@@ -324,8 +327,14 @@ static constexpr uint32_t InvalidSgLoadRegister = 1024;
 
 inline uint32_t GetHighestTmcClockSpeed() noexcept
 {
-	return DefaultHighestTmcClockSpeed;
+	return HighestTmcClockSpeed;
 }
+
+inline uint32_t GetLowestTmcClockSpeed() noexcept
+{
+	return LowestTmcClockSpeed;
+}
+
 
 enum class DriversState : uint8_t
 {
@@ -380,6 +389,7 @@ public:
 	void SetMaxCurrent(float value) noexcept;
 	void AppendDriverStatus(const StringRef& reply) noexcept;
 	float GetDriverTemperature() noexcept;
+	uint32_t GetDriverClockFrequency() noexcept;
 	bool UpdatePending() const noexcept { return (registersToUpdate.load() | newRegistersToUpdate.load()) != 0; }
 #if HAS_STALL_DETECT
 	void SetStallDetectThreshold(int sgThreshold) noexcept;
@@ -682,8 +692,14 @@ const char *_ecv_array _ecv_null Tmc51xxDriverState::CheckStallDetectionEnabled(
 	}
 	if (speed * (float)maxStallStepInterval < (float)(1u << microstepShiftFactor))
 	{
-		return "move is too slow for driver %u to detect stall";
+		return "move is too slow for driver %u to detect stall (increase speed or Tcoolthrs)";
 	}
+#if 0	// the Tpwmthrs setting affects the DIAG pin output but not the stall detection that we read over SPI, so we must not check the following
+	if (speed * (float)StepClockRate * (float)writeRegisters[WriteTpwmthrs] > (float)((GetLowestTmcClockSpeed()/256) << microstepShiftFactor))
+	{
+		return "move is too fast for driver %u to detect stall (reduce speed or Tpwmthrs)";
+	}
+#endif
 	return nullptr;
 }
 
@@ -1088,6 +1104,11 @@ float Tmc51xxDriverState::GetDriverTemperature() noexcept
 
 		return (status & TMC_RR_OT ? 150.0f : status & TMC_RR_OTPW ? 100.0f : 0.0f);
 	}
+}
+
+uint32_t Tmc51xxDriverState::GetDriverClockFrequency() noexcept
+{
+	return NominalTmcClockSpeed;
 }
 
 #if HAS_STALL_DETECT

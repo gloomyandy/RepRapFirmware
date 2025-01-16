@@ -416,20 +416,28 @@ typedef float floatc_t;								// type of matrix element used for calibration
 #endif
 
 #if SUPPORT_CAN_EXPANSION
+
+# include <Duet3Common.h>
+
 typedef Bitmap<uint32_t> AxesBitmap;				// Type of a bitmap representing a set of axes, and sometimes extruders too
 typedef Bitmap<uint32_t> ExtrudersBitmap;			// Type of a bitmap representing a set of extruder drive numbers
 typedef Bitmap<uint32_t> LogicalDrivesBitmap;		// Type of a bitmap representing a set of logical drives i.e. motor sets
 typedef Bitmap<uint64_t> InputPortsBitmap;			// Type of a bitmap representing a set of input ports
+
 #else
+
+typedef Bitmap<uint16_t> HeatersBitmap;
+typedef Bitmap<uint16_t> FansBitmap;
+typedef Bitmap<uint32_t> SensorsBitmap;
+typedef Bitmap<uint16_t> LocalDriversBitmap;
+
 typedef Bitmap<uint16_t> AxesBitmap;				// Type of a bitmap representing a set of axes, and sometimes extruders too
 typedef Bitmap<uint16_t> ExtrudersBitmap;			// Type of a bitmap representing a set of extruder drive numbers
 typedef Bitmap<uint16_t> LogicalDrivesBitmap;		// Type of a bitmap representing a set of logical drives i.e. motor sets
 typedef Bitmap<uint32_t> InputPortsBitmap;			// Type of a bitmap representing a set of input ports
+
 #endif
 
-typedef Bitmap<uint16_t> LocalDriversBitmap;		// Type of a bitmap representing a set of local driver numbers
-typedef Bitmap<uint32_t> FansBitmap;				// Type of a bitmap representing a set of fan numbers
-typedef Bitmap<uint32_t> HeatersBitmap;				// Type of a bitmap representing a set of heater numbers
 typedef Bitmap<uint32_t> TriggerNumbersBitmap;		// Type of a bitmap representing a set of trigger numbers
 typedef Bitmap<uint64_t> ToolNumbersBitmap;			// Type of a bitmap representing a set of tool numbers
 
@@ -441,18 +449,13 @@ typedef Bitmap<uint32_t> ParameterLettersBitmap;	// Type of a bitmap representin
 constexpr char HighestAxisLetter = 'f';
 #endif
 
-#if SUPPORT_CAN_EXPANSION
-typedef Bitmap<uint64_t> SensorsBitmap;
-#else
-typedef Bitmap<uint32_t> SensorsBitmap;
-#endif
-
 static_assert(MaxAxesPlusExtruders <= AxesBitmap::MaxBits());
 static_assert(MaxAxesPlusExtruders <= LogicalDrivesBitmap::MaxBits());
 static_assert(MaxExtruders <= ExtrudersBitmap::MaxBits());
-static_assert(MaxFans <= FansBitmap::MaxBits());
-static_assert(MaxHeaters <= HeatersBitmap::MaxBits());
 static_assert(NumDirectDrivers <= LocalDriversBitmap::MaxBits());
+static_assert(MaxHeaters <= HeatersBitmap::MaxBits());
+static_assert(MaxFans <= FansBitmap::MaxBits());
+static_assert(MaxSensors <= SensorsBitmap::MaxBits());
 static_assert(MaxSensors <= SensorsBitmap::MaxBits());
 static_assert(MaxGpInPorts <= InputPortsBitmap::MaxBits());
 static_assert(MaxTriggers <= TriggerNumbersBitmap::MaxBits());

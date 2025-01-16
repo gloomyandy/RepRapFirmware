@@ -74,8 +74,6 @@ constexpr uint32_t IAP_IMAGE_START = 0x20038000;
 
 // The physical capabilities of the machine
 
-#include <Duet3Common.h>
-
 constexpr size_t NumDirectDrivers = 7;				// The maximum number of drives supported by the electronics
 
 constexpr size_t MaxSmartDrivers = NumDirectDrivers;	// The maximum number of smart drivers

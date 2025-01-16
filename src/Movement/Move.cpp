@@ -2939,7 +2939,7 @@ bool Move::GetDriverStepTiming(size_t driver, float microseconds[4]) const noexc
 	for (size_t i = 0; i < 4; ++i)
 	{
 		microseconds[i] = (isSlowDriver)
-							? (float)slowDriverStepTimingClocks[i] * 1000000.0/(float)StepClockRate
+							? (float)slowDriverStepTimingClocks[i] * (1000000.0/(float)StepClockRate)
 								: 0.0;
 	}
 	return isSlowDriver;

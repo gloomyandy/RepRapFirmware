@@ -65,6 +65,9 @@ constexpr float MinimumOpenLoadMotorCurrent = 500;			// minimum current in mA fo
 constexpr uint32_t DefaultMicrosteppingShift = 4;			// x16 microstepping
 constexpr bool DefaultInterpolation = true;					// interpolation enabled
 constexpr uint32_t DefaultTpwmthrsReg = 2000;				// low values (high changeover speed) give horrible jerk at the changeover from stealthChop to spreadCycle
+constexpr uint32_t LowestTmcClockSpeed = 11500000;			// the lowest speed at which the TMC driver is clocked internally
+constexpr uint32_t NominalTmcClockSpeed = 12000000;			// the nominal speed at which the TMC driver is clocked internally
+constexpr uint32_t HighestTmcClockSpeed = 12600000;			// the highest speed at which the TMC driver is clocked internally
 constexpr uint32_t MaximumWaitTime = 10;					// Wait time for commands we need to complete
 constexpr uint16_t DriverNotPresentTimeouts = 10;			// Number of timeouts before we decide to ignore the driver
 constexpr size_t TmcTaskStackWords = 140;
@@ -421,6 +424,7 @@ public:
 	void SetMaxCurrent(float value) noexcept;
 	void AppendDriverStatus(const StringRef& reply) noexcept;
 	float GetDriverTemperature() noexcept;
+	uint32_t GetDriverClockFrequency() noexcept;
 	uint8_t GetDriverNumber() const noexcept { return driverNumber; }
 	bool UpdatePending() const noexcept;
 	
@@ -807,9 +811,13 @@ const char *_ecv_array _ecv_null Tmc22xxDriverState::CheckStallDetectionEnabled(
 	{
 		return "driver %u is not in stealthChop mode";
 	}
-	if (speed * (float)StepClockRate < ((12500000/256) << microstepShiftFactor) / writeRegisters[WriteTcoolthrs])
+	if (speed * (float)StepClockRate * (float)writeRegisters[WriteTcoolthrs] < (float)((HighestTmcClockSpeed/256) << microstepShiftFactor))
 	{
-		return "move is too slow for driver %u to detect stall";
+		return "move is too slow for driver %u to detect stall (increase speed or Tcoolthrs)";
+	}
+	if (speed * (float)StepClockRate * (float)writeRegisters[WriteTpwmthrs] > (float)((LowestTmcClockSpeed/256) << microstepShiftFactor))
+	{
+		return "move is too fast for driver %u to detect stall (reduce speed or Tpwmthrs)";
 	}
 	return nullptr;
 }
@@ -915,6 +923,9 @@ uint32_t Tmc22xxDriverState::GetRegister(SmartDriverRegister reg) const noexcept
 
 	case SmartDriverRegister::tpwmthrs:
 		return writeRegisters[WriteTpwmthrs] & 0x000FFFFF;
+
+	case SmartDriverRegister::tcoolthrs:
+		return writeRegisters[WriteTcoolthrs] & 0x000FFFFF;
 
 	case SmartDriverRegister::mstepPos:
 		return readRegisters[ReadMsCnt];
@@ -1188,6 +1199,11 @@ float Tmc22xxDriverState::GetDriverTemperature() noexcept
 
 	return (status & TMC_RR_OT_2209 ? 150.0f : status & TMC_RR_OTPW_2209 ? 100.0f : 0.0f);
 
+}
+
+uint32_t Tmc22xxDriverState::GetDriverClockFrequency() noexcept
+{
+	return NominalTmcClockSpeed;
 }
 
 // This is called by the ISR when the SPI transfer has completed

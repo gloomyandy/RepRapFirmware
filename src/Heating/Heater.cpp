@@ -82,8 +82,8 @@ DeviationAccumulator Heater::dHigh;
 DeviationAccumulator Heater::dLow;
 DeviationAccumulator Heater::tOn;
 DeviationAccumulator Heater::tOff;
-DeviationAccumulator Heater::heatingRate;
-DeviationAccumulator Heater::coolingRate;
+DeviationAccumulator Heater::heatingRateAcc;
+DeviationAccumulator Heater::coolingRateAcc;
 DeviationAccumulator Heater::tuningVoltage;				// sum of the voltage readings we take during the heating phase
 
 uint32_t Heater::tuningBeginTime;						// when we started the tuning process
@@ -108,8 +108,8 @@ Heater::HeaterParameters Heater::fanOffParams, Heater::fanOnParams;
 	dLow.Clear();
 	tOn.Clear();
 	tOff.Clear();
-	heatingRate.Clear();
-	coolingRate.Clear();
+	heatingRateAcc.Clear();
+	coolingRateAcc.Clear();
 }
 
 Heater::Heater(unsigned int num) noexcept
@@ -377,12 +377,12 @@ void Heater::CalculateModel(HeaterParameters& params) noexcept
 										lrintf(tOff.GetMean()), lrintf(tOff.GetDeviation()),
 										lrintf(dHigh.GetMean()), lrintf(dHigh.GetDeviation()),
 										lrintf(dLow.GetMean()), lrintf(dLow.GetDeviation()),
-										(double)heatingRate.GetMean(), (double)heatingRate.GetDeviation(),
-										(double)coolingRate.GetMean(), (double)coolingRate.GetDeviation(),
+										(double)heatingRateAcc.GetMean(), (double)heatingRateAcc.GetDeviation(),
+										(double)coolingRateAcc.GetMean(), (double)coolingRateAcc.GetDeviation(),
 #if HAS_VOLTAGE_MONITOR
 										(double)tuningVoltage.GetMean(), (double)tuningVoltage.GetDeviation(),
 #endif
-										coolingRate.GetNumSamples()
+										coolingRateAcc.GetNumSamples()
 									 );
 	}
 
@@ -391,8 +391,8 @@ void Heater::CalculateModel(HeaterParameters& params) noexcept
 	const float averageTemperatureRiseCooling = tuningTargetTemp - TuningPeakTempDrop - 0.5 * tuningHysteresis - tuningStartTemp.GetMean();
 	const float averageTemperatureRise = (averageTemperatureRiseHeating * tOn.GetMean() + averageTemperatureRiseCooling * tOff.GetMean()) / cycleTime;
 	params.deadTime = (((dHigh.GetMean() * tOff.GetMean()) + (dLow.GetMean() * tOn.GetMean())) * MillisToSeconds)/cycleTime;	// in seconds
-	params.coolingRate = coolingRate.GetMean();
-	params.heatingRate = (heatingRate.GetMean() + (coolingRate.GetMean() * averageTemperatureRiseHeating/averageTemperatureRiseCooling)) / tuningPwm;
+	params.coolingRate = coolingRateAcc.GetMean();
+	params.heatingRate = (heatingRateAcc.GetMean() + (coolingRateAcc.GetMean() * averageTemperatureRiseHeating/averageTemperatureRiseCooling)) / tuningPwm;
 	params.gain = (tOn.GetMean() + tOff.GetMean()) * averageTemperatureRise/tOn.GetMean();
 	params.numCycles = dHigh.GetNumSamples();
 }

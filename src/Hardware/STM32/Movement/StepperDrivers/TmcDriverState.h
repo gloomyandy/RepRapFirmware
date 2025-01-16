@@ -46,6 +46,7 @@ public:
 	virtual float GetMaxCurrent() const noexcept = 0;
 	virtual void SetMaxCurrent(float value) noexcept = 0;
 	virtual float GetDriverTemperature() noexcept = 0;
+	virtual uint32_t GetDriverClockFrequency() noexcept = 0;
 #if SUPPORT_PHASE_STEPPING
 	virtual bool EnablePhaseStepping(bool enable) noexcept = 0;
 	virtual bool IsPhaseSteppingEnabled() const noexcept = 0;

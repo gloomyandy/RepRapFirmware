@@ -103,7 +103,7 @@ DEFINE_GET_OBJECT_MODEL_TABLE(EndstopsManager)
 
 EndstopsManager::EndstopsManager() noexcept
 		: activeEndstops(nullptr),
-#if HAS_STALL_DETECT
+#if HAS_STALL_DETECT || SUPPORT_CAN_EXPANSION
 		  extrudersEndstop(nullptr),
 #endif
 		  isHomingMove(false)
@@ -227,7 +227,7 @@ void EndstopsManager::EnableAxisEndstops(AxesBitmap axes, const float speeds[Max
 }
 
 // Enable extruder endstops. This adds to any existing axis endstops, so you must call EnableAxisEndstops before calling this.
-void EndstopsManager::EnableExtruderEndstops(ExtrudersBitmap extruders, const float speeds[MaxAxesPlusExtruders]) THROWS(GCodeException)
+void EndstopsManager::EnableExtruderEndstops(ExtrudersBitmap extruders, const float speeds[MaxExtruders], bool& reduceAcceleration) THROWS(GCodeException)
 {
 	if (extruders.IsNonEmpty())
 	{
@@ -237,6 +237,7 @@ void EndstopsManager::EnableExtruderEndstops(ExtrudersBitmap extruders, const fl
 			extrudersEndstop = new StallDetectionEndstop;
 		}
 		extrudersEndstop->PrimeExtruders(extruders, speeds);
+		reduceAcceleration = extrudersEndstop->ShouldReduceAcceleration();
 		AddToActive(*extrudersEndstop);
 #else
 		ThrowGCodeException("extruder endstops not supported by this system");
@@ -790,7 +791,7 @@ void EndstopsManager::HandleRemoteAnalogZProbeValueChange(CanAddress src, uint8_
 	}
 }
 
-void EndstopsManager::HandleStalledRemoteDrivers(CanAddress boardAddress, RemoteDriversBitmap driversReportedStalled) noexcept
+void EndstopsManager::HandleStalledRemoteDrivers(CanAddress boardAddress, LocalDriversBitmap driversReportedStalled) noexcept
 {
 	ReadLocker lock(endstopsLock);						// make sure endstops are not changed or deleted while we operate on them
 

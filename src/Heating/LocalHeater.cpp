@@ -762,7 +762,7 @@ void LocalHeater::DoTuningStep() noexcept
 			dHigh.Add((float)(peakTime - lastOffTime));
 			tOff.Add((float)(now - lastOffTime));
 			const float currentCoolingRate = (afterPeakTemp - temperature) * SecondsToMillis/(now - afterPeakTime);
-			coolingRate.Add(currentCoolingRate);
+			coolingRateAcc.Add(currentCoolingRate);
 
 			// Decide whether to finish this phase
 			if (tuningPhase == 2)				// if we are doing idle cycles
@@ -780,13 +780,13 @@ void LocalHeater::DoTuningStep() noexcept
 					++idleCyclesDone;
 				}
 			}
-			else if (coolingRate.GetNumSamples() >= MinTuningHeaterCycles)
+			else if (coolingRateAcc.GetNumSamples() >= MinTuningHeaterCycles)
 			{
 				const bool isConsistent = dLow.DeviationFractionWithin(0.2)
 										&& dHigh.DeviationFractionWithin(0.2)
-										&& heatingRate.DeviationFractionWithin(0.1)
-										&& coolingRate.DeviationFractionWithin(0.1);
-				if (isConsistent || coolingRate.GetNumSamples() == MaxTuningHeaterCycles)
+										&& heatingRateAcc.DeviationFractionWithin(0.1)
+										&& coolingRateAcc.DeviationFractionWithin(0.1);
+				if (isConsistent || coolingRateAcc.GetNumSamples() == MaxTuningHeaterCycles)
 				{
 					if (!isConsistent)
 					{
@@ -892,7 +892,7 @@ void LocalHeater::DoTuningStep() noexcept
 			// We have reached the target temperature, so record a data point and turn the heater off
 			dLow.Add((float)(peakTime - lastOnTime));
 			tOn.Add((float)(now - lastOnTime));
-			heatingRate.Add((temperature - afterPeakTemp) * SecondsToMillis/(now - afterPeakTime));
+			heatingRateAcc.Add((temperature - afterPeakTemp) * SecondsToMillis/(now - afterPeakTime));
 			lastOffTime = peakTime = afterPeakTime = now;
 			peakTemp = afterPeakTemp = temperature;
 			lastPwm = 0.0;								// turn heater off

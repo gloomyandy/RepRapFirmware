@@ -1479,7 +1479,7 @@ OutputBuffer *_ecv_null RepRap::GetStatusResponse(uint8_t type, ResponseSource s
 				controllableFans.SetBit(fan);
 			}
 		}
-		response->catf(",\"controllableFans\":%lu", controllableFans.GetRaw());
+		response->catf(",\"controllableFans\":%lu", (uint32_t)controllableFans.GetRaw());
 
 		// Maximum hotend temperature - DWC just wants the highest one
 		response->catf(",\"tempLimit\":%.1f", (double)(heat->GetHighestTemperatureLimit()));
@@ -1566,7 +1566,7 @@ OutputBuffer *_ecv_null RepRap::GetStatusResponse(uint8_t type, ResponseSource s
 				response->cat("]]");
 
 				// Fan mapping
-				response->catf(",\"fans\":%lu", tool->GetFanMapping().GetRaw());
+				response->catf(",\"fans\":%lu", (uint32_t)tool->GetFanMapping().GetRaw());
 
 				// Filament (if any)
 				if (tool->GetFilament() != nullptr)

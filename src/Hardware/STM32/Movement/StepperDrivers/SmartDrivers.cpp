@@ -381,6 +381,11 @@ float SmartDrivers::GetDriverTemperature(size_t driver) noexcept
 	return (driver < numDrivers ? driverStates[driver]->GetDriverTemperature() : 0.0f);
 }
 
+uint32_t SmartDrivers::GetDriverClockFrequency(size_t driver) noexcept
+{
+	return (driver < numDrivers ? driverStates[driver]->GetDriverClockFrequency() : 0);
+}
+
 #if SUPPORT_PHASE_STEPPING
 
 bool SmartDrivers::EnablePhaseStepping(size_t driver, bool enable) noexcept

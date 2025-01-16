@@ -77,8 +77,11 @@ constexpr float MinimumOpenLoadMotorCurrent = 500;			// minimum current in mA fo
 constexpr uint32_t DefaultMicrosteppingShift = 4;			// x16 microstepping
 constexpr bool DefaultInterpolation = true;					// interpolation enabled
 constexpr uint32_t DefaultTpwmthrsReg = 2000;				// low values (high changeover speed) give horrible jerk at the changeover from stealthChop to spreadCycle
-constexpr size_t TmcTaskStackWords = 150;					// 100 is sufficient unless we use debugPrintf in the code executed by the TMC task
+constexpr uint32_t LowestTmcClockSpeed = 11500000;			// the lowest speed at which the TMC driver is clocked internally
+constexpr uint32_t NominalTmcClockSpeed = 12000000;			// the nominal speed at which the TMC driver is clocked internally
+constexpr uint32_t HighestTmcClockSpeed = 12600000;			// the highest speed at which the TMC driver is clocked internally
 
+constexpr size_t TmcTaskStackWords = 150;					// 100 is sufficient unless we use debugPrintf in the code executed by the TMC task
 constexpr uint16_t DriverNotPresentTimeouts = 20;
 
 #if HAS_STALL_DETECT
@@ -119,6 +122,7 @@ static DriversState driversState = DriversState::shutDown;
 
 #if SUPPORT_REMOTE_COMMANDS
 static LocalDriversBitmap stallEndstopsEnabled;
+std::atomic<uint16_t> SmartDrivers::driverStallsToNotify(0);
 #endif
 
 #if TMC22xx_USE_SLAVEADDR && TMC22xx_HAS_MUX
@@ -1253,11 +1257,15 @@ const char *_ecv_array _ecv_null TmcDriverState::CheckStallDetectionEnabled(floa
 {
 	if (!IsStealthChop())
 	{
-		return "driver %u is nt in stealthChop mode";
+		return "driver %u is not in stealthChop mode";
 	}
-	if (speed * (float)StepClockRate < ((12500000/256) << microstepShiftFactor) / writeRegisters[WriteTcoolthrs])
+	if (speed * (float)StepClockRate * (float)writeRegisters[WriteTcoolthrs] < (float)((HighestTmcClockSpeed/256) << microstepShiftFactor))
 	{
-		return "move is too slow for driver %u to detect stall";
+		return "move is too slow for driver %u to detect stall (increase speed or Tcoolthrs)";
+	}
+	if (speed * (float)StepClockRate * (float)writeRegisters[WriteTpwmthrs] > (float)((LowestTmcClockSpeed/256) << microstepShiftFactor))
+	{
+		return "move is too fast for driver %u to detect stall (reduce speed or Tpwmthrs)";
 	}
 	return nullptr;
 }
@@ -1362,6 +1370,9 @@ uint32_t TmcDriverState::GetRegister(SmartDriverRegister reg) const noexcept
 
 	case SmartDriverRegister::tpwmthrs:
 		return writeRegisters[WriteTpwmthrs] & 0x000FFFFF;
+
+	case SmartDriverRegister::tcoolthrs:
+		return writeRegisters[WriteTcoolthrs] & 0x000FFFFF;
 
 	case SmartDriverRegister::mstepPos:
 		return readRegisters[ReadMsCnt];
@@ -2642,8 +2653,6 @@ static void InitStallDetectionLogic() noexcept
 
 #  if SUPPORT_REMOTE_COMMANDS
 
-std::atomic<uint16_t> SmartDrivers::driverStallsToNotify(0);
-
 // ISR for Diag pins via CCL and event system
 extern "C" void StallEventInterruptEntry() noexcept
 {
@@ -2705,6 +2714,11 @@ GCodeResult SmartDrivers::SetStallEndstopReporting(uint16_t driverNumber, float 
 }
 
 #endif
+
+uint32_t SmartDrivers::GetDriverClockFrequency() noexcept
+{
+	return NominalTmcClockSpeed;
+}
 
 #if SUPPORT_TMC2240 && !(SUPPORT_TMC2208 || SUPPORT_TMC2209)
 

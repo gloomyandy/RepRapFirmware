@@ -2050,7 +2050,12 @@ void GCodes::LoadExtrusionFromGCode(GCodeBuffer& gb, MovementState& ms, bool isP
 			{
 				speeds[i] = ms.coords[ExtruderToLogicalDrive(i)] * ms.feedRate / cookedTotalExtrusion;
 			}
-			platform.GetEndstops().EnableExtruderEndstops(extrudersMoving, speeds);			// this will throw if the endstops can't be enabled
+			bool reduceAcceleration;
+			platform.GetEndstops().EnableExtruderEndstops(extrudersMoving, speeds, reduceAcceleration);			// this will throw if the endstops can't be enabled
+			if (reduceAcceleration)
+			{
+				ms.reduceAcceleration = true;
+			}
 		}
 	}
 }
@@ -2398,7 +2403,10 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 
 		bool reduceAcceleration;
 		platform.GetEndstops().EnableAxisEndstops(axesMentioned & AxesBitmap::MakeLowestNBits(numTotalAxes), speeds, ms.moveType == 1, reduceAcceleration); 	// throws if endstops can't be enabled
-		ms.reduceAcceleration = reduceAcceleration;
+		if (reduceAcceleration)
+		{
+			ms.reduceAcceleration = true;
+		}
 		ms.checkEndstops = true;
 		ms.endstopsTriggered.Clear();
 	}

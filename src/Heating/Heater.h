@@ -177,8 +177,8 @@ protected:
 	static DeviationAccumulator dLow;
 	static DeviationAccumulator tOn;
 	static DeviationAccumulator tOff;
-	static DeviationAccumulator heatingRate;
-	static DeviationAccumulator coolingRate;
+	static DeviationAccumulator heatingRateAcc;
+	static DeviationAccumulator coolingRateAcc;
 	static DeviationAccumulator tuningVoltage;				// sum of the voltage readings we take during the heating phase
 
 	static uint32_t lastOffTime;

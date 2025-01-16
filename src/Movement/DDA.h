@@ -122,7 +122,7 @@ public:
 	float GetTotalExtrusionRate() const noexcept;
 
 	float AdvanceBabyStepping(DDARing& ring, size_t axis, float amount) noexcept;	// Try to push babystepping earlier in the move queue
-	const Tool *GetTool() const noexcept { return tool; }
+	const Tool *_ecv_null GetTool() const noexcept { return tool; }
 	float GetTotalDistance() const noexcept { return totalDistance; }
 	void LimitSpeedAndAcceleration(float maxSpeed, float maxAcceleration) noexcept;	// Limit the speed an acceleration of this move
 

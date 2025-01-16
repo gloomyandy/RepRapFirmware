@@ -34,10 +34,10 @@ public:
 	bool ShouldReduceAcceleration() const noexcept override { return true; }
 
 	void SetDrivers(LocalDriversBitmap extruderDrivers) noexcept;										// for setting which local extruder drives are active extruder endstops
-	void PrimeExtruders(AxesBitmap extruders, const float speeds[MaxAxesPlusExtruders]) THROWS(GCodeException);
+	void PrimeExtruders(ExtrudersBitmap extruders, const float speeds[MaxExtruders]) THROWS(GCodeException);
 
 #if SUPPORT_CAN_EXPANSION
-	void HandleStalledRemoteDrivers(CanAddress boardAddress, RemoteDriversBitmap driversReportedStalled) noexcept override;	// record any stalled remote drivers that are meant for us
+	void HandleStalledRemoteDrivers(CanAddress boardAddress, LocalDriversBitmap driversReportedStalled) noexcept override;	// record any stalled remote drivers that are meant for us
 	void DeleteRemoteStallEndstops() noexcept override;
 #endif
 
@@ -55,10 +55,10 @@ private:
 	struct RemoteDriversMonitored																		// struct to represent a remote board and the drivers on it that we are interested in
 	{
 		CanAddress boardId;
-		RemoteDriversBitmap driversMonitored;
-		RemoteDriversBitmap driversStalled;
+		LocalDriversBitmap driversMonitored;
+		LocalDriversBitmap driversStalled;
 
-		RemoteDriversMonitored(CanAddress p_boardId, RemoteDriversBitmap p_driversMonitored) noexcept
+		RemoteDriversMonitored(CanAddress p_boardId, LocalDriversBitmap p_driversMonitored) noexcept
 			: boardId(p_boardId), driversMonitored(p_driversMonitored) { }								// driverStalled will be cleared by its default constructor
 
 		RemoteDriversMonitored() { }
