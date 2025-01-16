@@ -1247,7 +1247,9 @@ GCodeResult Move::EutSetMotorCurrents(const CanMessageMultipleDrivesRequest<floa
 							}
 							else
 							{
-								SetMotorCurrent(driver, msg.values[count], 906, reply);
+								motorCurrents[driver] = msg.values[count];
+								motorCurrentFraction[driver] = 1.0;
+								UpdateMotorCurrent(driver, msg.values[count]);
 							}
 						}
 				   );

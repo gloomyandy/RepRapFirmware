@@ -272,11 +272,16 @@ static GCodeResult EutGetInfo(const CanMessageReturnInfo& msg, const StringRef& 
 			{
 				reply.lcatf("Driver %u: %.1f steps/mm"
 #if HAS_SMART_DRIVERS
-					","
+					", "							// the call to status.AppendText always appends something
 #endif
 					, driver, (double)reprap.GetMove().DriveStepsPerMm(driver));
 #if HAS_SMART_DRIVERS
-				SmartDrivers::AppendDriverStatus(driver, reply);
+				const StandardDriverStatus status = SmartDrivers::GetStatus(driver, false, false);
+				status.AppendText(reply, 0);
+				if (!status.notPresent)
+				{
+					SmartDrivers::AppendDriverStatus(driver, reply);
+				}
 #endif
 			}
 		}

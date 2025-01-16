@@ -2637,6 +2637,9 @@ static void InitStallDetectionLogic() noexcept
 		SetPinFunction(p, GpioPinFunction::N);
 	}
 
+	MCLK->APBCMASK.reg |= MCLK_APBCMASK_CCL;					// enable the CCL APB clock
+	MCLK->APBBMASK.reg |= MCLK_APBBMASK_EVSYS;					// enable the event system APB clock
+
 	// Set up the event channels for CCL LUTs 1 to 3. We only use CCL 1-3 so leave 0 alone for possible other applications.
 	for (unsigned int i = 1; i < 4; ++i)
 	{
