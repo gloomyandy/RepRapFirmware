@@ -2555,6 +2555,38 @@ LocalDriversBitmap SmartDrivers::GetStalledDrivers(LocalDriversBitmap driversOfI
 // Each TMC2209 DIAG output is routed to its own MCU pin, however we don't have enough EXINTs on the SAME54 to give each one its own interrupt.
 // So we route them all to CCL input pins instead, which lets us selectively OR them together in 3 groups and generate an interrupt from the resulting events
 
+// Initialise the stall detection logic that is external to the drivers. Only needs to be called once.
+static void InitStallDetectionLogic() noexcept
+{
+	// Set up the DIAG inputs as CCL inputs
+	for (Pin p : DriverDiagPins)
+	{
+		pinMode(p, INPUT_PULLDOWN);								// enable pulldown in case of missing drivers
+		SetPinFunction(p, GpioPinFunction::N);
+	}
+
+	MCLK->APBCMASK.reg |= MCLK_APBCMASK_CCL;					// enable the CCL APB clock
+	MCLK->APBBMASK.reg |= MCLK_APBBMASK_EVSYS;					// enable the event system APB clock
+#if 0	// not needed unless we use edge detection in the CCL
+	GCLK->PCHCTRL[CCL_GCLK_ID].reg = GCLK_PCHCTRL_GEN(GclkNum60MHz) | GCLK_PCHCTRL_CHEN;
+#endif
+	CCL->CTRL.reg = 0;											// SAME5x errata: the LUT config registers are enable-protected by the global enable bit
+
+	// Set up the event channels for CCL LUTs 1 to 3. We only use CCL 1-3 so leave 0 alone for possible other applications.
+	// We attach event system channels 1,2,3 to CCLs 1,2,3 respectively.
+	for (unsigned int i = 1; i < 4; ++i)
+	{
+		GCLK->PCHCTRL[EVSYS_GCLK_ID_0 + i].reg = GCLK_PCHCTRL_GEN(GclkNum60MHz) | GCLK_PCHCTRL_CHEN;	// enable the GCLK, needed to use the resynchronised path
+		EVSYS->Channel[CclLut0Event + i].CHANNEL.reg = EVSYS_CHANNEL_EVGEN(0x74 + i) | EVSYS_CHANNEL_PATH_RESYNCHRONIZED | EVSYS_CHANNEL_EDGSEL_RISING_EDGE;
+																// LUT output events on the SAME5x are event generator numbers 0x74 to 0x77. Resynchronised path allows interrupts.
+		EVSYS->Channel[CclLut0Event + i].CHINTENCLR.reg = EVSYS_CHINTENCLR_EVD | EVSYS_CHINTENCLR_OVR;	// disable interrupts for now
+		NVIC_SetPriority((IRQn)(EVSYS_0_IRQn + i), NvicPriorityDriverDiag);
+		NVIC_EnableIRQ((IRQn)(EVSYS_0_IRQn + i));				// enable the interrupt for this event channel in the NVIC
+	}
+}
+
+#if SUPPORT_REMOTE_COMMANDS
+
 constexpr uint32_t lutDefault = CCL_LUTCTRL_TRUTH(0xFE) | CCL_LUTCTRL_LUTEO;					// OR function, disabled, event output enabled
 static uint32_t lutInputControls[4] = { lutDefault, lutDefault, lutDefault, lutDefault };		// the first element is not used because we don't use LUT0
 
@@ -2634,38 +2666,6 @@ static void DisableOneStallInterrupt(uint8_t driverNumber) noexcept
 		CCL->CTRL.reg = CCL_CTRL_ENABLE;						// SAME5x errata: the LUT config registers are enable-protected by the global enable bit
 	}
 }
-
-// Initialise the stall detection logic that is external to the drivers. Only needs to be called once.
-static void InitStallDetectionLogic() noexcept
-{
-	// Set up the DIAG inputs as CCL inputs
-	for (Pin p : DriverDiagPins)
-	{
-		pinMode(p, INPUT_PULLDOWN);								// enable pulldown in case of missing drivers
-		SetPinFunction(p, GpioPinFunction::N);
-	}
-
-	MCLK->APBCMASK.reg |= MCLK_APBCMASK_CCL;					// enable the CCL APB clock
-	MCLK->APBBMASK.reg |= MCLK_APBBMASK_EVSYS;					// enable the event system APB clock
-#if 0	// not needed unless we use edge detection in the CCL
-	GCLK->PCHCTRL[CCL_GCLK_ID].reg = GCLK_PCHCTRL_GEN(GclkNum60MHz) | GCLK_PCHCTRL_CHEN;
-#endif
-	CCL->CTRL.reg = 0;											// SAME5x errata: the LUT config registers are enable-protected by the global enable bit
-
-	// Set up the event channels for CCL LUTs 1 to 3. We only use CCL 1-3 so leave 0 alone for possible other applications.
-	// We attach event system channels 1,2,3 to CCLs 1,2,3 respectively.
-	for (unsigned int i = 1; i < 4; ++i)
-	{
-		GCLK->PCHCTRL[EVSYS_GCLK_ID_0 + i].reg = GCLK_PCHCTRL_GEN(GclkNum60MHz) | GCLK_PCHCTRL_CHEN;	// enable the GCLK, needed to use the resynchronised path
-		EVSYS->Channel[CclLut0Event + i].CHANNEL.reg = EVSYS_CHANNEL_EVGEN(0x74 + i) | EVSYS_CHANNEL_PATH_RESYNCHRONIZED | EVSYS_CHANNEL_EDGSEL_RISING_EDGE;
-																// LUT output events on the SAME5x are event generator numbers 0x74 to 0x77. Resynchronised path allows interrupts.
-		EVSYS->Channel[CclLut0Event + i].CHINTENCLR.reg = EVSYS_CHINTENCLR_EVD | EVSYS_CHINTENCLR_OVR;	// disable interrupts for now
-		NVIC_SetPriority((IRQn)(EVSYS_0_IRQn + i), NvicPriorityDriverDiag);
-		NVIC_EnableIRQ((IRQn)(EVSYS_0_IRQn + i));				// enable the interrupt for this event channel in the NVIC
-	}
-}
-
-#  if SUPPORT_REMOTE_COMMANDS
 
 // ISR for Diag pins via CCL and event system
 extern "C" void StallEventInterruptEntry() noexcept
