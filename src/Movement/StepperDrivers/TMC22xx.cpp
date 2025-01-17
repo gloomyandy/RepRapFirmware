@@ -2559,7 +2559,7 @@ constexpr uint32_t lutDefault = CCL_LUTCTRL_TRUTH(0xFE) | CCL_LUTCTRL_LUTEO;				
 static uint32_t lutInputControls[4] = { lutDefault, lutDefault, lutDefault, lutDefault };		// the first element is not used because we don't use LUT0
 
 // Disable all the stall interrupts
-void DisableAllStallInterrupts() noexcept
+static void DisableAllStallInterrupts() noexcept
 {
 	for (unsigned int i = 1; i < 3; ++i)
 	{
@@ -2570,8 +2570,9 @@ void DisableAllStallInterrupts() noexcept
 	}
 }
 
+#if 0	// unused
 // Set up to generate interrupts on the specified drivers stalling
-void EnableStallInterrupts(LocalDriversBitmap drivers) noexcept
+static void EnableStallInterrupts(LocalDriversBitmap drivers) noexcept
 {
 	DisableAllStallInterrupts();
 
@@ -2603,27 +2604,34 @@ void EnableStallInterrupts(LocalDriversBitmap drivers) noexcept
 		}
 	}
 }
+#endif
 
-void EnableOneStallInterrupt(uint8_t driverNumber) noexcept
+static void EnableOneStallInterrupt(uint8_t driverNumber) noexcept
 {
 	if (driverNumber < GetNumTmcDrivers())
 	{
 		const uint32_t cclInput = CclDiagInputs[driverNumber];
 		const size_t index = cclInput & 3;
 		lutInputControls[index] |= cclInput & 0x000000FFFFFF0000;
+		CCL->CTRL.reg = 0;										// SAME5x errata: the LUT config registers are enable-protected by the global enable bit
+		CCL->LUTCTRL[index].reg = lutInputControls[index];
 		CCL->LUTCTRL[index].reg = lutInputControls[index] | CCL_LUTCTRL_ENABLE;
 		EVSYS->Channel[CclLut0Event + index].CHINTENSET.reg = EVSYS_CHINTENSET_EVD;
+		CCL->CTRL.reg = CCL_CTRL_ENABLE;						// SAME5x errata: the LUT config registers are enable-protected by the global enable bit
 	}
 }
 
-void DisableOneStallInterrupt(uint8_t driverNumber) noexcept
+static void DisableOneStallInterrupt(uint8_t driverNumber) noexcept
 {
 	if (driverNumber < GetNumTmcDrivers())
 	{
 		const uint32_t cclInput = CclDiagInputs[driverNumber];
 		const size_t index = cclInput & 3;
 		lutInputControls[index] &= ~(cclInput & 0x000000FFFFFF0000);
+		CCL->CTRL.reg = 0;										// SAME5x errata: the LUT config registers are enable-protected by the global enable bit
+		CCL->LUTCTRL[index].reg = lutInputControls[index];
 		CCL->LUTCTRL[index].reg = lutInputControls[index] | CCL_LUTCTRL_ENABLE;
+		CCL->CTRL.reg = CCL_CTRL_ENABLE;						// SAME5x errata: the LUT config registers are enable-protected by the global enable bit
 	}
 }
 
@@ -2639,19 +2647,22 @@ static void InitStallDetectionLogic() noexcept
 
 	MCLK->APBCMASK.reg |= MCLK_APBCMASK_CCL;					// enable the CCL APB clock
 	MCLK->APBBMASK.reg |= MCLK_APBBMASK_EVSYS;					// enable the event system APB clock
+#if 0	// not needed unless we use edge detection in the CCL
+	GCLK->PCHCTRL[CCL_GCLK_ID].reg = GCLK_PCHCTRL_GEN(GclkNum60MHz) | GCLK_PCHCTRL_CHEN;
+#endif
+	CCL->CTRL.reg = 0;											// SAME5x errata: the LUT config registers are enable-protected by the global enable bit
 
 	// Set up the event channels for CCL LUTs 1 to 3. We only use CCL 1-3 so leave 0 alone for possible other applications.
+	// We attach event system channels 1,2,3 to CCLs 1,2,3 respectively.
 	for (unsigned int i = 1; i < 4; ++i)
 	{
 		GCLK->PCHCTRL[EVSYS_GCLK_ID_0 + i].reg = GCLK_PCHCTRL_GEN(GclkNum60MHz) | GCLK_PCHCTRL_CHEN;	// enable the GCLK, needed to use the resynchronised path
-		EVSYS->Channel[CclLut0Event + i].CHANNEL.reg = EVSYS_CHANNEL_EVGEN(0x74 + i) | EVSYS_CHANNEL_PATH_RESYNCHRONIZED;
+		EVSYS->Channel[CclLut0Event + i].CHANNEL.reg = EVSYS_CHANNEL_EVGEN(0x74 + i) | EVSYS_CHANNEL_PATH_RESYNCHRONIZED | EVSYS_CHANNEL_EDGSEL_RISING_EDGE;
 																// LUT output events on the SAME5x are event generator numbers 0x74 to 0x77. Resynchronised path allows interrupts.
 		EVSYS->Channel[CclLut0Event + i].CHINTENCLR.reg = EVSYS_CHINTENCLR_EVD | EVSYS_CHINTENCLR_OVR;	// disable interrupts for now
 		NVIC_SetPriority((IRQn)(EVSYS_0_IRQn + i), NvicPriorityDriverDiag);
 		NVIC_EnableIRQ((IRQn)(EVSYS_0_IRQn + i));				// enable the interrupt for this event channel in the NVIC
 	}
-
-	CCL->CTRL.reg = CCL_CTRL_ENABLE;							// enable the CCL
 }
 
 #  if SUPPORT_REMOTE_COMMANDS
@@ -2659,6 +2670,11 @@ static void InitStallDetectionLogic() noexcept
 // ISR for Diag pins via CCL and event system
 extern "C" void StallEventInterruptEntry() noexcept
 {
+	// Clear the event flags
+	EVSYS->Channel[CclLut0Event + 1].CHINTFLAG.reg = EVSYS_CHINTFLAG_EVD | EVSYS_CHINTFLAG_OVR;
+	EVSYS->Channel[CclLut0Event + 2].CHINTFLAG.reg = EVSYS_CHINTFLAG_EVD | EVSYS_CHINTFLAG_OVR;
+	EVSYS->Channel[CclLut0Event + 3].CHINTFLAG.reg = EVSYS_CHINTFLAG_EVD | EVSYS_CHINTFLAG_OVR;
+
 	const LocalDriversBitmap stalledDrivers = SmartDrivers::GetStalledDrivers(stallEndstopsEnabled);
 	if (stalledDrivers.IsNonEmpty())
 	{
@@ -2702,6 +2718,7 @@ GCodeResult SmartDrivers::SetStallEndstopReporting(uint16_t driverNumber, float 
 		if (msg == nullptr)
 		{
 			stallEndstopsEnabled.SetBit(driverNumber);
+			EnableOneStallInterrupt(driverNumber);
 			return GCodeResult::ok;
 		}
 		reply.printf(msg, driverNumber);
