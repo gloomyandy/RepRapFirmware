@@ -296,7 +296,7 @@ static void InitDiagPin()
 {
     bool dummy;
     LogicalPin pin;
-    if (LookupPinName("status", pin, dummy))
+    if (DiagPin == NoPin && LookupPinName("status", pin, dummy))
     {
         DiagPin = (Pin)pin;
     }
@@ -641,8 +641,6 @@ static bool LoadBoardDefaults() noexcept
         // we use the name configured here for the firmware file
         SafeSnprintf(iapFirmwareFile, sizeof(iapFirmwareFile), "firmware_%s.bin", BoardName);
         InitDiagPin();
-        // for now ignore settings in boot file
-        NetworkModule = NetworkModuleType::espauto;
         return true;
     }
     return false;
