@@ -806,6 +806,12 @@ GCodeResult Tmc51xxDriverState::SetAnyRegister(const StringRef& reply, uint8_t r
 	{
 		if (regNum == WriteRegNumbers[i])
 		{
+			if (i == WriteChopConf)
+			{
+				// We keep a copy of the contents of ChopConf so we need to update that to make the new
+				// value "stick"
+				configuredChopConfReg = regVal;
+			}
 			UpdateRegister(i, regVal);
 			return GCodeResult::ok;
 		}
