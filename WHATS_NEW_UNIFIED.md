@@ -1,5 +1,12 @@
 Version 3.6.0-beta.2
 ======================
+* Duet3d 3.6.0-beta.3
+* Added support for AFC lite board
+* Fixed UART data overrun in some situations
+* Reduced overhead on gpio interrupt on change
+
+Version 3.6.0-beta.2
+======================
 * Duet3d 3.6.0-beta.2
 
 Version 3.6.0-beta.1+2
