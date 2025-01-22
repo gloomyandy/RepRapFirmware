@@ -78,7 +78,7 @@ namespace SmartDrivers
 # endif
 #endif
 
-#if SUPPORT_TMC2240 && !(SUPPORT_TMC2208 || SUPPORT_TMC2209)
+#if SUPPORT_TMC2240
 	float GetDriverTemperature(size_t driver) noexcept;
 #endif
 };

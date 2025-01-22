@@ -64,8 +64,6 @@ public:
 	bool IsPrintingExtruderMovement() const noexcept;					// returns true if this is an extruder executing a printing move
 	bool CheckingEndstops() const noexcept;								// returns true when executing a move that checks endstops or Z probe
 
-	void SetAsExtruder(bool p_isExtruder) noexcept { isExtruder = p_isExtruder; }
-
 #if HAS_SMART_DRIVERS
 	uint32_t GetStepInterval(uint32_t microstepShift) const noexcept;	// Get the current full step interval for this axis or extruder
 #endif
@@ -119,7 +117,7 @@ private:
 	uint8_t drive;										// the drive that this DM controls
 	uint8_t direction : 1,								// true=forwards, false=backwards
 			directionChanged : 1,						// set by CalcNextStepTime if the direction is changed
-			isExtruder : 1,								// true if this DM is for an extruder
+							: 1,						// unused
 			stepErrorType : 3,							// records what type of step error we had
 			stepsTakenThisSegment : 2;					// how many steps we have taken this phase, counts from 0 to 2. Last field in the byte so that we can increment it efficiently.
 	uint8_t stepsTillRecalc;							// how soon we need to recalculate. Use the top 2 bits of the byte so that we can increment it efficiently.
@@ -139,7 +137,7 @@ private:
 	int32_t positionAtSegmentStart;						// the value of currentMotorPosition at the start of the current segment
 	int32_t positionAtMoveStart;						// the position at the start of the current move, if it is an isolated move
 #if STEPS_DEBUG
-	motioncalc_t positionRequested;						// accumulated position changes requested by moves executed
+	motioncalc_t positionRequested;						// accumulated position changes requested by moves executed - caution, the step ISR modifies this!
 #endif
 
 	// These values change as the segment is executed
@@ -285,10 +283,7 @@ inline bool DriveMovement::GetCurrentMotion(uint32_t when, MotionParameters& mPa
 					currentMotorPosition = positionAtSegmentStart + netStepsThisSegment;
 					distanceCarriedForwards += seg->GetLength() - (motioncalc_t)netStepsThisSegment;
 					phaseStepsTakenSinceMoveStart += seg->GetLength();
-					if (isExtruder)
-					{
-						movementAccumulator += netStepsThisSegment;		// update the amount of extrusion
-					}
+					movementAccumulator += netStepsThisSegment;		// update the amount of extrusion
 					MoveSegment *oldSeg = seg;
 					segments = oldSeg->GetNext();
 					MoveSegment::Release(oldSeg);

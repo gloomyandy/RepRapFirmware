@@ -3625,8 +3625,8 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 				}
 				break;
 
-			case 205: // Set/print maximum jerk speeds in mm/sec
-			case 566: // Set/print maximum jerk speeds in mm/min
+			case 205: // Set/print printing jerk speeds in mm/sec
+			case 566: // Set/print machine limit jerk speeds in mm/min
 				{
 					const bool useMmPerSec = (code == 205);
 					const bool setMax = (code == 566);

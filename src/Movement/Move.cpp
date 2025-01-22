@@ -981,7 +981,6 @@ void Move::Diagnostics(MessageType mtype) noexcept
 	for (size_t drive = 0; drive < reprap.GetGCodes().GetTotalAxes(); ++drive)
 	{
 		scratchString.catf(" %.2f/%" PRIi32 "/%.2f", (double)dms[drive].positionRequested, dms[drive].currentMotorPosition, (double)dms[drive].distanceCarriedForwards);
-		dms[drive].positionRequested = (float)dms[drive].currentMotorPosition;
 	}
 	scratchString.cat('\n');
 	p.Message(mtype, scratchString.c_str());
@@ -1858,7 +1857,7 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 	else
 	{
 		accelDistance = (params.decelClocks + params.steadyClocks == 0) ? totalDistance : (motioncalc_t)params.accelDistance;
-		accelPressureAdvance = (dm.isExtruder && !moveFlags.nonPrintingMove) ? (motioncalc_t)(params.accelClocks * dm.extruderShaper.GetKclocks()) : (motioncalc_t)0.0;
+		accelPressureAdvance = (moveFlags.isExtruder && !moveFlags.nonPrintingMove) ? (motioncalc_t)(params.accelClocks * dm.extruderShaper.GetKclocks()) : (motioncalc_t)0.0;
 	}
 
 	motioncalc_t decelDistance, decelPressureAdvance;
@@ -1870,7 +1869,7 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 	else
 	{
 		decelDistance = totalDistance - ((params.steadyClocks == 0) ? accelDistance : (motioncalc_t)params.decelStartDistance);
-		decelPressureAdvance = (dm.isExtruder && !moveFlags.nonPrintingMove) ? (motioncalc_t)(params.decelClocks * dm.extruderShaper.GetKclocks()) : (motioncalc_t)0.0;
+		decelPressureAdvance = (moveFlags.isExtruder && !moveFlags.nonPrintingMove) ? (motioncalc_t)(params.decelClocks * dm.extruderShaper.GetKclocks()) : (motioncalc_t)0.0;
 	}
 
 	const motioncalc_t steadyDistance = (params.steadyClocks == 0) ? (motioncalc_t)0.0 : totalDistance - accelDistance - decelDistance;
@@ -1880,7 +1879,10 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 #endif
 
 #if STEPS_DEBUG
-	dm.positionRequested += steps;
+	{
+		AtomicCriticalSectionLocker lock;
+		dm.positionRequested += steps;				// currently we compile for C++17 so we can't make this variable atomic
+	}
 #endif
 
 	if (moveFlags.noShaping)
@@ -2455,6 +2457,8 @@ void Move::CheckEndstops(bool executingMove) noexcept
 }
 
 // Generate the step pulses of internal drivers used by this DDA
+// Note, we use the movement timer ticks to decide when to generate step pulses, but we must use th raw step timer to enforce delays between pulses.
+// 'now'is the movement timer ticks
 void Move::StepDrivers(uint32_t now) noexcept
 {
 	uint32_t driversStepping = 0;
@@ -2499,10 +2503,11 @@ void Move::StepDrivers(uint32_t now) noexcept
 		// Wait until step low and direction setup time have elapsed
 		const uint32_t locLastStepPulseTime = lastStepHighTime;
 		const uint32_t locLastDirChangeTime = lastDirChangeTime;
-		while (now - locLastStepPulseTime < GetSlowDriverStepPeriodClocks() || now - locLastDirChangeTime < GetSlowDriverDirSetupClocks())
+		uint32_t rawNow;
+		do
 		{
-			now = StepTimer::GetTimerTicks();
-		}
+			rawNow = StepTimer::GetTimerTicks();
+		} while (rawNow - locLastStepPulseTime < GetSlowDriverStepPeriodClocks() || rawNow - locLastDirChangeTime < GetSlowDriverDirSetupClocks());
 
 		StepPins::StepDriversLow(StepPins::AllDriversBitmap & (~driversStepping));		// disable the step pins of the drivers we don't want to step
 		StepPins::StepDriversHigh(driversStepping);										// set up the drivers that we do want to step

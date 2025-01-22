@@ -1411,21 +1411,20 @@ void GCodes::SaveResumeInfo(bool wasPowerFailure) noexcept
 					moveStates[i].GetAxesAndExtrudersOwned().Iterate([&coords, coords2](unsigned int bitNum, unsigned int) noexcept { coords[bitNum] = coords2[bitNum]; });
 				}
 #endif
+				String<StringLength100> buf2, buf3;
+
 				// We no longer use G92 to restore the positions because we don't know whether a tool is loaded.
 				buf.printf("G21\nM98 P\"%s\"", RESUME_PROLOGUE_G);		// set units to mm and call the prologue, passing the machine positions of the axes
-				for (size_t i = 0; i < numVisibleAxes; ++i)
-				{
-					buf.catf(" %c%.3f", axisLetters[i], (double)coords[i]);
-				}
-
-				// Set babystepping offsets
-				buf.cat("\nM290 R0");
+				buf2.copy("\nM290 R0");									// set babystepping offsets
+				buf3.copy("\nM205");									// set printing jerk (this is currently stored globally, not per movement system)
 				for (size_t axis = 0; axis < numVisibleAxes; ++axis)
 				{
-					buf.catf(" %c%.3f", axisLetters[axis], (double)GetTotalBabyStepOffset(axis));
+					buf.catf (" %c%.3f", axisLetters[axis], (double)coords[axis]);
+					buf2.catf(" %c%.3f", axisLetters[axis], (double)GetTotalBabyStepOffset(axis));
+					buf3.catf(" %c%.2f", axisLetters[axis], (double)InverseConvertSpeedToMmPerSec(reprap.GetMove().GetPrintingInstantDv(axis)));
 				}
-				buf.cat('\n');
-				ok = f->Write(buf.c_str());									// write baby stepping offsets
+				buf3.cat('\n');
+				ok = f->Write(buf.c_str()) && f->Write(buf2.c_str()) && f->Write(buf3.c_str());									// write baby stepping offsets
 			}
 
 			// Restore the coordinate offsets of all workplaces (all motion systems use the same workplace offsets)
@@ -1671,7 +1670,7 @@ bool GCodes::SaveMoveStateResumeInfo(const MovementState& ms, FileStore * const 
 			buf.catf(" P%u", (unsigned int)pauseRestorePoint.laserPwmOrIoBits.ioBits);
 		}
 #endif
-		buf.cat("\n");
+		buf.cat('\n');
 		ok = f->Write(buf.c_str());									// restore feed rate and output bits or laser power
 	}
 	if (ok)

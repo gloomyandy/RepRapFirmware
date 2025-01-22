@@ -717,7 +717,7 @@ bool DDA::InitFromRemote(DDARing& ring, const CanMessageMovementLinearShaped& ms
 			if (extrusionRequested != 0.0)
 			{
 				move.EnableDrivers(drive, false);
-				move.AddLinearSegments(*this, drive, msg.whenToExecute, params, extrusionRequested, segFlags);
+				move.AddLinearSegments(*this, drive, msg.whenToExecute, params, extrusionRequested, segFlags.AddIsExtruder());
 			}
 		}
 		else
@@ -1278,7 +1278,7 @@ void DDA::Prepare(DDARing& ring, SimulationMode simMode) noexcept
 							const motioncalc_t delta = totalDistance * directionVector[drive] * move.DriveStepsPerMm(drive);
 
 							// We generate segments even for nonlocal extruders in order to track extruder position
-							move.AddLinearSegments(*this, drive, afterPrepare.moveStartTime, params, delta, segFlags);
+							move.AddLinearSegments(*this, drive, afterPrepare.moveStartTime, params, delta, segFlags.AddIsExtruder());
 
 #if SUPPORT_CAN_EXPANSION
 							const DriverId driver = move.GetExtruderDriver(extruder);

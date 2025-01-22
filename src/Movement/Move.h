@@ -249,8 +249,6 @@ public:
 	float DriveStepsPerMm(size_t axisOrExtruder) const noexcept pre(axisOrExtruder < MaxAxesPlusExtruders) { return driveStepsPerMm[axisOrExtruder]; }
 	float SetDriveStepsPerMm(size_t axisOrExtruder, float value, uint32_t requestedMicrostepping) noexcept pre(axisOrExtruder < MaxAxesPlusExtruders);
 
-	void SetAsExtruder(size_t drive, bool isExtruder) noexcept pre(drive < MaxAxesPlusExtruders) { dms[drive].SetAsExtruder(isExtruder); }
-
 	bool SetMicrostepping(size_t drive, unsigned int microsteps, bool mode, const StringRef& reply) noexcept pre(drive < MaxAxesPlusExtruders);
 	unsigned int GetMicrostepping(size_t drive, bool& interpolation) const noexcept pre(drive < MaxAxesPlusExtruders);
 	unsigned int GetMicrostepping(size_t drive) const noexcept pre(drive < MaxAxesPlusExtruders) { return microstepping[drive] & 0x7FFF; }

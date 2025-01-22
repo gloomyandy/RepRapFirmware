@@ -1318,12 +1318,13 @@ OutputBuffer *_ecv_null RepRap::GetStatusResponse(uint8_t type, ResponseSource s
 		// Z babystepping
 		response->catf(",\"babystep\":%.3f}", (double)gCodes->GetTotalBabyStepOffset(Z_AXIS));
 
+#if 0	// DWC hasn't used rr_status for years so remove it to reduce flash memory usage
 		// G-code reply sequence for webserver (sequence number for AUX is handled later)
 		if (source == ResponseSource::HTTP)
 		{
 			response->catf(",\"seq\":%" PRIu32, network->GetHttpReplySeq());
 		}
-
+#endif
 		// Sensors
 		response->cat(",\"sensors\":{");
 
@@ -1445,7 +1446,7 @@ OutputBuffer *_ecv_null RepRap::GetStatusResponse(uint8_t type, ResponseSource s
 		}
 	}
 
-#if SUPPORT_LASER
+#if 0	// removed to reduce flash memory usage, was if SUPPORT_LASER
 	if (gCodes->GetMachineType() == MachineType::laser)
 	{
 		response->catf(",\"laser\":%.1f", (double)(gCodes->GetLaserPwm() * 100.0));		// 2020-04-24: return the configured laser PWM even if the laser is temporarily turned off
