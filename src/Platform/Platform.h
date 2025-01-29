@@ -476,9 +476,18 @@ public:
 	const char *_ecv_array null GetExpansionBoardName() const noexcept { return (hasTmc2240Expansion) ? "Duet3 Mini 2+ (TMC2240)" : nullptr; }
 #endif
 
+	// Debug buffer for M111
 	static bool HasDebugBuffer() noexcept;
 	static bool IsrDebugPutc(char c) noexcept;
 	static bool SetDebugBufferSize(uint32_t size) noexcept;
+
+	// Debug buffer for other purposes, used initially (post 3.6.0-beta.3) for printing move error messages.
+	// Build up a message in genericDebugBuffer, then set haveGenericDebug to true to indicate it is complete and ready to output.
+	// Optionally set shouldTurnOffHeaters before setting hasGenericDebug.
+	// It will be set false again when the message has been output and the buffer is free again.
+	static String<StringLength256> genericDebugBuffer;
+	static bool hasGenericDebug;
+	static bool shouldTurnOffHeaters;
 
 protected:
 	DECLARE_OBJECT_MODEL_WITH_ARRAYS

@@ -99,18 +99,6 @@ struct NonlinearExtrusion
 
 #endif
 
-// Collection of data reported to help debug step errors
-struct StepErrorDetails
-{
-	uint32_t executingStartTime;
-	uint32_t executingDuration;
-	uint32_t newSegmentStartTime;
-	uint32_t timeNow;
-	float extra;
-	uint8_t stepErrorType;
-	uint8_t drive;
-};
-
 // This is the master movement class.  It controls all movement in the machine.
 class Move final INHERIT_OBJECT_MODEL
 {
@@ -492,11 +480,7 @@ public:
 #endif
 
 	// Movement error handling
-	void LogStepError(uint8_t type, uint8_t drive, float extra) noexcept;					// stop all movement because of a step error
-	StepErrorDetails GetStepErrorDetails() const noexcept { return stepErrorDetails; }
-	bool HasMovementError() const noexcept;
-	void ResetAfterError() noexcept;
-	void GenerateMovementErrorDebug() noexcept;
+	void StepErrorHalt() noexcept { hadStepError = true; }
 	void AddPrepareHiccup() noexcept { ++numPrepareHiccups; }
 
 	// We now use the laser task to take readings from scanning Z probes, so we always need it
@@ -791,8 +775,7 @@ private:
 	bool useTaper;										// True to taper off the compensation
 
 	// Reporting of step errors
-	volatile StepErrorState stepErrorState = StepErrorState::noError;
-	StepErrorDetails stepErrorDetails;
+	volatile bool hadStepError = false;
 };
 
 //******************************************************************************************************
@@ -981,27 +964,6 @@ inline void Move::InsertDM(DriveMovement *dm) noexcept
 	}
 	dm->nextDM = *dmp;
 	*dmp = dm;
-}
-
-inline void Move::LogStepError(uint8_t type, uint8_t drive, float extra) noexcept
-{
-	stepErrorDetails.stepErrorType = type;
-	stepErrorDetails.drive = drive;
-	stepErrorDetails.extra = extra;
-	stepErrorState = StepErrorState::haveError;
-}
-
-inline bool Move::HasMovementError() const noexcept
-{
-	return stepErrorState == StepErrorState::haveError;
-}
-
-inline void Move::ResetAfterError() noexcept
-{
-	if (HasMovementError())
-	{
-		stepErrorState = StepErrorState::resetting;
-	}
 }
 
 #if HAS_SMART_DRIVERS

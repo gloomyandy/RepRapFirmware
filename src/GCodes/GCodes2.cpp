@@ -3010,7 +3010,11 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 
 			case 408: // Get status in JSON format
 				{
+#if 0	// removed support for M408 with S > 1 because we ran out of flash memory on Duet 2
 					const unsigned int type = gb.Seen('S') ? gb.GetUIValue() : 0;
+#else
+					const unsigned int type = gb.Seen('S') ? gb.GetLimitedUIValue('S', 2) : 0;
+#endif
 #if SUPPORT_CAN_EXPANSION
 					const uint32_t board = (gb.Seen('B')) ? gb.GetUIValue() : 0;
 					if (board != 0)
@@ -3536,7 +3540,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 			case 558: // Set or report Z probe type and for which axes it is used; M558.1 calibrate Z probe; M558.2 calibrate scanning Z probe drive strength
 				result =
 #if SUPPORT_SCANNING_PROBES
-						(gb.GetCommandFraction() > 2) ? TryMacroFile(gb) :
+						(gb.GetCommandFraction() > 3) ? TryMacroFile(gb) :
 #endif
 							platform.GetEndstops().HandleM558(gb, reply);
 				break;

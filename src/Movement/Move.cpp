@@ -609,37 +609,12 @@ void Move::Exit() noexcept
 	moveTask.TerminateAndUnlink();
 }
 
-void Move::GenerateMovementErrorDebug() noexcept
-{
-	if (reprap.Debug(Module::Move))
-	{
-		const DDA *_ecv_null cdda = rings[0].GetCurrentDDA();
-		if (cdda == nullptr)
-		{
-			debugPrintf("No current DDA\n");
-		}
-		else
-		{
-			cdda->DebugPrint("Current DDA");
-		}
-
-		debugPrintf("Failing DM:\n");
-		for (const DriveMovement& dm : dms)
-		{
-			if (dm.HasError())
-			{
-				dm.DebugPrint();
-			}
-		}
-	}
-}
-
 [[noreturn]] void Move::MoveLoop() noexcept
 {
 	stepsTimer.SetCallback(Move::TimerCallback, CallbackParameter(this));
 	for (;;)
 	{
-		if (reprap.IsStopped() || stepErrorState != StepErrorState::noError)
+		if (reprap.IsStopped() || hadStepError)
 		{
 			// Emergency stop has been commanded, so terminate this task to prevent new moves being prepared and executed
 			moveTask.TerminateAndUnlink();
@@ -1791,22 +1766,16 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 			{
 				if (tail->GetFlags().executing)
 				{
-#if 1	// temp for debugging
-					stepErrorDetails.executingStartTime = segStartTime;
-					stepErrorDetails.executingDuration = tail->GetDuration();
-					stepErrorDetails.newSegmentStartTime = startTime;
-					stepErrorDetails.timeNow = StepTimer::GetMovementTimerTicks();
-#endif
-					LogStepError(3, logicalDrive, 0.0);
+					// Error, the segment we are trying to add overlaps an executing one
+					const StringRef& dbgRef = Platform::genericDebugBuffer.GetRef();
+					dbgRef.printf("Code 3 move error: new: start=%" PRIu32 " overlap=%" PRIu32 " time now=%" PRIu32 ", existing: ",
+									startTime, segStartTime + tail->GetDuration() - startTime, StepTimer::GetMovementTimerTicks());
+					tail->AppendDetails(dbgRef);
+					dbgRef.cat('\n');
+					Platform::shouldTurnOffHeaters = true;
+					Platform::hasGenericDebug = true;
 					RestoreBasePriority(oldPrio);
-					if (reprap.Debug(Module::Move))
-					{
-						const uint32_t now = StepTimer::GetMovementTimerTicks();
-						const int32_t overlap = endTime - startTime;
-						debugPrintf("overlaps executing seg by %" PRIi32 " while trying to add segment(s) starting at %" PRIu32 ", time now %" PRIu32 "\n",
-										overlap, startTime, now);
-						MoveSegment::DebugPrintList(tail);
-					}
+					StepErrorHalt();
 					return;
 				}
 
@@ -2258,7 +2227,7 @@ void Move::Interrupt() noexcept
 			// Generate steps for the current move segments
 			StepDrivers(now);									// check endstops if necessary and step the drivers
 
-			if (activeDMs == nullptr || stepErrorState != StepErrorState::noError )
+			if (activeDMs == nullptr || hadStepError)
 			{
 				WakeMoveTaskFromISR();							// we may have just completed a special move, so wake up the Move task so that it can notice that
 				break;

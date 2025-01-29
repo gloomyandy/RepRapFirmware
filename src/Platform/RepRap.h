@@ -106,8 +106,11 @@ public:
 	bool SpinTimeoutImminent() const noexcept;
 	bool IsStopped() const noexcept;
 
+#if 0	// removed because we ran out of flash memory on Duet 2
 	OutputBuffer *_ecv_null GetStatusResponse(uint8_t type, ResponseSource source) const noexcept;
 	OutputBuffer *_ecv_null GetConfigResponse() noexcept;
+#endif
+
 	OutputBuffer *_ecv_null GetLegacyStatusResponse(uint8_t type, int seq) const noexcept;
 
 #if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES

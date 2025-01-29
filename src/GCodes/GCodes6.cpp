@@ -875,7 +875,7 @@ void GCodes::SetupM675BackoffMove(GCodeBuffer& gb, float position) noexcept
 #if SUPPORT_SCANNING_PROBES
 
 // Calibrate height vs. reading for a scanning Z probe. We have already checked the probe is a scanning one and that scanningRange is a sensible value.
-GCodeResult GCodes::HandleM558Point1or2(GCodeBuffer& gb, const StringRef &reply, unsigned int probeNumber) THROWS(GCodeException)
+GCodeResult GCodes::HandleM558Point1or2or3(GCodeBuffer& gb, const StringRef &reply, unsigned int probeNumber) THROWS(GCodeException)
 {
 	const auto zp = platform.GetEndstops().GetZProbe(probeNumber);
 	if (zp.IsNull())
@@ -890,9 +890,9 @@ GCodeResult GCodes::HandleM558Point1or2(GCodeBuffer& gb, const StringRef &reply,
 		return GCodeResult::error;
 	}
 
-	if (gb.GetCommandFraction() == 1)
+	switch (gb.GetCommandFraction())
 	{
-		// Calibrate height vs. reading
+	case 1:		// M558.1 calibrate height vs. reading
 		if (gb.Seen('A'))
 		{
 			const float aParam = gb.GetFValue();
@@ -931,10 +931,16 @@ GCodeResult GCodes::HandleM558Point1or2(GCodeBuffer& gb, const StringRef &reply,
 			return GCodeResult::ok;
 		}
 		return zp->ReportScanningCoefficients(reply);
-	}
 
-	// Else must be M558.2: Calibrate drive level
-	return zp->CalibrateDriveLevel(gb, reply);
+	case 2:		// M558.2 calibrate drive level
+		return zp->CalibrateDriveLevel(gb, reply);
+
+	case 3:		// M558.3 set touch mode parameters
+		return zp->SetTouchModeParameters(gb, reply);
+
+	default:
+		THROW_INTERNAL_ERROR;
+	}
 }
 
 #endif

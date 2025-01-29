@@ -743,6 +743,18 @@ bool GCodeBuffer::TryGetNonNegativeFValue(char c, float& val, bool& seen) THROWS
 	return false;
 }
 
+bool GCodeBuffer::TryGetPositiveFValue(char c, float& val, bool& seen) THROWS(GCodeException)
+{
+	if (Seen(c))
+	{
+		val = GetPositiveFValue();
+		seen = true;
+		return true;
+	}
+	return false;
+}
+
+
 bool GCodeBuffer::TryGetLimitedFValue(char c, float& val, bool& seen, float minValue, float maxValue) THROWS(GCodeException)
 {
 	if (Seen(c))

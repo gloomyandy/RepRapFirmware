@@ -709,7 +709,7 @@ static bool DeleteContents(DIR& dir, const StringRef& filePath, ErrorMessageMode
 		if (!StringEqualsIgnoreCase(entry.fname, ".") && !StringEqualsIgnoreCase(entry.fname, ".."))
 		{
 			filePath.cat(entry.fname);
-			if (entry.fattrib & AM_DIR)
+			if ((entry.fattrib & AM_DIR) != 0)
 			{
 				DIR dir2;
 				if (f_opendir(&dir2, filePath.c_str()) == FR_OK)

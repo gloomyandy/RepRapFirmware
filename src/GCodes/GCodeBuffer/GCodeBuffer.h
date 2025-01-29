@@ -134,6 +134,7 @@ public:
 	bool TryGetUIValue(char c, uint32_t& val, bool& seen) THROWS(GCodeException);
 	bool TryGetLimitedUIValue(char c, uint32_t& val, bool& seen, uint32_t maxValuePlusOne) THROWS(GCodeException);
 	bool TryGetNonNegativeFValue(char c, float& val, bool& seen) THROWS(GCodeException);
+	bool TryGetPositiveFValue(char c, float& val, bool& seen) THROWS(GCodeException);
 	bool TryGetLimitedFValue(char c, float& val, bool& seen, float minValue, float maxValue) THROWS(GCodeException)
 		pre(minValue <= maxValue);
 	bool TryGetBValue(char c, bool& val, bool& seen) THROWS(GCodeException);

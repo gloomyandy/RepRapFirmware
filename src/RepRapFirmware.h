@@ -606,6 +606,14 @@ template <typename T, typename T2> void ReplaceObject(T *null & ptr, T2* pNew) n
 	delete p2;
 }
 
+// Functions to return and reset non-atomic values. Do not use on std::atomic<T> values.
+template<typename T> T Exchange(T& var, T newValue) noexcept
+{
+	const T ret = var;
+	var = newValue;
+	return ret;
+}
+
 // Common definitions used by more than one module
 
 constexpr size_t XY_AXES = 2;										// The number of Cartesian axes

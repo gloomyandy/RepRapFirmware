@@ -347,6 +347,9 @@ size_t Platform::GetNumGpOutputsToReport() const noexcept
 #endif
 
 bool Platform::deliberateError = false;						// true if we deliberately caused an exception for testing purposes
+String<StringLength256> Platform::genericDebugBuffer;
+bool Platform::hasGenericDebug = false;
+bool Platform::shouldTurnOffHeaters = false;
 
 Platform::Platform() noexcept :
 #if HAS_MASS_STORAGE
@@ -860,6 +863,7 @@ void Platform::Spin() noexcept
 #if SUPPORT_REMOTE_COMMANDS
 	if (CanInterface::InExpansionMode())
 	{
+		// Update status LED
 		if (StepTimer::CheckSynced())
 		{
 			digitalWrite(DiagPin, XNor(DiagOnPolarity, StepTimer::GetMasterTime() & (1u << 19)) != 0);
@@ -895,29 +899,18 @@ void Platform::Spin() noexcept
 	MassStorage::Spin();
 #endif
 
-	// Check for movement errors
-	Move& move = reprap.GetMove();
-	if (move.HasMovementError())
+	// Check for generic debug
+	if (hasGenericDebug)
 	{
-		const StepErrorDetails details = move.GetStepErrorDetails();
-		MessageF(AddError(MessageType::GenericMessage), "Movement halted because a step timing error occurred on drive %u (code %u). Please reset the controller.\n", details.drive, details.stepErrorType);
-		if (details.stepErrorType == 3)
+		Message(AddError(MessageType::GenericMessage), genericDebugBuffer.c_str());
+		if (shouldTurnOffHeaters)
 		{
-			MessageF(AddError(MessageType::GenericMessage), "Existing: start=%" PRIu32 " length=%" PRIu32 ", new: start=%" PRIu32 ", overlap=%" PRIu32 " time now=%" PRIu32 "\n",
-						details.executingStartTime, details.executingDuration, details.newSegmentStartTime,
-						details.executingStartTime + details.executingDuration - details.newSegmentStartTime,
-						details.timeNow);
+			reprap.GetHeat().SwitchOffAll(true);
 		}
-		else
-		{
-			MessageF(AddError(MessageType::GenericMessage), "Extra info=%.6g\n", (double)details.extra);
-		}
-		move.GenerateMovementErrorDebug();
-		move.ResetAfterError();
-		reprap.GetHeat().SwitchOffAll(true);
+		hasGenericDebug = false;
 	}
 
-	// Check for debug messages
+	// Check for M111 debug messages stored in the optional buffer
 	while (!isrDebugBuffer.IsEmpty())
 	{
 		char buf[101];

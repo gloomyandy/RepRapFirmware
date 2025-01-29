@@ -166,6 +166,9 @@ public:
 	// Print this segment to the debug channel
 	void DebugPrint() const noexcept;
 
+	// Append details of this segment to a string buffer
+	void AppendDetails(const StringRef& str) const noexcept;
+
 	// Print list of segments
 	static void DebugPrintList(const MoveSegment *_ecv_null segs) noexcept;
 

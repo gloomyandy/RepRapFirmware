@@ -660,6 +660,8 @@ bool HttpResponder::GetJsonResponse(const char *_ecv_array request, OutputBuffer
 		response->copy("{err:1}");
 	}
 #endif
+
+#if 0	// removed because we ran out of flash memory on Duet 2
 	// Check for the legacy requests last
 	else if (StringEqualsIgnoreCase(request, "status"))
 	{
@@ -688,6 +690,7 @@ bool HttpResponder::GetJsonResponse(const char *_ecv_array request, OutputBuffer
 		OutputBuffer::ReleaseAll(response);
 		response = reprap.GetConfigResponse();
 	}
+#endif
 	else
 	{
 		RejectMessage("Unknown request", 500);

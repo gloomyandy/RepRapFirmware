@@ -644,6 +644,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 			}
 			gb.SetState((zPendingRestore) ? GCodeState::resuming2 : GCodeState::resuming3);
 #else
+			SetMoveBufferDefaults(ms);
 			const bool restoreZ = (gb.GetState() != GCodeState::resuming1 || ms.coords[Z_AXIS] <= ms.GetPauseRestorePoint().moveCoords[Z_AXIS]);
 			for (size_t axis = 0; axis < numVisibleAxes; ++axis)
 			{
@@ -929,32 +930,38 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 					doingManualBedProbe = true;												// suspend the Z movement limit
 					DoManualBedProbe(gb);
 				}
-				else if (zp->Stopped())
-				{
-					reprap.GetHeat().SuspendHeaters(false);
-					gb.LatestMachineState().SetError("Probe already triggered before probing move started");
-					gb.SetState(GCodeState::checkError);
-					RetractZProbe(gb);
-					break;
-				}
 				else
 				{
-					zProbeTriggered = false;
-					SetMoveBufferDefaults(ms);
-					if (!platform.GetEndstops().EnableZProbe(currentZProbeNumber) || !zp->SetProbing(true))
+#if SUPPORT_SCANNING_PROBES
+					zp->ClearTouchTriggered();
+#endif
+					if (zp->Stopped())
 					{
-						gb.LatestMachineState().SetError("Failed to enable probe");
+						reprap.GetHeat().SuspendHeaters(false);
+						gb.LatestMachineState().SetError("Probe already triggered before probing move started");
 						gb.SetState(GCodeState::checkError);
 						RetractZProbe(gb);
 						break;
 					}
-					ms.checkEndstops = true;
-					ms.reduceAcceleration = true;
-					ms.coords[Z_AXIS] = -zp->GetDiveHeight(-1) + zp->GetActualTriggerHeight();
-					ms.feedRate = zp->GetProbingSpeed(tapsDone);
-					ms.linearAxesMentioned = true;
-					NewSingleSegmentMoveAvailable(ms);
-					gb.AdvanceState();
+					else
+					{
+						zProbeTriggered = false;
+						SetMoveBufferDefaults(ms);
+						if (!platform.GetEndstops().EnableZProbe(currentZProbeNumber) || !zp->SetProbing(true))
+						{
+							gb.LatestMachineState().SetError("Failed to enable probe");
+							gb.SetState(GCodeState::checkError);
+							RetractZProbe(gb);
+							break;
+						}
+						ms.checkEndstops = true;
+						ms.reduceAcceleration = true;
+						ms.coords[Z_AXIS] = -zp->GetDiveHeight(-1) + zp->GetActiveModeTriggerHeight();
+						ms.feedRate = zp->GetProbingSpeed(tapsDone);
+						ms.linearAxesMentioned = true;
+						NewSingleSegmentMoveAvailable(ms);
+						gb.AdvanceState();
+					}
 				}
 			}
 		}
@@ -984,7 +991,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 				}
 
 				// Grid probing never does an additional fast tap, so we can always include this tap in the average
-				g30zHeightError = ms.coords[Z_AXIS] - zp->GetActualTriggerHeight();
+				g30zHeightError = ms.coords[Z_AXIS] - zp->GetActiveModeTriggerHeight();
 				g30zHeightErrorSum += g30zHeightError;
 			}
 
@@ -1326,39 +1333,45 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 					doingManualBedProbe = true;												// suspend the Z movement limit
 					DoManualBedProbe(gb);
 				}
-				else if (zp->Stopped())														// check for probe already triggered at start
-				{
-					// Z probe is already triggered at the start of the move, so abandon the probe and record an error
-					reprap.GetHeat().SuspendHeaters(false);
-					gb.LatestMachineState().SetError("Probe already triggered at start of probing move");
-					if (g30ProbePointIndex >= 0)
-					{
-						reprap.GetMove().SetZBedProbePoint(g30ProbePointIndex, zp->GetDiveHeight(tapsDone), true, true);
-					}
-					gb.SetState(GCodeState::checkError);									// no point in doing anything else
-					RetractZProbe(gb);
-				}
 				else
 				{
-					zProbeTriggered = false;
-					SetMoveBufferDefaults(ms);
-					if (!platform.GetEndstops().EnableZProbe(currentZProbeNumber) || !zp->SetProbing(true))
+#if SUPPORT_SCANNING_PROBES
+					zp->ClearTouchTriggered();
+#endif
+					if (zp->Stopped())														// check for probe already triggered at start
 					{
-						gb.LatestMachineState().SetError("Failed to enable probe");
-						gb.SetState(GCodeState::checkError);
+						// Z probe is already triggered at the start of the move, so abandon the probe and record an error
+						reprap.GetHeat().SuspendHeaters(false);
+						gb.LatestMachineState().SetError("Probe already triggered at start of probing move");
+						if (g30ProbePointIndex >= 0)
+						{
+							reprap.GetMove().SetZBedProbePoint(g30ProbePointIndex, zp->GetDiveHeight(tapsDone), true, true);
+						}
+						gb.SetState(GCodeState::checkError);									// no point in doing anything else
 						RetractZProbe(gb);
-						break;
 					}
+					else
+					{
+						zProbeTriggered = false;
+						SetMoveBufferDefaults(ms);
+						if (!platform.GetEndstops().EnableZProbe(currentZProbeNumber) || !zp->SetProbing(true))
+						{
+							gb.LatestMachineState().SetError("Failed to enable probe");
+							gb.SetState(GCodeState::checkError);
+							RetractZProbe(gb);
+							break;
+						}
 
-					ms.checkEndstops = true;
-					ms.reduceAcceleration = true;
-					ms.coords[Z_AXIS] = (IsAxisHomed(Z_AXIS))
-												? reprap.GetMove().AxisMinimum(Z_AXIS) - zp->GetDiveHeight(-1) + zp->GetActualTriggerHeight()	// Z axis has been homed, so no point in going very far
-												: -1.1 * reprap.GetMove().AxisTotalLength(Z_AXIS);	// Z axis not homed yet, so treat this as a homing move
-					ms.feedRate = zp->GetProbingSpeed(tapsDone);
-					ms.linearAxesMentioned = true;
-					NewSingleSegmentMoveAvailable(ms);
-					gb.AdvanceState();
+						ms.checkEndstops = true;
+						ms.reduceAcceleration = true;
+						ms.coords[Z_AXIS] = (IsAxisHomed(Z_AXIS))
+													? reprap.GetMove().AxisMinimum(Z_AXIS) - zp->GetDiveHeight(-1) + zp->GetActiveModeTriggerHeight()	// Z axis has been homed, so no point in going very far
+													: -1.1 * reprap.GetMove().AxisTotalLength(Z_AXIS);	// Z axis not homed yet, so treat this as a homing move
+						ms.feedRate = zp->GetProbingSpeed(tapsDone);
+						ms.linearAxesMentioned = true;
+						NewSingleSegmentMoveAvailable(ms);
+						gb.AdvanceState();
+					}
 				}
 			}
 		}
@@ -1398,7 +1411,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 					zp->SetLastStoppedHeight(g30zStoppedHeight);
 					if (tapsDone > 0)											// don't accumulate the result if we are doing fast-then-slow probing and this was the fast probe
 					{
-						g30zHeightError = g30zStoppedHeight - zp->GetActualTriggerHeight();
+						g30zHeightError = g30zStoppedHeight - zp->GetActiveModeTriggerHeight();
 						g30zHeightErrorSum += g30zHeightError;
 					}
 				}
@@ -1418,7 +1431,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 				if (tapsDone <= 1 && !hadProbingError)
 				{
 					// Reset the Z axis origin according to the height error so that we can move back up to the dive height
-					ms.coords[Z_AXIS] = zp->GetActualTriggerHeight();
+					ms.coords[Z_AXIS] = zp->GetActiveModeTriggerHeight();
 					ms.SetNewPositionOfOwnedAxes(ms.coords);
 
 					// Find the coordinates of the Z probe to pass to SetZeroHeightError

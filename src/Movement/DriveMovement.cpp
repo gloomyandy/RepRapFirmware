@@ -115,22 +115,22 @@ MoveSegment *_ecv_null DriveMovement::NewSegment(uint32_t now) noexcept
 
 	while (true)
 	{
-		MoveSegment *_ecv_null seg = segments;				// capture volatile variable
+		MoveSegment *_ecv_null seg = segments;					// capture volatile variable
 		if (seg == nullptr)
 		{
 			segmentFlags.Init();
-			state = DMState::idle;					// if we have been round this loop already then we will have changed the state, so reset it to idle
+			state = DMState::idle;								// if we have been round this loop already then we will have changed the state, so reset it to idle
 			return nullptr;
 		}
 
-		segmentFlags = seg->GetFlags();				// assume we are going to execute this segment, or at least generate an interrupt when it is due to begin
+		segmentFlags = seg->GetFlags();							// assume we are going to execute this segment, or at least generate an interrupt when it is due to begin
 
 		if ((int32_t)(seg->GetStartTime() - now) > (int32_t)MoveTiming::MaximumMoveStartAdvanceClocks)
 		{
-			state = DMState::starting;				// the segment is not due to start for a while. To allow it to be changed meanwhile, generate an interrupt when it is due to start.
-			driversCurrentlyUsed = 0;				// don't generate a step on that interrupt
-			driverEndstopsTriggeredAtStart = 0;		// reset since we will be setting this in DDA::Prepare()
-			nextStepTime = seg->GetStartTime();		// this is when we want the interrupt
+			state = DMState::starting;							// the segment is not due to start for a while. To allow it to be changed meanwhile, generate an interrupt when it is due to start.
+			driversCurrentlyUsed = 0;							// don't generate a step on that interrupt
+			driverEndstopsTriggeredAtStart = 0;					// reset since we will be setting this in DDA::Prepare()
+			nextStepTime = seg->GetStartTime();					// this is when we want the interrupt
 			return seg;
 		}
 
@@ -280,19 +280,16 @@ MoveSegment *_ecv_null DriveMovement::NewSegment(uint32_t now) noexcept
 						(unsigned int)state, (double)q, (double)t0, (double)p, nextStep, segmentStepLimit);
 		seg->DebugPrint();
 #endif
+		// nextStep is not less than segmentStepLimit, so we are not going to execute this segment
 		motioncalc_t newDcf = distanceCarriedForwards + seg->GetLength();
 		if (fabsm(newDcf) > (motioncalc_t)1.0)
 		{
-			if (reprap.Debug(Module::Move))
-			{
-				debugPrintf("newDcf=%.3e\n", (double)newDcf);
-			}
-			LogStepError(7, (float)newDcf);
+			(void)LogStepError(7, (float)newDcf, seg);
 			newDcf = constrain<motioncalc_t>(newDcf, -1.0, 1.0);	// to prevent the next segment erroring out
 		}
 		distanceCarriedForwards = newDcf;
 		MoveSegment *oldSeg = seg;
-		segments = seg = seg->GetNext();						// skip this segment
+		segments = seg = seg->GetNext();							// skip this segment
 		MoveSegment::Release(oldSeg);
 	}
 }
@@ -307,18 +304,19 @@ static inline motioncalc_t fastLimSqrtm(motioncalc_t f) noexcept
 #endif
 }
 
-// Tell the Move class that we had a step error. This always returns false so that CalcNextStepTimeFull can tail-chain to it.
-bool DriveMovement::LogStepError(uint8_t type, float extra) noexcept
+// Notify a step error. This always returns false so that CalcNextStepTimeFull can tail-chain to it.
+bool DriveMovement::LogStepError(uint8_t type, float extra, const MoveSegment *seg) noexcept
 {
-	state = DMState::stepError;
-	stepErrorType = type;
-	if (reprap.Debug(Module::Move))
+	const StringRef& dbgRef = Platform::genericDebugBuffer.GetRef();
+	dbgRef.printf("Code %u move error: info=%.3g, seg: ", type, (double)extra);
+	if (seg != nullptr)
 	{
-		debugPrintf("Step err %u on ", type);
-		DebugPrint();
-		MoveSegment::DebugPrintList(segments);
+		seg->AppendDetails(dbgRef);
 	}
-	reprap.GetMove().LogStepError(type, drive, extra);
+	dbgRef.cat('\n');
+	Platform::shouldTurnOffHeaters = true;
+	Platform::hasGenericDebug = true;
+	reprap.GetMove().StepErrorHalt();
 	return false;
 }
 
@@ -390,11 +388,11 @@ pre(stepsTillRecalc == 0; segments != nullptr)
 			distanceCarriedForwards += currentSegment->GetLength() - (motioncalc_t)netStepsThisSegment;
 			if (distanceCarriedForwards > (motioncalc_t)1.0 || distanceCarriedForwards < (motioncalc_t)-1.0)
 			{
-				return LogStepError(5, distanceCarriedForwards);
+				return LogStepError(5, (float)distanceCarriedForwards, currentSegment);
 			}
 			if (currentMotorPosition - positionAtSegmentStart != netStepsThisSegment)
 			{
-				return LogStepError(6, 0.0);
+				return LogStepError(6, 0.0, currentSegment);
 			}
 
 			movementAccumulator += netStepsThisSegment;			// update the amount of extrusion
@@ -414,7 +412,7 @@ pre(stepsTillRecalc == 0; segments != nullptr)
 
 			if (unlikely((int32_t)(currentSegment->GetStartTime() - prevEndTime) < -10))
 			{
-				return LogStepError(1, (float)(int32_t)(currentSegment->GetStartTime() - prevEndTime));
+				return LogStepError(1, (float)(int32_t)(currentSegment->GetStartTime() - prevEndTime), currentSegment);
 			}
 
 			// Leave shiftFactor set to 0 so that we compute a single step time, because the interval will have changed
@@ -496,7 +494,7 @@ pre(stepsTillRecalc == 0; segments != nullptr)
 #if SEGMENT_DEBUG
 		debugPrintf("DMstate %u, quitting\n", (unsigned int)state);
 #endif
-		return LogStepError(4, 0.0);
+		return LogStepError(4, (float)state, currentSegment);
 	}
 
 	nextCalcStepTime += t0;
@@ -507,7 +505,7 @@ pre(stepsTillRecalc == 0; segments != nullptr)
 		{
 			debugPrintf("nextCalcStepTime=%.3e\n", (double)nextCalcStepTime);
 		}
-		return LogStepError(2, (float)nextCalcStepTime);
+		return LogStepError(2, (float)nextCalcStepTime, currentSegment);
 	}
 
 	uint32_t iNextCalcStepTime = (uint32_t)nextCalcStepTime;
