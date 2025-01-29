@@ -6,7 +6,7 @@ FREERTOS_DIR ?= ./FreeRTOS
 REPRAPFIRMWARE_DIR ?= ./RepRapFirmware
 RRFLIBRARIES_DIR ?= ./RRFLibraries
 CORESTM_DIR ?= ./CoreN2G
-CANLIB_DIR ?= CANlib
+CANLIB_DIR ?= ./CANlib
 OUTPUT_NAME ?= base_stm32f4
 BUILD ?= Debug
 

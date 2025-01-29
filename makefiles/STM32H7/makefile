@@ -7,7 +7,7 @@ REPRAPFIRMWARE_DIR ?= ./RepRapFirmware
 RRFLIBRARIES_DIR ?= ./RRFLibraries
 TINYUSB_DIR ?= ./LibTinyusb
 CORESTM_DIR ?= ./CoreN2G
-CANLIB_DIR ?= CANlib
+CANLIB_DIR ?= ./CANlib
 OUTPUT_NAME ?= base_$(VARIANT)
 BUILD ?= Debug
 
