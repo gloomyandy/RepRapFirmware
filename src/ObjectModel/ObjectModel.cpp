@@ -1511,12 +1511,55 @@ decrease(strlen(idString))	// recursion variant
 		{
 			return (context.WantArrayLength()) ? ExpressionValue((int32_t)val.shVal.GetLength()) : val;
 		}
+		if (*idString == '^')
+		{
+			++idString;
+			if (*idString != 0)
+			{
+				break;
+			}
+			context.AddIndex();
+			ReadLockedPointer<const char> p = val.shVal.Get();
+			const bool inBounds = !p.IsNull() && context.GetLastIndex() >= 0 && (size_t)context.GetLastIndex() < strlen(p.Ptr());
+			if (context.WantExists())
+			{
+				return ExpressionValue(inBounds);
+			}
+
+			if (!inBounds)
+			{
+				throw context.ConstructParseException("array index out of bounds");
+			}
+
+			return ExpressionValue(p.Ptr()[context.GetLastIndex()]);
+		}
 		break;
 
 	case TypeCode::CString:
 		if (*idString == 0)
 		{
 			return (context.WantArrayLength()) ? ExpressionValue((int32_t)strlen(val.sVal)) : val;
+		}
+		if (*idString == '^')
+		{
+			++idString;
+			if (*idString != 0)
+			{
+				break;
+			}
+			context.AddIndex();
+			const bool inBounds = (context.GetLastIndex() >= 0 && (size_t)context.GetLastIndex() < strlen(val.sVal));
+			if (context.WantExists())
+			{
+				return ExpressionValue(inBounds);
+			}
+
+			if (!inBounds)
+			{
+				throw context.ConstructParseException("array index out of bounds");
+			}
+
+			return ExpressionValue(val.sVal[context.GetLastIndex()]);
 		}
 		break;
 

@@ -3489,14 +3489,18 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #endif
 
 			case 555: // Set/report firmware type to emulate
-				if (gb.Seen('P'))
 				{
-					gb.LatestMachineState().compatibility.Assign(gb.GetIValue());
-					reprap.InputsUpdated();
-				}
-				else
-				{
-					reply.printf("Output mode: %s", gb.LatestMachineState().compatibility.ToString());
+					bool seen = false;
+					uint32_t val = gb.TryGetLimitedUIValue('P', val, seen, Compatibility::NumValues);
+					if (seen)
+					{
+						gb.LatestMachineState().compatibility.Assign(val);
+						reprap.InputsUpdated();
+					}
+					else
+					{
+						reply.printf("Compatibility mode: %s", gb.LatestMachineState().compatibility.ToString());
+					}
 				}
 				break;
 
@@ -4529,9 +4533,9 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 				if (gb.Seen('A'))
 				{
 					const uint32_t serialChannel = gb.GetLimitedUIValue('A', 1, NumSerialChannels);
-					const uint32_t auxChannel = serialChannel - 1;
-					if (platform.IsAuxEnabled(auxChannel))
+					if (platform.IsChanEnabled(serialChannel))
 					{
+						const uint32_t auxChannel = serialChannel - 1;
 						if (gb.Seen('P'))
 						{
 							String<StringLength20> eraseString;

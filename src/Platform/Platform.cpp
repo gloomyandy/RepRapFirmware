@@ -468,7 +468,7 @@ void Platform::Init() noexcept
 	realTime = 0;
 
 	// Comms
-	commsParams[0] = 0;
+	commsParams[0] = 2;							// USB is in raw mode by default
 	usbMutex.Create("USB");
 #if SAME5x && !CORE_USES_TINYUSB
     SERIAL_MAIN_DEVICE.Start();
@@ -744,13 +744,17 @@ void Platform::PanelDueBeep(int freq, int ms) noexcept
 }
 
 // Send a short message to the aux channel. There is no flow control on this port, so it can't block for long.
-void Platform::SendPanelDueMessage(size_t auxNumber, const char *_ecv_array msg) noexcept
+void Platform::SendPanelDueMessage(size_t chan, const char *_ecv_array msg) noexcept
 {
+	if (chan == 0)
+	{
+		//TODO
+	}
 #if HAS_AUX_DEVICES
 	// Don't send anything to PanelDue while we are flashing it
 	if (!reprap.GetGCodes().IsFlashingPanelDue())
 	{
-		auxDevices[auxNumber].SendPanelDueMessage(msg);
+		auxDevices[chan - 1].SendPanelDueMessage(msg);
 	}
 #endif
 }
@@ -2193,6 +2197,29 @@ void Platform::AppendUsbReply(OutputBuffer *buffer) noexcept
 
 // Aux port functions
 
+// Translation of M575 S parameter to AuxMode
+static constexpr AuxMode auxModes[] =
+{
+	AuxMode::panelDue,			// basic PanelDue mode,
+	AuxMode::panelDue,			// PanelDue mode with CRC or checksum required (default)
+	AuxMode::raw,				// basic raw mode
+	AuxMode::raw,				// raw mode with CRC or checksum required
+	AuxMode::panelDue,			// PanelDue mode with CRC required
+	AuxMode::disabled,			// was unused, now treated as disabled
+	AuxMode::raw,				// raw mode with CRC required
+	AuxMode::device,			// Modbus/Uart mode
+};
+
+// Return the mode of this serial channel (raw, panelDue, device, disabled)
+AuxMode Platform::GetChannelMode(size_t chan) const noexcept
+{
+	return (chan == 0) ? auxModes[commsParams[0] & 7]
+#if HAS_AUX_DEVICES
+			: (chan < NumSerialChannels) ? auxDevices[chan - 1].GetMode()
+#endif
+				: AuxMode::disabled;
+}
+
 GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {
 	// Get the channel specified by the command and the corresponding GCode buffer
@@ -2207,55 +2234,51 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 	// See if a mode is provided
 	if (gb.Seen('S'))
 	{
-		// Translation of M575 S parameter to AuxMode
-		static constexpr AuxMode modes[] =
-		{
-			AuxMode::panelDue,			// basic PanelDue mode,
-			AuxMode::panelDue,			// PanelDue mode with CRC or checksum required (default)
-			AuxMode::raw,				// basic raw mode
-			AuxMode::raw,				// raw mode with CRC or checksum required
-			AuxMode::panelDue,			// PanelDue mode with CRC required
-			AuxMode::disabled,			// was unused, now treated as disabled
-			AuxMode::raw,				// raw mode with CRC required
-			AuxMode::device,			// Modbus/Uart mode
-		};
 
-		const uint32_t val = gb.GetLimitedUIValue('S', ARRAY_SIZE(modes));
-		AuxMode newMode = modes[val];
-		if (gbp != nullptr)
+		const uint32_t val = gb.GetLimitedUIValue('S', ARRAY_SIZE(auxModes));
+		const AuxMode newMode = auxModes[val];
+		if (newMode == AuxMode::device)
 		{
-			gbp->Disable();							// disable I/O for this buffer
+			// Don't allow device mode if it is not supported on this port
+			if (chan == 0)
+			{
+				reply.copy("Device mode not supported on this port");
+				return GCodeResult::error;
+			}
+# if SUPPORT_MODBUS_RTU
+			AuxDevice& dev = auxDevices[chan - 1];
+			if (gb.Seen('C'))
+			{
+				String<StringLength50> portName;
+				gb.GetQuotedString(portName.GetRef(), false);
+				if (!dev.ConfigureDirectionPort(portName.c_str(), reply))
+				{
+					return GCodeResult::error;
+				}
+			}
+#  if defined(DUET3_MB6XD)
+			else if (chan == 2 && board >= BoardType::Duet3_6XD_v102)
+			{
+				if (!dev.ConfigureDirectionPort(ModbusTxPinName, reply))
+				{
+					return GCodeResult::error;
+				}
+			}
+#  endif
+# endif
 		}
 
-		SetCommsProperties(chan, val);
+		if (gbp != nullptr)
+		{
+			gbp->Disable();				// disable I/O for this serial channel
+		}
+
+		commsParams[chan] = val;		// we limited the value of 'chan' when we fetched it, so no need for a range-check here
 
 #if HAS_AUX_DEVICES
 		if (chan != 0)
 		{
 			AuxDevice& dev = auxDevices[chan - FirstAuxChannel];
-			if (newMode == AuxMode::device)
-			{
-# if SUPPORT_MODBUS_RTU
-				if (gb.Seen('C'))
-				{
-					String<StringLength50> portName;
-					gb.GetQuotedString(portName.GetRef(), false);
-					if (!dev.ConfigureDirectionPort(portName.c_str(), reply))
-					{
-						return GCodeResult::error;
-					}
-				}
-#  if defined(DUET3_MB6XD)
-				else if (chan == 2 && board >= BoardType::Duet3_6XD_v102)
-				{
-					if (!dev.ConfigureDirectionPort(ModbusTxPinName, reply))
-					{
-						return GCodeResult::error;
-					}
-				}
-#  endif
-# endif
-			}
 			if (baudRate != 0)
 			{
 				dev.SetBaudRate(baudRate);
@@ -2285,31 +2308,29 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 	else
 	{
 		// Just print the existing configuration
-		const uint32_t cp = GetCommsProperties(chan);
-		const char *_ecv_array crcMode = (cp & 4) ? "requires CRC"
-								: (cp & 1) ? "requires checksum or CRC"
-									: "does not require checksum or CRC";
-#if HAS_AUX_DEVICES
-		if (chan != 0)
+		const AuxMode mode = GetChannelMode(chan);
+		if (mode == AuxMode::disabled)
 		{
-			if (!IsAuxEnabled(chan - 1)
-				&& (chan >= NumSerialChannels || auxDevices[chan - FirstAuxChannel].GetMode() != AuxMode::device)
-			   )
+			reply.printf("Channel %u is disabled", chan);
+		}
+		else
+		{
+			const uint32_t cp = commsParams[chan];								// we limited the value of 'chan' when we fetched it, so no need for a range-check here
+			const char *_ecv_array crcMode = (cp & 4) ? "requires CRC"
+									: (cp & 1) ? "requires checksum or CRC"
+										: "does not require checksum or CRC";
+			const char *_ecv_array modeString = (mode == AuxMode::device) ? "Device or Modbus RTU"
+												: (IsChanRaw(chan)) ? "raw"
+													: "PanelDue";
+#if HAS_AUX_DEVICES
+			if (chan != 0)
 			{
-				reply.printf("Channel %u is disabled", chan);
-			}
-			else
-			{
-				const AuxDevice& dev = auxDevices[chan - FirstAuxChannel];
-				const char *_ecv_array modeString = (dev.GetMode() == AuxMode::device) ? "Device / modbus RTU" :
-											(IsAuxRaw(chan - 1)) ? "raw"
-												: "PanelDue";
-				reply.printf("Channel %d: baud rate %" PRIu32 ", %s mode, ", chan, GetBaudRate(chan), modeString);
-				if (dev.GetMode() == AuxMode::device)
+				reply.printf("Channel %u (Aux %u): baud rate %" PRIu32 ", %s mode, ", chan, chan - 1, GetBaudRate(chan), modeString);
+				if (mode == AuxMode::device)
 				{
 # if SUPPORT_MODBUS_RTU
 					reply.cat("Modbus Tx/!Rx port ");
-					dev.AppendDirectionPortName(reply);
+					auxDevices[chan - 1].AppendDirectionPortName(reply);
 # endif
 				}
 				else
@@ -2317,37 +2338,44 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 					reply.cat(crcMode);
 				}
 			}
-		}
-		else
+			else
 #endif
-		{
-			reply.printf("Channel 0 (USB): %s", crcMode);
-			if (SERIAL_MAIN_DEVICE.IsConnected())
 			{
-				reply.cat(", connected");
+				reply.printf("Channel 0 (USB): %s mode, %s", modeString, crcMode);
+				if (SERIAL_MAIN_DEVICE.IsConnected())
+				{
+					reply.cat(", connected");
+				}
 			}
 		}
 	}
 	return GCodeResult::ok;
 }
 
-bool Platform::IsAuxEnabled(size_t auxNumber) const noexcept
+bool Platform::IsChanEnabled(size_t chan) const noexcept
 {
 #if HAS_AUX_DEVICES
-	return auxNumber < ARRAY_SIZE(auxDevices) && auxDevices[auxNumber].IsEnabledForGCodeIo();
+	return chan == 0 || (chan <= ARRAY_SIZE(auxDevices) && auxDevices[chan - 1].IsEnabledForGCodeIo());
 #else
 	return false;
 #endif
 }
 
-bool Platform::IsAuxRaw(size_t auxNumber) const noexcept
+bool Platform::IsChanRaw(size_t chan) const noexcept
 {
+	if (chan == 0)				// if USB
+	{
+		return (commsParams[0] & 0x02) != 0;
+	}
+
 #if HAS_AUX_DEVICES
-	return auxNumber >= ARRAY_SIZE(auxDevices) || auxDevices[auxNumber].IsRaw();
+	return chan > ARRAY_SIZE(auxDevices) || auxDevices[chan - 1].IsRaw();
 #else
 	return true;
 #endif
 }
+
+# if !defined(DUET_NG)			// we don't support this on Duet 2 because we are running low on flash memory space
 
 /**
  * Converts a single byte of hex value to its ASCII hex representation.
@@ -2378,8 +2406,6 @@ static inline void ConvertHexToAsciiHex(uint8_t hex, uint8_t asciiHex[2])
 		}
 	}
 }
-
-# if !defined(DUET_NG)			// we don't support this on Duet 2 because we are running low on flash memory space
 
 static inline void CalculateNordsonUltimusVCheckSum(uint8_t *_ecv_array data, size_t len, uint8_t checksum[2])
 {
@@ -2954,7 +2980,7 @@ void Platform::EnablePanelDuePort() noexcept
 {
 	auxDevices[0].SetBaudRate(57600);
 	auxDevices[0].SetMode(AuxMode::panelDue);
-	SetCommsProperties(1, 1);
+	commsParams[1] = 1;
 	reprap.GetGCodes().GetSerialGCodeBuffer(1)->Enable(1);
 }
 
@@ -3019,7 +3045,7 @@ void Platform::RawMessage(MessageType type, const char *_ecv_array message) noex
 	// Send the message to the destinations
 	if ((type & ImmediateAuxMessage) != 0)
 	{
-		SendPanelDueMessage(0, message);
+		SendPanelDueMessage(1, message);
 	}
 	else if ((type & AuxMessage) != 0)
 	{
@@ -3484,19 +3510,6 @@ uint32_t Platform::GetBaudRate(size_t chan) const noexcept
 		(chan != 0 && chan < NumSerialChannels) ? auxDevices[chan - FirstAuxChannel].GetBaudRate() :
 #endif
 		0;
-}
-
-void Platform::SetCommsProperties(size_t chan, uint32_t cp) noexcept
-{
-	if (chan < NumSerialChannels)
-	{
-		commsParams[chan] = cp;
-	}
-}
-
-uint32_t Platform::GetCommsProperties(size_t chan) const noexcept
-{
-	return (chan < NumSerialChannels) ? commsParams[chan] : 0u;
 }
 
 // Re-initialise a serial channel.

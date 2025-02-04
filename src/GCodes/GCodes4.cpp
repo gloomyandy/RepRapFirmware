@@ -86,7 +86,8 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply) noexcept
 					move.UpdateStartCoordinates(ms.GetNumber(), ms.coords);
 					int32_t endpoints[MaxAxes];
 					move.CartesianToMotorSteps(ms.coords, endpoints, false);
-					ms.ChangeEndpointsAfterHoming(ms.logicalDrivesOwned, endpoints);
+					// Only pass axis (not extruder) drives in the following, we don't want to modify extruder positions
+					ms.ChangeEndpointsAfterHoming(ms.logicalDrivesOwned & LogicalDrivesBitmap::MakeLowestNBits(numTotalAxes), endpoints);
 				}
 				else
 				{

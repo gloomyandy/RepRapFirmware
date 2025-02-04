@@ -56,8 +56,17 @@ GCodeResult RemoteZProbe::AppendPinNames(const StringRef& str) noexcept
 // Get the raw reading. Not used with scanning Z probes except for reporting in the object model.
 uint32_t RemoteZProbe::GetRawReading() const noexcept
 {
-	return (type == ZProbeType::scanningAnalog && !useTouchMode) ? lastValue
-			: (touchTriggered) ? 1000 : 0;
+	if (type == ZProbeType::scanningAnalog)
+	{
+		if (useTouchMode)
+		{
+			return (touchTriggered) ? 1000 : 0;
+		}
+		return lastValue;
+	}
+
+	// Otherwise it must be a digital probe because we don't currently support other types of analog probe
+	return (lastValue > 0) ? 1000 : 0;				// for digital probes the reading sent over CAN (stored in lastValue) is 0xFFFFFFFF.
 }
 
 bool RemoteZProbe::SetProbing(bool isProbing) noexcept
@@ -69,7 +78,9 @@ bool RemoteZProbe::SetProbing(bool isProbing) noexcept
 		touchTriggered = false;
 		if (isProbing)
 		{
-			rslt = CanInterface::ChangeHandleSetTouchMode(boardAddress, handle, (uint32_t)((uint16_t)touchModeSensitivity * 65535), reply.GetRef());
+			// Send the sensitivity as a 16-bit integer in the lower half of the 32-bit parameter in the ChangeInputHandle message.
+			// We keep the upper bits free for future touch mode parameters.
+			rslt = CanInterface::ChangeHandleSetTouchMode(boardAddress, handle, (uint32_t)((uint16_t)(touchModeSensitivity * 65535.0)), reply.GetRef());
 		}
 	}
 	else

@@ -67,10 +67,10 @@ void InputMonitor::Deactivate() noexcept
 }
 
 // Return the analog value of this input
-uint16_t InputMonitor::GetAnalogValue() const noexcept
+uint32_t InputMonitor::GetAnalogValue() const noexcept
 {
 	return (threshold != 0) ? port.ReadAnalog()
-			: port.ReadDigital() ? 0xFFFF
+			: port.ReadDigital() ? 0xFFFFFFFF
 				: 0;
 }
 

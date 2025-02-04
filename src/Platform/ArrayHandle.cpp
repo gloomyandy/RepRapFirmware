@@ -126,7 +126,7 @@ size_t ArrayHandle::GetNumElements() const noexcept
 bool ArrayHandle::GetElement(size_t index, ExpressionValue &rslt) const noexcept
 {
 #if CHECK_HEAP_LOCKED
-	Heap::heapLock.CheckHasReadLock();
+	Heap::heapLock.CheckHasReadOrWriteLock();
 #endif
 	if (slotPtr != nullptr)
 	{
@@ -152,7 +152,7 @@ bool ArrayHandle::GetElement(size_t index, ExpressionValue &rslt) const noexcept
 TypeCode ArrayHandle::GetElementType(size_t index) const noexcept
 {
 #if CHECK_HEAP_LOCKED
-	Heap::heapLock.CheckHasReadLock();
+	Heap::heapLock.CheckHasReadOrWriteLock();
 #endif
 	if (slotPtr != nullptr)
 	{

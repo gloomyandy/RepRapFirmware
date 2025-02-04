@@ -281,8 +281,9 @@ public:
 	void AppendAuxReply(size_t auxNumber, const char *_ecv_array msg, bool rawMessage) noexcept;
 
 	void ResetChannel(size_t chan) noexcept;						// Re-initialise a serial channel
-    bool IsAuxEnabled(size_t auxNumber) const noexcept;				// Any device on the AUX line?
-    bool IsAuxRaw(size_t auxNumber) const noexcept;
+	bool IsChanEnabled(size_t chan) const noexcept;					// Any device on the serial line?
+    bool IsChanRaw(size_t chan) const noexcept;						// Is the serial line in raw mode?
+
 #if SUPPORT_PANELDUE_FLASH
 	PanelDueUpdater *_ecv_null GetPanelDueUpdater() noexcept { return panelDueUpdater; }
 	void InitPanelDueUpdater() noexcept;
@@ -296,8 +297,6 @@ public:
 	IPAddress GateWay() const noexcept;
 	void SetBaudRate(size_t chan, uint32_t br) noexcept;
 	uint32_t GetBaudRate(size_t chan) const noexcept;
-	void SetCommsProperties(size_t chan, uint32_t cp) noexcept;
-	uint32_t GetCommsProperties(size_t chan) const noexcept;
 
 	// File functions
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE || HAS_EMBEDDED_FILES
@@ -364,7 +363,7 @@ public:
 
 	// AUX device
 	void PanelDueBeep(int freq, int ms) noexcept;
-	void SendPanelDueMessage(size_t auxNumber, const char *_ecv_array msg) noexcept;
+	void SendPanelDueMessage(size_t chan, const char *_ecv_array msg) noexcept;
 
 	// Hotend configuration
 	float GetFilamentWidth() const noexcept;
@@ -583,7 +582,8 @@ private:
 	uint32_t lastFanCheckTime;
 
   	// Serial/USB
-	uint8_t commsParams[NumSerialChannels];
+	uint8_t commsParams[NumSerialChannels];							// the M575 S parameter for each serial channel
+	AuxMode GetChannelMode(size_t chan) const noexcept;
 
 	volatile OutputStack usbOutput;
 	Mutex usbMutex;
