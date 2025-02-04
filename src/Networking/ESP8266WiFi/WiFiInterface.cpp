@@ -643,11 +643,7 @@ void WiFiInterface::Stop() noexcept
 		digitalWrite(SamTfrReadyPin, false);		// tell the ESP we can't receive
 
 #if !WIFI_USES_ESP32
-#if STM32
-		pinMode(EspResetPin, OUTPUT_LOW);
-#else
 		digitalWrite(EspResetPin, false);			// put the ESP back into reset
-#endif
 #endif
 		digitalWrite(EspEnablePin, false);
 		DisableEspInterrupt();						// ignore IRQs from the transfer request pin
@@ -2555,11 +2551,7 @@ void WiFiInterface::SpiInterrupt() noexcept
 void WiFiInterface::StartWiFi() noexcept
 {
 #if !WIFI_USES_ESP32
-#if STM32
-	pinMode(EspResetPin, INPUT_PULLUP);
-#else
 	digitalWrite(EspResetPin, true);
-#endif
 	delayMicroseconds(150);										// ESP8266 datasheet specifies minimum 100us from releasing reset to power up
 #endif
 
@@ -2658,11 +2650,7 @@ void WiFiInterface::ResetWiFiForUpload(bool external) noexcept
 
 #if !WIFI_USES_ESP32
 	// Release the reset on the ESP8266
-#if STM32
-	pinMode(EspResetPin, INPUT_PULLUP);
-#else
 	digitalWrite(EspResetPin, true);
-#endif
 	delayMicroseconds(150);											// ESP8266 datasheet specifies minimum 100us from releasing reset to power up
 #endif
 	// Take the ESP8266 out of power down
