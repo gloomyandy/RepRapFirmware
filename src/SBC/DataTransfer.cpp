@@ -564,11 +564,11 @@ void DataTransfer::InitFromTask() noexcept
 
 void DataTransfer::Diagnostics(const StringRef& reply) noexcept
 {
-	reply.lcatf("Transfer state: %d, failed transfers: %u, checksum errors: %u\n", (int)state, failedTransfers, checksumErrors);
-	reply.lcatf("RX/TX seq numbers: %d/%d\n", (int)rxHeader.sequenceNumber, (int)txHeader.sequenceNumber);
-	reply.lcatf("SPI underruns %u, overruns %u\n", spiTxUnderruns, spiRxOverruns);
+	reply.lcatf("Transfer state: %d, failed transfers: %u, checksum errors: %u", (int)state, failedTransfers, checksumErrors);
+	reply.lcatf("RX/TX seq numbers: %d/%d", (int)rxHeader.sequenceNumber, (int)txHeader.sequenceNumber);
+	reply.lcatf("SPI underruns %u, overruns %u", spiTxUnderruns, spiRxOverruns);
 #if STM32
-	reply.lcatf("CRC errors header %u, data %u\n", (unsigned)HeaderCRCErrors, (unsigned)DataCRCErrors);
+	reply.lcatf("CRC errors header %u, data %u", (unsigned)HeaderCRCErrors, (unsigned)DataCRCErrors);
 #endif
 }
 
