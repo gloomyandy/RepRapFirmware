@@ -330,7 +330,7 @@ void DuetExpansion::AnalogOut(Pin pin, float pwm) noexcept
 }
 
 // Print diagnostic data. I2C error counts are now reported by Platform.
-void DuetExpansion::Diagnostics(MessageType mtype) noexcept
+void DuetExpansion::Diagnostics(const StringRef& reply) noexcept
 {
 	if (dueXnBoardType != ExpansionBoardType::none)
 	{
@@ -338,11 +338,10 @@ void DuetExpansion::Diagnostics(MessageType mtype) noexcept
 		const uint32_t readCount = dueXnReadCount;
 		dueXnReadCount = 0;
 
-		reprap.GetPlatform().MessageF(mtype,
-										"=== DueX ===\nRead count %" PRIu32 ", %.02f reads/min\n",
-										readCount,
-										(double)(((float)readCount * (SecondsToMillis * MinutesToSeconds))/(now - dueXnReadCountResetMillis))
-									 );
+		reply.printf("=== DueX ===\nRead count %" PRIu32 ", %.02f reads/min",
+						readCount,
+						(double)(((float)readCount * (SecondsToMillis * MinutesToSeconds))/(now - dueXnReadCountResetMillis))
+					);
 		dueXnReadCountResetMillis = now;
 	}
 }

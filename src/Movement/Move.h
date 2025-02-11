@@ -343,8 +343,6 @@ public:
 
 	// Stall endstops
 	GCodeResult SetStallEndstopReporting(const CanMessageEnableStallEndstop& msg, const StringRef& reply) noexcept;
-
-	void AppendDiagnostics(const StringRef& reply) noexcept;
 #endif
 
 	AxisShaper& GetAxisShaper() noexcept { return axisShaper; }
@@ -354,7 +352,7 @@ public:
 
 	bool AreDrivesStopped(LogicalDrivesBitmap drives) const noexcept;						// return true if none of the drives passed has any movement pending
 
-	void Diagnostics(MessageType mtype) noexcept;											// Report useful stuff
+	void Diagnostics(unsigned int part, const StringRef& reply) noexcept;					// Report useful stuff
 
 	// Kinematics and related functions
 	Kinematics &_ecv_from GetKinematics() const noexcept { return *kinematics; }
@@ -496,6 +494,8 @@ public:
 
 protected:
 	DECLARE_OBJECT_MODEL_WITH_ARRAYS
+
+	size_t GetMaxElementsToReturn(const ObjectModelArrayTableEntry *entry) const noexcept override;
 
 private:
 	enum class MoveState : uint8_t

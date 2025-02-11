@@ -509,7 +509,7 @@ ObjectExplorationContext::ObjectExplorationContext(const GCodeBuffer *_ecv_null 
 	  line(-1), column(-1), gb(gbp),
 	  shortForm(false), wantArrayLength(wal), wantExists(false),
 	  includeNonLive(true), includeImportant(false), includeNulls(false),
-	  obsoleteFieldQueried(false), truncateLongArrays(true),
+	  obsoleteFieldQueried(false),
 	  excludedFlags(ObjectModelEntryFlags::verbose | ObjectModelEntryFlags::obsolete)
 {
 	while (true)
@@ -520,7 +520,6 @@ ObjectExplorationContext::ObjectExplorationContext(const GCodeBuffer *_ecv_null 
 			return;
 		case 'a':
 			startElement = 0;
-			truncateLongArrays = false;
 			while (isDigit(*reportFlags))
 			{
 				startElement = (10 * startElement) + (*reportFlags - '0');
@@ -536,7 +535,7 @@ ObjectExplorationContext::ObjectExplorationContext(const GCodeBuffer *_ecv_null 
 			}
 			break;
 		case 'f':
-			includeNonLive = false; truncateLongArrays = false;
+			includeNonLive = false;
 			break;
 		case 'i':
 			includeImportant = true;
@@ -572,7 +571,7 @@ ObjectExplorationContext::ObjectExplorationContext(const GCodeBuffer *_ecv_null 
 	  line(p_line), column(p_col), gb(gbp),
 	  shortForm(false), wantArrayLength(wal), wantExists(wex),
 	  includeNonLive(true), includeImportant(false), includeNulls(false),
-	  obsoleteFieldQueried(false), truncateLongArrays(false),
+	  obsoleteFieldQueried(false),
 	  excludedFlags(ObjectModelEntryFlags::none)
 {
 }
@@ -1081,11 +1080,23 @@ void ObjectModel::ReportPinNameAsJson(OutputBuffer *buf, const ExpressionValue& 
 void ObjectModel::ReportObjectModelArrayAsJson(OutputBuffer *buf, ObjectExplorationContext& context, const ObjectModelClassDescriptor *null classDescriptor,
 												const ObjectModelArrayTableEntry *entry, const char *_ecv_array filter) const THROWS(GCodeException)
 {
+	// Some arrays contain too much data to return in one go. For these arrays (currently just move.axes):
+	// 1. If we receive a query for a key that contains the array but isn't for just the array, and isn't just for live elements, we limit the number of its elements that we return.
+	//    Function GetMaxElementsToReturn() defines the maximum. DWC, DSF and any other clients must be aware of this maximum so that they know to request the array by itself.
+	// 2. If we receive a query for just the array, we use the A parameter to specify the first element we want and we return the next available element in the 'next' field of the result.
 	const bool isRootArray = (buf->Length() == context.GetInitialBufferOffset());		// it's a root array if we haven't started writing to the buffer yet
 	ReadLocker lock(entry->lockPointer);
 
 	buf->cat('[');
-	const size_t count = entry->GetNumElements(this, context);
+	size_t count = entry->GetNumElements(this, context);
+	if (!isRootArray && context.ShouldTruncateArrays())
+	{
+		const size_t maxCount = GetMaxElementsToReturn(entry);
+		if (maxCount != 0 && maxCount < count)
+		{
+			count = maxCount;
+		}
+	}
 	const size_t startElement = (isRootArray) ? context.GetStartElement() : 0;
 	for (size_t i = startElement; i < count; ++i)
 	{
@@ -1098,6 +1109,7 @@ void ObjectModel::ReportObjectModelArrayAsJson(OutputBuffer *buf, ObjectExplorat
 				context.SetNextElement(i);
 				break;
 			}
+
 			buf->cat(',');
 		}
 		context.AddIndex(i);

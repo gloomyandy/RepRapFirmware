@@ -169,19 +169,19 @@ float MovementState::LiveMachineCoordinate(unsigned int axisOrExtruder) const no
 	return latestLiveCoordinates[axisOrExtruder];
 }
 
-void MovementState::Diagnostics(MessageType mtype) const noexcept
+void MovementState::Diagnostics(const StringRef& reply) const noexcept
 {
-	reprap.GetPlatform().MessageF(mtype, "Segments left %u"
+	reply.lcatf("Segments left %u"
 #if SUPPORT_ASYNC_MOVES
-											", axes/extruders owned 0x%08" PRIx32 ", drives owned 0x%08" PRIx32
+				", axes/extruders owned 0x%08" PRIx32 ", drives owned 0x%08" PRIx32
 #endif
-											"\n",
-											segmentsLeft
+				,
+				segmentsLeft
 #if SUPPORT_ASYNC_MOVES
-											, axesAndExtrudersOwned.GetRaw(), logicalDrivesOwned.GetRaw()
+				, axesAndExtrudersOwned.GetRaw(), logicalDrivesOwned.GetRaw()
 #endif
 									);
-	codeQueue->Diagnostics(mtype);
+	codeQueue->Diagnostics(reply);
 }
 
 void MovementState::SavePosition(unsigned int restorePointNumber, size_t numAxes, float p_feedRate, FilePosition p_filePos) noexcept

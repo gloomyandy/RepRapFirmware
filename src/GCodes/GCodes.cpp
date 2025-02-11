@@ -1687,26 +1687,24 @@ bool GCodes::SaveMoveStateResumeInfo(const MovementState& ms, FileStore * const 
 
 #endif
 
-void GCodes::Diagnostics(MessageType mtype) noexcept
+void GCodes::Diagnostics(const StringRef& reply) noexcept
 {
-	platform.Message(mtype, "=== GCodes ===\n");
-	String<StringLength50> text;
+	reply.copy("=== GCodes ===\nMovement locks held by ");
 	for (unsigned int i = 0; i < NumMovementSystems; ++i)
 	{
 		const GCodeBuffer *_ecv_null const movementOwner = resourceOwners[MoveResourceBase + i];
 		if (i != 0)
 		{
-			text.cat(", ");
+			reply.cat(", ");
 		}
-		text.cat((movementOwner == nullptr) ? "null" : movementOwner->GetChannel().ToString());
+		reply.cat((movementOwner == nullptr) ? "null" : movementOwner->GetChannel().ToString());
 	}
-	platform.MessageF(mtype, "Movement locks held by %s\n", text.c_str());
 
 	for (GCodeBuffer *_ecv_null gb : gcodeSources)
 	{
 		if (gb != nullptr)
 		{
-			gb->Diagnostics(mtype);
+			gb->Diagnostics(reply);
 		}
 	}
 }

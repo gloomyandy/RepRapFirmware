@@ -1405,14 +1405,14 @@ void SbcInterface::InvalidateResources() noexcept
 	//reprap.GetHeat().SwitchOffAll(true);
 }
 
-void SbcInterface::Diagnostics(MessageType mtype) noexcept
+void SbcInterface::Diagnostics(const StringRef& reply) noexcept
 {
-	reprap.GetPlatform().Message(mtype, "=== SBC interface ===\n");
-	transfer.Diagnostics(mtype);
-	reprap.GetPlatform().MessageF(mtype, "State: %d, disconnects: %" PRIu32 ", timeouts: %" PRIu32 " total, %" PRIu32 " by SBC, IAP RAM available 0x%05" PRIx32 "\n", (int)state, numDisconnects, numTimeouts, numSbcTimeouts, iapRamAvailable);
-	reprap.GetPlatform().MessageF(mtype, "Buffer RX/TX: %d/%d-%d, open files: %u\n", (int)rxPointer, (int)txPointer, (int)txEnd, numOpenFiles);
+	reply.copy( "=== SBC interface ===");
+	transfer.Diagnostics(reply);
+	reply.lcatf("State: %d, disconnects: %" PRIu32 ", timeouts: %" PRIu32 " total, %" PRIu32 " by SBC, IAP RAM available 0x%05" PRIx32 "\n", (int)state, numDisconnects, numTimeouts, numSbcTimeouts, iapRamAvailable);
+	reply.lcatf("Buffer RX/TX: %d/%d-%d, open files: %u\n", (int)rxPointer, (int)txPointer, (int)txEnd, numOpenFiles);
 #ifdef TRACK_FILE_CODES
-	reprap.GetPlatform().MessageF(mtype, "File codes read/handled: %d/%d, file macros open/closing: %d %d\n", (int)fileCodesRead, (int)fileCodesHandled, (int)fileMacrosRunning, (int)fileMacrosClosing);
+	reply.lcatf("File codes read/handled: %d/%d, file macros open/closing: %d %d\n", (int)fileCodesRead, (int)fileCodesHandled, (int)fileMacrosRunning, (int)fileMacrosClosing);
 #endif
 }
 

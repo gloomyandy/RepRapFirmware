@@ -93,7 +93,7 @@ private:
 	bool ScheduleFirstSegment() noexcept;
 
 	void ReleaseSegments() noexcept;					// release the list of segments and set it to nullptr
-	bool LogStepError(uint8_t type, float extra, const MoveSegment *seg) noexcept;	// record a step error
+	bool LogStepError(uint8_t type, float info, const MoveSegment *seg) noexcept;	// record a step error
 
 #if SUPPORT_PHASE_STEPPING
 	motioncalc_t GetPhaseStepsTakenThisSegment() const noexcept;

@@ -667,14 +667,13 @@ bool DDARing::LowPowerOrStallPause(MovementState& ms) noexcept
 
 #endif
 
-void DDARing::Diagnostics(MessageType mtype, unsigned int ringNumber) noexcept
+void DDARing::Diagnostics(const StringRef& reply, unsigned int ringNumber) noexcept
 {
-	reprap.GetPlatform().MessageF(mtype,
-									"=== DDARing %u ===\nScheduled moves %" PRIu32 ", completed %" PRIu32 ", LaErrors %u, Underruns [%u, %u, %u]\n",
-									ringNumber, scheduledMoves, completedMoves, numLookaheadErrors, numLookaheadUnderruns, numPrepareUnderruns, numNoMoveUnderruns
-								 );
+	reply.lcatf("=== DDARing %u ===\nScheduled moves %" PRIu32 ", completed %" PRIu32 ", LaErrors %u, Underruns [%u, %u, %u]\n",
+				ringNumber, scheduledMoves, completedMoves, numLookaheadErrors, numLookaheadUnderruns, numPrepareUnderruns, numNoMoveUnderruns
+			   );
 	numLookaheadUnderruns = numPrepareUnderruns = numNoMoveUnderruns = numLookaheadErrors = 0;
-	reprap.GetGCodes().GetMovementState(ringNumber).Diagnostics(mtype);
+	reprap.GetGCodes().GetMovementState(ringNumber).Diagnostics(reply);
 }
 
 #if SUPPORT_LASER

@@ -364,7 +364,7 @@ void W5500Interface::Spin() noexcept
 	}
 }
 
-void W5500Interface::Diagnostics(MessageType mtype) noexcept
+void W5500Interface::Diagnostics(const StringRef& reply) noexcept
 {
 	// Report the link state
 	uint8_t phycfgr;
@@ -374,17 +374,14 @@ void W5500Interface::Diagnostics(MessageType mtype) noexcept
 	}
 	const char *_ecv_array const linkSpeed = ((phycfgr & 1) == 0) ? "down" : ((phycfgr & 2) != 0) ? "100Mbps" : "10Mbps";
 	const char *_ecv_array const linkDuplex = ((phycfgr & 1) == 0) ? "" : ((phycfgr & 4) != 0) ? " full duplex" : " half duplex";
-	platform.MessageF(mtype, "Interface state %s, link %s%s\n", GetStateName(), linkSpeed, linkDuplex);
+	reply.lcatf("Interface state %s, link %s%s", GetStateName(), linkSpeed, linkDuplex);
 
 	// Report the socket states
-	String<StringLength50> str;
-	str.copy("Socket states:");
+	reply.lcat("Socket states:");
 	for (const W5500Socket* skt : sockets)
 	{
-		str.catf(" %u", skt->GetState());
+		reply.catf(" %u", skt->GetState());
 	}
-	str.cat('\n');
-	platform.Message(mtype, str.c_str());
 }
 
 // Enable or disable the network

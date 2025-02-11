@@ -108,16 +108,22 @@ void StallDetectionEndstop::AddDriverToMonitoredList(DriverId did, float speed) 
 			DeleteRemoteStallEndstops();
 			throw;
 		}
+
+		bool found = false;
 		for (size_t i = 0; i < remoteDriversMonitored.Size(); ++i)
 		{
 			if (remoteDriversMonitored[i].boardId == did.boardAddress)
 			{
 				remoteDriversMonitored[i].driversMonitored.SetBit(did.localDriver);
-				return;
+				found = true;
+				break;
 			}
 		}
 
-		(void)remoteDriversMonitored.Add(RemoteDriversMonitored(did.boardAddress, LocalDriversBitmap::MakeFromBits(did.localDriver)));		// we don't expect the vector to overflow
+		if (!found)
+		{
+			(void)remoteDriversMonitored.Add(RemoteDriversMonitored(did.boardAddress, LocalDriversBitmap::MakeFromBits(did.localDriver)));		// we don't expect the vector to overflow
+		}
 	}
 	else
 #endif

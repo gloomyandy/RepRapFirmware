@@ -47,7 +47,7 @@ public:
 	void AppendAuxReply(OutputBuffer *_ecv_null reply, bool rawMessage) noexcept;
 	bool Flush() noexcept;
 
-	void Diagnostics(MessageType mt, unsigned int index) noexcept;
+	void Diagnostics(const StringRef& reply, unsigned int index) noexcept;
 
 #if SUPPORT_MODBUS_RTU
 	bool ConfigureDirectionPort(const char *_ecv_array pinName, const StringRef& reply) THROWS(GCodeException);

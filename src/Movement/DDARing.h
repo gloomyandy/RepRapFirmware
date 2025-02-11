@@ -71,7 +71,7 @@ public:
 	uint32_t ManageIOBitsAndFeedForward() noexcept;										// Manage the IOBITS (G1 P parameter) and extruder heater feedforward
 
 	void RecordLookaheadError() noexcept { ++numLookaheadErrors; }						// Record a lookahead error
-	void Diagnostics(MessageType mtype, unsigned int ringNumber) noexcept;
+	void Diagnostics(const StringRef& reply, unsigned int ringNumber) noexcept;
 
 	bool SetWaitingToEmpty() noexcept;
 

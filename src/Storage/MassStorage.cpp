@@ -1281,24 +1281,22 @@ GCodeResult MassStorage::GetFileInfo(const char *_ecv_array filePath, GCodeFileI
 	return infoParser.GetFileInfo(filePath, p_info, quitEarly, customVars);
 }
 
-void MassStorage::Diagnostics(MessageType mtype) noexcept
+void MassStorage::Diagnostics(const StringRef& reply) noexcept
 {
-	Platform& platform = reprap.GetPlatform();
-
 	// Show the number of free entries in the file table
-	platform.MessageF(mtype, "=== Storage ===\nFree file entries: %u\n", MassStorage::GetNumFreeFiles());
+	reply.printf("=== Storage ===\nFree file entries: %u", MassStorage::GetNumFreeFiles());
 
 # if HAS_MASS_STORAGE
 #  if HAS_HIGH_SPEED_SD
 	// Show the HSMCI CD pin and speed
-	platform.MessageF(mtype, "SD card 0 %s, interface speed: %.1fMBytes/sec\n",
+	reply.lcatf("SD card 0 %s, interface speed: %.1fMBytes/sec",
 								(IsCardDetected(0) ? "detected" : "not detected"), (double)((float)sd_mmc_get_interface_speed(0) * 0.000001));
 #  else
-	platform.MessageF(mtype, "SD card 0 %s\n", (MassStorage::IsCardDetected(0) ? "detected" : "not detected"));
+	reply.lcatf("SD card 0 %s", (MassStorage::IsCardDetected(0) ? "detected" : "not detected"));
 #  endif
 
 	// Show the longest SD card write time
-	platform.MessageF(mtype, "SD card longest read time %.1fms, write time %.1fms, max retries %u\n",
+	reply.lcatf("SD card longest read time %.1fms, write time %.1fms, max retries %u",
 								(double)DiskioGetAndClearLongestReadTime(), (double)DiskioGetAndClearLongestWriteTime(), DiskioGetAndClearMaxRetryCount());
 # endif
 }

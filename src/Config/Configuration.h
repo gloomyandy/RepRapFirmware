@@ -147,13 +147,9 @@ constexpr size_t MaxHeaterNameLength = StringLength50;	// Maximum number of char
 constexpr size_t MaxFanNameLength = StringLength50;		// Maximum number of characters in a fan name
 constexpr size_t MaxToolNameLength = StringLength50;	// Maximum allowed length for tool names
 
-#ifdef DUET3_ATE
+// GCodeReplyLength is also the maximum size of a fragment of the diagnostics, for example the Tasks section, so 256 isn't long enough on some processors
 constexpr size_t GCodeReplyLength = StringLength500;	// Maximum number of characters in a GCode reply that doesn't use an OutputBuffer (ATE codes can generate long replies)
 constexpr size_t FormatStringLength = StringLength500;	// GCode replies are processed by Platform::MessageF which uses an intermediate buffer of this length
-#else
-constexpr size_t GCodeReplyLength = StringLength256;	// Maximum number of characters in a GCode reply that doesn't use an OutputBuffer
-constexpr size_t FormatStringLength = StringLength256;
-#endif
 constexpr size_t MachineNameLength = StringLength50;
 constexpr size_t RepRapPasswordLength = StringLength20;
 constexpr size_t MediumStringLength = MaxFilenameLength;
@@ -180,12 +176,13 @@ constexpr size_t MinimumBuffersForObjectModel = 20;		// Minimum number of free b
 #elif SAM4E || SAM4S
 constexpr size_t OUTPUT_BUFFER_SIZE = 256;				// How many bytes does each OutputBuffer hold?
 constexpr size_t OUTPUT_BUFFER_COUNT = 26;				// How many OutputBuffer instances do we have?
-constexpr size_t RESERVED_OUTPUT_BUFFERS = 4;			// Number of reserved output buffers after long responses, enough to hold a status response
+constexpr size_t RESERVED_OUTPUT_BUFFERS = 2;			// Number of reserved output buffers after long responses, enough to hold a status response
 constexpr size_t MinimumBuffersForObjectModel = 20;		// Minimum number of free buffers we want before we start assembling a request for the object model
 #else
 # error Unsupported processor
 #endif
 
+constexpr size_t MaxReportedAxes = 6;					// This used to be fixed at 9 but that's too big for some Duet 2 configurations
 constexpr size_t maxQueuedCodes = 16;					// How many codes can be queued?
 
 #if SAME70 || SAME5x || STM32H7

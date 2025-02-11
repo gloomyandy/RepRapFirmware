@@ -1454,122 +1454,141 @@ extern void SPWMDiagnostics();
 extern uint32_t numUsbInterrupts;
 #endif
 
-// Return diagnostic information
-void Platform::Diagnostics(MessageType mtype) noexcept
+// Return diagnostic information. Each part must fit in a buffer of length GCodeReplyLength.
+void Platform::Diagnostics(unsigned int part, const StringRef& reply) noexcept
 {
-#if 0	// USE_CACHE && (SAM4E || SAME5x)
-	// Get the cache statistics before we start messing around with the cache
-	const uint32_t cacheCount = Cache::GetHitCount();
-#endif
-
-	Message(mtype, "=== Platform ===\n");
-
-	// Debugging support
-	if (debugLine != 0)
+	switch (part)
 	{
-		MessageF(mtype, "Debug line %d\n", debugLine);
-	}
+	case 0:
+		reply.copy("=== Platform ===");
 
-	// Show the up time and reason for the last reset
-	const uint32_t now = (uint32_t)(millis64()/1000u);		// get up time in seconds
-	MessageF(mtype, "Last reset %02d:%02d:%02d ago, cause: %s\n", (unsigned int)(now/3600), (unsigned int)((now % 3600)/60), (unsigned int)(now % 60), GetResetReasonText());
-
-	// Show the reset code stored at the last software reset
-	{
-
-		NonVolatileMemory mem;
-		unsigned int slot;
-		const SoftwareResetData *_ecv_null const srd = mem.GetLastWrittenResetData(slot);
-		if (srd == nullptr)
+		// Debugging support
+		if (debugLine != 0)
 		{
-			Message(mtype, "Last software reset details not available\n");
+			reply.lcatf("Debug line %d", debugLine);
 		}
-		else
-		{
-			srd->Printit(mtype, slot);
-		}
-	}
 
-	// Show the current error codes
-	MessageF(mtype, "Error status: 0x%02" PRIx32 "\n", errorCodeBits);		// we only use the bottom 5 bits at present, so print just 2 characters
+		// Show the up time and reason for the last reset
+		{
+			const uint32_t now = (uint32_t)(millis64()/1000u);		// get up time in seconds
+			reply.lcatf("Last reset %02d:%02d:%02d ago, cause: %s", (unsigned int)(now/3600), (unsigned int)((now % 3600)/60), (unsigned int)(now % 60), GetResetReasonText());
+		}
+		break;
+
+	case 1:
+		// Show the reset code stored at the last software reset
+		{
+			NonVolatileMemory mem;
+			unsigned int slot;
+			const SoftwareResetData *_ecv_null const srd = mem.GetLastWrittenResetData(slot);
+			if (srd == nullptr)
+			{
+				reply.lcat("Last software reset details not available");
+			}
+			else
+			{
+				srd->PrintPart1(slot, reply);
+			}
+		}
+		break;
+
+	case 2:
+		{
+			// Show the reset code stored at the last software reset
+			NonVolatileMemory mem;
+			unsigned int slot;
+			const SoftwareResetData *_ecv_null const srd = mem.GetLastWrittenResetData(slot);
+			if (srd != nullptr)
+			{
+				srd->PrintPart2(reply);
+			}
+		}
+		break;
+
+	case 3:
+		// Show the current error codes
+		reply.printf("Error status: 0x%02" PRIx32, errorCodeBits);		// we only use the bottom 5 bits at present, so print just 2 characters
 
 #if HAS_AUX_DEVICES
-	// Show the aux port status
-	for (size_t i = 0; i < ARRAY_SIZE(auxDevices); ++i)
-	{
-		auxDevices[i].Diagnostics(mtype, i);
-	}
+		// Show the aux port status
+		for (size_t i = 0; i < ARRAY_SIZE(auxDevices); ++i)
+		{
+			auxDevices[i].Diagnostics(reply, i);
+		}
 #endif
+		break;
 
-#if 0	//ifdef DUET3MINI
-	// Report the processor revision level and analogIn status (trying to debug the spurious zero VIN issue)
-	{
-		// The DSU clocks are enabled by default so no need to enable them here
-		const unsigned int chipVersion = DSU->DID.bit.REVISION;
-		uint32_t conversionsStarted, conversionsCompleted, conversionTimeouts, errors;
-		AnalogIn::GetDebugInfo(conversionsStarted, conversionsCompleted, conversionTimeouts, errors);
-		MessageF(mtype, "MCU revision %u, ADC conversions started %" PRIu32 ", completed %" PRIu32 ", timed out %" PRIu32 ", errs %" PRIu32 "\n",
-					chipVersion, conversionsStarted, conversionsCompleted, conversionTimeouts, errors);
-	}
-
-#endif
-
+	case 4:
 #if HAS_CPU_TEMP_SENSOR
-	// Show the MCU temperatures
-	const float currentMcuTemperature = GetCpuTemperature();
-	MessageF(mtype, "MCU temperature: min %.1f, current %.1f, max %.1f\n",
-		(double)lowestMcuTemperature, (double)currentMcuTemperature, (double)highestMcuTemperature);
-	lowestMcuTemperature = highestMcuTemperature = currentMcuTemperature;
-
+		// Show the MCU temperatures
+		{
+			const float currentMcuTemperature = GetCpuTemperature();
+			reply.lcatf("MCU temperature: min %.1f, current %.1f, max %.1f", (double)lowestMcuTemperature, (double)currentMcuTemperature, (double)highestMcuTemperature);
+			lowestMcuTemperature = highestMcuTemperature = currentMcuTemperature;
 # if HAS_VOLTAGE_MONITOR
-	// No need to call reprap.BoardsUpdated() here because that is done in ResetVoltageMonitors which is called later
+			// No need to call reprap.BoardsUpdated() here because that is done in ResetVoltageMonitors which is called later
 # else
-	reprap.BoardsUpdated();
+			reprap.BoardsUpdated();
 # endif
+		}
+
 #endif
 
 #if HAS_VOLTAGE_MONITOR
-	// Show the supply voltage
-	MessageF(mtype, "Supply voltage: min %.1f, current %.1f, max %.1f, under voltage events: %" PRIu32 ", over voltage events: %" PRIu32 ", power good: %s\n",
-		(double)AdcReadingToPowerVoltage(lowestVin), (double)AdcReadingToPowerVoltage(currentVin), (double)AdcReadingToPowerVoltage(highestVin),
-				numVinUnderVoltageEvents, numVinOverVoltageEvents,
-				(HasDriverPower()) ? "yes" : "no");
+		// Show the supply voltage
+		reply.lcatf("Supply voltage: min %.1f, current %.1f, max %.1f, under voltage events: %" PRIu32 ", over voltage events: %" PRIu32 ", power good: %s",
+			(double)AdcReadingToPowerVoltage(lowestVin), (double)AdcReadingToPowerVoltage(currentVin), (double)AdcReadingToPowerVoltage(highestVin),
+					numVinUnderVoltageEvents, numVinOverVoltageEvents,
+					(HasDriverPower()) ? "yes" : "no");
 #endif
 
 
 #if HAS_12V_MONITOR
-	// Show the 12V rail voltage
-	MessageF(mtype, "12V rail voltage: min %.1f, current %.1f, max %.1f, under voltage events: %" PRIu32 "\n",
-		(double)AdcReadingToV12Voltage(lowestV12), (double)AdcReadingToV12Voltage(currentV12), (double)AdcReadingToV12Voltage(highestV12), numV12UnderVoltageEvents);
+		// Show the 12V rail voltage
+		reply.lcatf("12V rail voltage: min %.1f, current %.1f, max %.1f, under voltage events: %" PRIu32,
+			(double)AdcReadingToV12Voltage(lowestV12), (double)AdcReadingToV12Voltage(currentV12), (double)AdcReadingToV12Voltage(highestV12), numV12UnderVoltageEvents);
 #endif
+		ResetVoltageMonitors();
+		break;
 
-	ResetVoltageMonitors();
+	case 5:
+		Heap::Diagnostics(reply, *this);
+		Event::Diagnostics(reply, *this);
+		break;
 
-	Heap::Diagnostics(mtype, *this);
-	Event::Diagnostics(mtype, *this);
+	case 6:
+		// Show current RTC time
+		{
+			reply.lcat("Date/time: ");
+			struct tm timeInfo;
+			if (gmtime_r(&realTime, &timeInfo) != nullptr)
+			{
+				reply.catf("%04u-%02u-%02u %02u:%02u:%02u",
+						timeInfo.tm_year + 1900, timeInfo.tm_mon + 1, timeInfo.tm_mday,
+						timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
+			}
+			else
+			{
+				reply.cat("not set");
+			}
+		}
+		reprap.Timing(reply);
 
-	// Show current RTC time
-	Message(mtype, "Date/time: ");
-	struct tm timeInfo;
-	if (gmtime_r(&realTime, &timeInfo) != nullptr)
-	{
-		MessageF(mtype, "%04u-%02u-%02u %02u:%02u:%02u\n",
-				timeInfo.tm_year + 1900, timeInfo.tm_mon + 1, timeInfo.tm_mday,
-				timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
-	}
-	else
-	{
-		Message(mtype, "not set\n");
-	}
-
-#if 0	// USE_CACHE && (SAM4E || SAME5x)
-	MessageF(mtype, "Cache data hit count %" PRIu32 "\n", cacheCount);
+#ifdef I2C_IFACE
+		{
+			const TwoWire::ErrorCounts errs = I2C_IFACE.GetErrorCounts(true);
+			reply.lcatf("I2C nak errors %" PRIu32 ", send timeouts %" PRIu32 ", receive timeouts %" PRIu32 ", finishTimeouts %" PRIu32 ", resets %" PRIu32,
+				errs.naks, errs.sendTimeouts, errs.recvTimeouts, errs.finishTimeouts, errs.resets);
+		}
 #endif
+		break;
 
-	reprap.Timing(mtype);
+		static_assert(NumPlatformDiagnosticParts == 7);
+	}
+
 
 #if CORE_USES_TINYUSB	//DEBUG
-	MessageF(mtype, "USB interrupts %" PRIu32 "\n", numUsbInterrupts);
+//	MessageF(mtype, "USB interrupts %" PRIu32 "\n", numUsbInterrupts);
 #endif
 
 #if 0
@@ -1584,11 +1603,6 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 		numSoftTimerInterruptsExecuted, STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_RB, lastSoftTimerInterruptScheduledAt, GetTimerTicks());
 #endif
 
-#ifdef I2C_IFACE
-	const TwoWire::ErrorCounts errs = I2C_IFACE.GetErrorCounts(true);
-	MessageF(mtype, "I2C nak errors %" PRIu32 ", send timeouts %" PRIu32 ", receive timeouts %" PRIu32 ", finishTimeouts %" PRIu32 ", resets %" PRIu32 "\n",
-		errs.naks, errs.sendTimeouts, errs.recvTimeouts, errs.finishTimeouts, errs.resets);
-#endif
 }
 
 // Execute a timed square root that takes less than one millisecond
@@ -2234,7 +2248,6 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 	// See if a mode is provided
 	if (gb.Seen('S'))
 	{
-
 		const uint32_t val = gb.GetLimitedUIValue('S', ARRAY_SIZE(auxModes));
 		const AuxMode newMode = auxModes[val];
 		if (newMode == AuxMode::device)

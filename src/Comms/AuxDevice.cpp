@@ -162,12 +162,13 @@ bool AuxDevice::Flush() noexcept
 	return hasMore;
 }
 
-void AuxDevice::Diagnostics(MessageType mt, unsigned int index) noexcept
+// Append a line of diagnostics info for this port
+void AuxDevice::Diagnostics(const StringRef& reply, unsigned int index) noexcept
 {
 	if (mode != AuxMode::disabled)
 	{
 		const AsyncSerial::Errors errs = uart->GetAndClearErrors();
-		reprap.GetPlatform().MessageF(mt, "Aux%u errors %u,%u,%u\n", index, (unsigned int)errs.uartOverrun, (unsigned int)errs.bufferOverrun, (unsigned int)errs.framing);
+		reply.lcatf("Aux%u errors %u,%u,%u", index, (unsigned int)errs.uartOverrun, (unsigned int)errs.bufferOverrun, (unsigned int)errs.framing);
 	}
 }
 

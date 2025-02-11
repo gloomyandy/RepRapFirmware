@@ -216,57 +216,54 @@ bool GCodeBuffer::IsWaitingForTemperatures() const noexcept
 }
 
 // Write some debug info
-void GCodeBuffer::Diagnostics(MessageType mtype) noexcept
+void GCodeBuffer::Diagnostics(const StringRef& reply) noexcept
 {
-	String<StringLength256> scratchString;
-	scratchString.copy(codeChannel.ToString());
+	reply.lcat(codeChannel.ToString());
 #if HAS_SBC_INTERFACE
-	scratchString.cat(IsBinary() ? "* " : " ");
+	reply.cat(IsBinary() ? "* " : " ");
 #else
-	scratchString.cat(" ");
+	reply.cat(" ");
 #endif
 	switch (bufferState)
 	{
 	case GCodeBufferState::parseNotStarted:
-		scratchString.cat("is idle");
+		reply.cat("is idle");
 		break;
 
 	case GCodeBufferState::ready:
-		scratchString.cat("is ready with \"");
-		AppendFullCommand(scratchString.GetRef());
-		scratchString.cat('"');
+		reply.cat("is ready with \"");
+		AppendFullCommand(reply);
+		reply.cat('"');
 		break;
 
 	case GCodeBufferState::executing:
-		scratchString.cat("is doing \"");
-		AppendFullCommand(scratchString.GetRef());
-		scratchString.cat('"');
+		reply.cat("is doing \"");
+		AppendFullCommand(reply);
+		reply.cat('"');
 		break;
 
 	default:
-		scratchString.cat("is assembling a command");
+		reply.cat("is assembling a command");
 		break;
 	}
 
-	scratchString.cat(" in state(s)");
+	reply.cat(" in state(s)");
 	const GCodeMachineState *_ecv_null ms = machineState;
 	do
 	{
-		scratchString.catf(" %d", (int)ms->GetState());
+		reply.catf(" %d", (int)ms->GetState());
 		ms = ms->GetPrevious();
 	} while (ms != nullptr);
 	if (IsDoingFileMacro())
 	{
-		scratchString.cat(", running macro");
+		reply.cat(", running macro");
 	}
 #if SUPPORT_ASYNC_MOVES
 	if (syncState != SyncState::running)
 	{
-		scratchString.catf(", sync state %u", (unsigned int)syncState);
+		reply.catf(", sync state %u", (unsigned int)syncState);
 	}
 #endif
-	scratchString.cat('\n');
-	reprap.GetPlatform().Message(mtype, scratchString.c_str());
 }
 
 // Add a character to the end

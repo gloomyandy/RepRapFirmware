@@ -1483,9 +1483,9 @@ void HttpResponder::SendData() noexcept
 	}
 }
 
-void HttpResponder::Diagnostics(MessageType mt) const noexcept
+void HttpResponder::Diagnostics(const StringRef& reply) const noexcept
 {
-	GetPlatform().MessageF(mt, " HTTP(%d)", (int)responderState);
+	reply.catf(" HTTP(%d)", (int)responderState);
 }
 
 /*static*/ void HttpResponder::InitStatic() noexcept
@@ -1531,7 +1531,7 @@ void HttpResponder::Diagnostics(MessageType mt) const noexcept
 		OutputBuffer *_ecv_null buffer = gcodeReply.GetLastItem();
 		if (buffer == nullptr || buffer->IsReferenced())
 		{
-			if (!OutputBuffer::Allocate(buffer))
+			if (!OutputBuffer::Allocate(buffer, false))
 			{
 				// No more space available, stop here
 				return;
@@ -1625,10 +1625,10 @@ void HttpResponder::Diagnostics(MessageType mt) const noexcept
 	}
 }
 
-/*static*/ void HttpResponder::CommonDiagnostics(MessageType mtype) noexcept
+/*static*/ void HttpResponder::CommonDiagnostics(const StringRef& reply) noexcept
 {
-	GetPlatform().MessageF(mtype, "HTTP sessions: %u of %u\n", numSessions, MaxHttpSessions);
-	GetPlatform().MessageF(mtype, "Uploads/Errors: %u/%u\n", numUploads, numUploadErrors);
+	reply.lcatf("HTTP sessions: %u of %u", numSessions, MaxHttpSessions);
+	reply.lcatf("Uploads/Errors: %u/%u", numUploads, numUploadErrors);
 	numUploads = numUploadErrors = 0;
 }
 

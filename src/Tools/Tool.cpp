@@ -927,7 +927,7 @@ GCodeResult Tool::SetFirmwareRetraction(GCodeBuffer &gb, const StringRef &reply,
 	else
 	{
 		// Use an output buffer because M207 can report on all tools
-		if (outBuf == nullptr && !OutputBuffer::Allocate(outBuf))
+		if (outBuf == nullptr && !OutputBuffer::Allocate(outBuf, false))
 		{
 			return GCodeResult::notFinished;
 		}

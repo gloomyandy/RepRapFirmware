@@ -993,18 +993,17 @@ const char *_ecv_array WiFiInterface::TranslateEspResetReason(uint32_t reason) n
 			: "Unrecognised";
 }
 
-void WiFiInterface::Diagnostics(MessageType mtype) noexcept
+void WiFiInterface::Diagnostics(const StringRef& reply) noexcept
 {
-	platform.MessageF(mtype,
-						"=== WiFi ===\nInterface state: %s\n"
-						"Module is %s\n"
-						"Failed messages: pending %u, notrdy %u, noresp %u\n",
-						 	 GetStateName(),
-							 TranslateWiFiState(currentMode),
-							 transferAlreadyPendingCount, readyTimeoutCount, responseTimeoutCount
-					 );
+	reply.lcatf("=== WiFi ===\nInterface state: %s\n"
+				"Module is %s\n"
+				"Failed messages: pending %u, notrdy %u, noresp %u",
+					 GetStateName(),
+					 TranslateWiFiState(currentMode),
+					 transferAlreadyPendingCount, readyTimeoutCount, responseTimeoutCount
+			   );
 #if STM32
-	platform.MessageF(mtype, "Bad header: %u/%u\n", badHeaderCount, actualBadHeaderCount);
+	reply.lcatf("Bad header: %u/%u", badHeaderCount, actualBadHeaderCount);
 #endif
 
 	if (GetState() != NetworkState::disabled && GetState() != NetworkState::starting1 && GetState() != NetworkState::starting2)
@@ -1015,47 +1014,46 @@ void WiFiInterface::Diagnostics(MessageType mtype) noexcept
 		{
 			NetworkStatusResponse& r = status.Value();
 			r.versionText[ARRAY_UPB(r.versionText)] = 0;
-			platform.MessageF(mtype, "Firmware version %s\n", r.versionText);
-			platform.MessageF(mtype, "MAC address %02x:%02x:%02x:%02x:%02x:%02x\n",
-								r.macAddress[0], r.macAddress[1], r.macAddress[2], r.macAddress[3], r.macAddress[4], r.macAddress[5]);
-			platform.MessageF(mtype, "Module reset reason: %s, Vcc %.2f, flash size %" PRIu32 ", free heap %" PRIu32 "\n",
+			reply.lcatf("Firmware version %s", r.versionText);
+			reply.lcatf("Module reset reason: %s, Vcc %.2f, flash size %" PRIu32 ", free heap %" PRIu32,
 								TranslateEspResetReason(r.resetReason), (double)((float)r.vcc/1024), r.flashSize, r.freeHeap);
+			reply.lcatf("MAC address %02x:%02x:%02x:%02x:%02x:%02x",
+								r.macAddress[0], r.macAddress[1], r.macAddress[2], r.macAddress[3], r.macAddress[4], r.macAddress[5]);
 
 			if (currentMode == WiFiState::connected || currentMode == WiFiState::runningAsAccessPoint)
 			{
-				platform.MessageF(mtype, "WiFi IP address %s\n", IP4String(r.ipAddress).c_str());
+				reply.lcatf("IP address %s", IP4String(r.ipAddress).c_str());
 			}
 
 			if (currentMode == WiFiState::connected)
 			{
 				constexpr const char *_ecv_array ConnectionModes[4] =  { "none", "802.11b", "802.11g", "802.11n" };
-				platform.MessageF(mtype, "Signal strength %ddBm, channel %u, mode %s, reconnections %u\n",
+				reply.lcatf("Signal strength %ddBm, channel %u, mode %s, reconnections %u",
 											(int)r.rssi, r.channel, ConnectionModes[r.phyMode], reconnectCount);
 			}
 			else if (currentMode == WiFiState::runningAsAccessPoint)
 			{
-				platform.MessageF(mtype, "Connected clients %u\n", (unsigned int)r.numClients);
+				reply.lcatf("Connected clients %u", (unsigned int)r.numClients);
 			}
 			// status, ssid and hostName not displayed
-			platform.MessageF(mtype, "Clock register %08" PRIx32 "\n", r.clockReg);
+			reply.lcatf("Clock register %08" PRIx32, r.clockReg);
 
 			// Print LwIP stats and other values over the ESP's UART line
 			if (SendCommand(NetworkCommand::diagnostics, 0, 0, 0, nullptr, 0, nullptr, 0) != ResponseEmpty)
 			{
-				platform.Message(mtype, "Failed to request ESP stats\n");
+				reply.lcatf("Failed to request ESP stats");
 			}
 		}
 		else
 		{
-			platform.Message(mtype, "Failed to get WiFi status\n");
+			reply.lcatf("Failed to get WiFi status");
 		}
 	}
-	platform.Message(mtype, "Socket states:");
+	reply.lcat("Socket states:");
 	for (size_t i = 0; i < NumWiFiTcpSockets; i++)
 	{
-		platform.MessageF(mtype, " %d", sockets[i]->State());
+		reply.catf(" %d", sockets[i]->State());
 	}
-	platform.Message(mtype, "\n");
 }
 
 // Enable or disable the network

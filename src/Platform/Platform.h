@@ -218,10 +218,13 @@ public:
 	void Spin() noexcept;									// This gets called in the main loop and should do any housekeeping needed
 	void Exit() noexcept;									// Shut down tidily. Calling Init after calling this should reset to the beginning
 
-	void Diagnostics(MessageType mtype) noexcept;
-	static const char *_ecv_array GetResetReasonText() noexcept;
+	void Diagnostics(unsigned int part, const StringRef& reply) noexcept;
+	static constexpr unsigned int NumPlatformDiagnosticParts = 7;
+
 	GCodeResult DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, OutputBuffer *_ecv_null & buf, unsigned int d) THROWS(GCodeException);
+	static const char *_ecv_array GetResetReasonText() noexcept;
 	static bool WasDeliberateError() noexcept { return deliberateError; }
+
 	void LogError(ErrorCode e) noexcept { errorCodeBits |= (uint32_t)e; }
 
 	bool GetAtxPowerState() const noexcept;

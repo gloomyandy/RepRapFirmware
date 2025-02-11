@@ -56,17 +56,9 @@ GCodeResult RemoteZProbe::AppendPinNames(const StringRef& str) noexcept
 // Get the raw reading. Not used with scanning Z probes except for reporting in the object model.
 uint32_t RemoteZProbe::GetRawReading() const noexcept
 {
-	if (type == ZProbeType::scanningAnalog)
-	{
-		if (useTouchMode)
-		{
-			return (touchTriggered) ? 1000 : 0;
-		}
-		return lastValue;
-	}
-
-	// Otherwise it must be a digital probe because we don't currently support other types of analog probe
-	return (lastValue > 0) ? 1000 : 0;				// for digital probes the reading sent over CAN (stored in lastValue) is 0xFFFFFFFF.
+	return (type == ZProbeType::scanningAnalog) ? lastValue
+			: (lastValue > 0) ? 1000						// if it's not a scanning probe then it must be digital because we don't yet support analog probes on expansion boards
+				: 0;										// for digital probes the reading sent over CAN (stored in lastValue) is 0xFFFFFFFF or zero.
 }
 
 bool RemoteZProbe::SetProbing(bool isProbing) noexcept

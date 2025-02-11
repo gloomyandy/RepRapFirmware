@@ -73,7 +73,7 @@ public:
 #if HAS_NETWORKING
 	[[noreturn]] void Spin() noexcept;
 #endif
-	void Diagnostics(MessageType mtype) noexcept;
+	void Diagnostics(unsigned int part, const StringRef& reply) noexcept;
 	unsigned int GetNumNetworkInterfaces() const noexcept;
 	bool IsWiFiInterface(unsigned int interface) const noexcept;
 

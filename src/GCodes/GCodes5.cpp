@@ -287,7 +287,7 @@ GCodeResult GCodes::HandleM486(GCodeBuffer &gb, const StringRef &reply, OutputBu
 	if (!seen)
 	{
 		// List objects on build plate
-		if (!OutputBuffer::Allocate(buf))
+		if (!OutputBuffer::Allocate(buf, false))
 		{
 			return GCodeResult::notFinished;
 		}

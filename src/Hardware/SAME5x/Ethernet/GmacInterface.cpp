@@ -812,9 +812,9 @@ extern "C" uint32_t sys_now() noexcept
 	return millis();
 }
 
-void ethernetif_diagnostics(MessageType mtype) noexcept
+void ethernetif_diagnostics(const StringRef& reply) noexcept
 {
-	reprap.GetPlatform().MessageF(mtype, "Error counts: %u %u %u %u %u %u\nSocket states:",
+	reply.lcatf("Error counts: %u %u %u %u %u %u\nSocket states:",
 								rxErrorCount, rxBuffersNotFullyPopulatedCount, rxBufferNotAvailableCount, txErrorCount, txBufferNotFreeCount, txBufferTooShortCount);
 	rxErrorCount = rxBuffersNotFullyPopulatedCount = rxBufferNotAvailableCount = txErrorCount = txBufferNotFreeCount = txBufferTooShortCount = 0;
 }

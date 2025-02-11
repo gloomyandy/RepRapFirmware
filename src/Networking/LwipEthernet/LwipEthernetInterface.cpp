@@ -542,15 +542,14 @@ void LwipEthernetInterface::Spin() noexcept
 	}
 }
 
-void LwipEthernetInterface::Diagnostics(MessageType mtype) noexcept
+void LwipEthernetInterface::Diagnostics(const StringRef& reply) noexcept
 {
-	platform.MessageF(mtype, "= Ethernet =\nInterface state: %s\n", GetStateName());
-	ethernetif_diagnostics(mtype);
+	reply.lcatf("= Ethernet =\nInterface state: %s", GetStateName());
+	ethernetif_diagnostics(reply);
 	for (const LwipSocket *s : sockets)
 	{
-		platform.MessageF(mtype, " %d", s->GetState());
+		reply.catf(" %d", s->GetState());
 	}
-	platform.Message(mtype, "\n");
 
 #if LWIP_STATS
 	if (reprap.Debug(Module::Network))

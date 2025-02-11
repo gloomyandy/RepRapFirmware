@@ -1648,14 +1648,14 @@ void TmcDriverState::AppendDriverStatus(const StringRef& reply) noexcept
 	}
 #endif
 
-	reply.catf(", read errors %u, write errors %u, ifcnt %u, reads %u, writes %u, timeouts %u, DMA errors %u",
+	reply.catf(", r/w errs %u/%u, ifcnt %u, reads/writes %u/%u, timeouts %u, DMA errs %u",
 					readErrors, writeErrors, lastIfCount, numReads, numWrites, numTimeouts, numDmaErrors);
 #if SUPPORT_TMC2208 || SUPPORT_TMC2209
 # if SUPPORT_TMC2240
 	if (!isTmc2240)
 # endif
 	{
-		reply.catf(", CC errors %u", badChopConfErrors);
+		reply.catf(", CC errs %u", badChopConfErrors);
 	}
 #endif
 	if (failedOp != 0xFF)

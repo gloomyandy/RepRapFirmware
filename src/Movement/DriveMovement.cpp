@@ -305,10 +305,10 @@ static inline motioncalc_t fastLimSqrtm(motioncalc_t f) noexcept
 }
 
 // Notify a step error. This always returns false so that CalcNextStepTimeFull can tail-chain to it.
-bool DriveMovement::LogStepError(uint8_t type, float extra, const MoveSegment *seg) noexcept
+bool DriveMovement::LogStepError(uint8_t type, float info, const MoveSegment *seg) noexcept
 {
 	const StringRef& dbgRef = Platform::genericDebugBuffer.GetRef();
-	dbgRef.printf("Code %u move error: info=%.3g, seg: ", type, (double)extra);
+	dbgRef.printf("Code %u move error: info=%.3g, seg: ", type, (double)info);
 	if (seg != nullptr)
 	{
 		seg->AppendDetails(dbgRef);
@@ -498,17 +498,28 @@ pre(stepsTillRecalc == 0; segments != nullptr)
 	}
 
 	nextCalcStepTime += t0;
-
-	if (unlikely(std::isnan(nextCalcStepTime) || nextCalcStepTime < (motioncalc_t)0.0))
+	uint32_t iNextCalcStepTime;
+	// Check that the next step time is reasonable
+	if (unlikely(std::isnan(nextCalcStepTime)))
 	{
-		if (reprap.Debug(Module::Move))
-		{
-			debugPrintf("nextCalcStepTime=%.3e\n", (double)nextCalcStepTime);
-		}
 		return LogStepError(2, (float)nextCalcStepTime, currentSegment);
 	}
 
-	uint32_t iNextCalcStepTime = (uint32_t)nextCalcStepTime;
+	if (unlikely(nextCalcStepTime < (motioncalc_t)0.0))
+	{
+		// If we are carrying almost a whole step forward to this segment so that the first step is due almost immediately,
+		// then due to floating point rounding error we can get a slightly negative value here for nextCalcStepTime.
+		// The only value we have had reported so far is -0.00195 but we now allow up to two step clocks of error.
+		if (nextCalcStepTime < -(motioncalc_t)2.0)
+		{
+			return LogStepError(2, (float)nextCalcStepTime, currentSegment);
+		}
+		iNextCalcStepTime = 0;
+	}
+	else
+	{
+		iNextCalcStepTime = (uint32_t)nextCalcStepTime;
+	}
 
 	if (iNextCalcStepTime > currentSegment->GetDuration())
 	{
@@ -516,7 +527,7 @@ pre(stepsTillRecalc == 0; segments != nullptr)
 		// When the end speed is very low, calculating the time of the last step is very sensitive to rounding error.
 		// So if this is the last step and it is late, bring it forward to the expected finish time.
 		// 2023-12-06: we now allow any step to be late but we record the maximum number.
-		// 2024-040-5: we now allow steps to be late on any segment, not just the last one, because a segment may be 0 or 1 step long and on deltas the last 2 steps may be calculated late.
+		// 2024-04-05: we now allow steps to be late on any segment, not just the last one, because a segment may be 0 or 1 step long and on deltas the last 2 steps may be calculated late.
 		iNextCalcStepTime = currentSegment->GetDuration();
 		const int32_t nextCalcStep = nextStep + (int32_t)stepsTillRecalc;
 		const int32_t stepsLate = segmentStepLimit - nextCalcStep;

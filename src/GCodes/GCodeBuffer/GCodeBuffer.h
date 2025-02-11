@@ -59,7 +59,7 @@ public:
 	void Init() noexcept;														// Set it up to parse another G-code
 	void Disable() noexcept;													// Disable input from the associated port
 	void Enable(uint32_t commsProperties) noexcept;								// Enable input and set the CRC or checksum requirements
-	void Diagnostics(MessageType mtype) noexcept;								// Write some debug info
+	void Diagnostics(const StringRef& reply) noexcept;							// Write some debug info
 
 	bool Put(char c) noexcept SPEED_CRITICAL;									// Add a character to the end
 #if HAS_SBC_INTERFACE

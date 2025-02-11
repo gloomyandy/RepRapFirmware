@@ -33,7 +33,7 @@ namespace DuetExpansion
 	void DigitalWrite(Pin pin, bool high) noexcept;							// Write a pin
 	void AnalogOut(Pin pin, float pwm) noexcept;							// Set the PWM value on this pin
 	uint16_t DiagnosticRead() noexcept;										// Diagnose the SX1509 by setting all pins as inputs and reading them
-	void Diagnostics(MessageType mtype) noexcept;							// Print diagnostic data
+	void Diagnostics(const StringRef& reply) noexcept;						// Print diagnostic data
 }
 
 #endif /* SRC_DUETNG_DUEXN_H_ */

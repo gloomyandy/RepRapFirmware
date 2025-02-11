@@ -542,23 +542,19 @@ void Heat::SendHeatersStatus(CanMessageBuffer& buf) noexcept
 	}
 }
 
-void Heat::Diagnostics(MessageType mtype) noexcept
+void Heat::Diagnostics(const StringRef& reply) noexcept
 {
-	Platform& platform = reprap.GetPlatform();
-	platform.Message(mtype, "=== Heat ===\n");
-	String<StringLength100> str;
-	str.copy("Bed heaters");
+	reply.copy("=== Heat ===\nBed heaters");
 	for (int8_t bedHeater : bedHeaters)
 	{
-		str.catf(" %d", bedHeater);
+		reply.catf(" %d", bedHeater);
 	}
-	str.cat(", chamber heaters");
+	reply.cat(", chamber heaters");
 	for (int8_t chamberHeater : chamberHeaters)
 	{
-		str.catf(" %d", chamberHeater);
+		reply.catf(" %d", chamberHeater);
 	}
-	str.catf(", ordering errs %u\n", sensorOrderingErrors);
-	platform.Message(mtype, str.c_str());
+	reply.catf(", ordering errs %u", sensorOrderingErrors);
 
 	for (size_t heater : ARRAY_INDICES(heaters))
 	{
@@ -567,7 +563,7 @@ void Heat::Diagnostics(MessageType mtype) noexcept
 		{
 			const float acc = h->GetAccumulator();
 			h.Release();
-			platform.MessageF(mtype, "Heater %u is on, I-accum = %.1f\n", heater, (double)acc);
+			reply.lcatf("Heater %u is on, I-accum = %.1f", heater, (double)acc);
 		}
 	}
 }

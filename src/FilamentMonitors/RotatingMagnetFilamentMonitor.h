@@ -18,13 +18,12 @@ public:
 protected:
 	DECLARE_OBJECT_MODEL
 
-	void Diagnostics(MessageType mtype, unsigned int extruder) noexcept override;
+	void Diagnostics(const StringRef& reply) noexcept override;
 	const char *_ecv_array GetTypeText() const noexcept override { return "rotatingMagnet"; }
 
 	GCodeResult Configure(GCodeBuffer& gb, const StringRef& reply, bool& seen) THROWS(GCodeException) override;
 #if SUPPORT_REMOTE_COMMANDS
 	GCodeResult Configure(const CanMessageGenericParser& parser, const StringRef& reply) noexcept override;
-	void Diagnostics(const StringRef& reply) noexcept override;
 #endif
 	FilamentSensorStatus Check(bool isPrinting, bool fromIsr, uint32_t isrMillis, float filamentConsumed) noexcept override;
 	FilamentSensorStatus Clear() noexcept override;

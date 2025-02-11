@@ -16,6 +16,7 @@ extern "C" {
 }
 
 #include <Platform/MessageType.h>
+#include <General/StringRef.h>
 
 err_t ethernetif_init(struct netif *netif) noexcept;		// called by LwIP to initialise the interface
 
@@ -31,6 +32,6 @@ bool ethernetif_link_established() noexcept;				// asks the PHY if the link is s
 
 void ethernetif_set_mac_address(const uint8_t macAddress[]) noexcept;
 
-void ethernetif_diagnostics(MessageType mtype) noexcept;
+void ethernetif_diagnostics(const StringRef& reply) noexcept;
 
 #endif /* SRC_HARDWARE_SAME5X_ETHERNET_GMACINTERFACE_H_ */

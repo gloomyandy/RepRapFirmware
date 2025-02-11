@@ -78,12 +78,7 @@ constexpr ObjectModelArrayTableEntry Move::objectModelArrayTable[] =
 	// 0. Axes
 	{
 		nullptr,					// no lock needed
-		[] (const ObjectModel *_ecv_from self, const ObjectExplorationContext& context) noexcept -> size_t
-				{
-					const size_t numAxes = reprap.GetGCodes().GetTotalAxes();
-					// The array gets too large to send when we want all fields and there are a lot of axes, so restrict the number of axes returned to 9
-					return (context.TruncateLongArrays()) ? min<size_t>(numAxes, 9) : numAxes;
-				},
+		[] (const ObjectModel *_ecv_from self, const ObjectExplorationContext& context) noexcept -> size_t { return reprap.GetGCodes().GetTotalAxes(); },
 		[] (const ObjectModel *_ecv_from self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(self, 9); }
 	},
 	// 1. Extruders
@@ -142,6 +137,11 @@ constexpr ObjectModelArrayTableEntry Move::objectModelArrayTable[] =
 };
 
 DEFINE_GET_OBJECT_MODEL_ARRAY_TABLE(Move)
+
+size_t Move::GetMaxElementsToReturn(const ObjectModelArrayTableEntry *entry) const noexcept
+{
+	return (entry == &objectModelArrayTable[0]) ? MaxReportedAxes : 0;				// return at most this number of elements of move.axes unless just move.axes is requested
+}
 
 static inline const char *_ecv_array GetFilamentName(size_t extruder) noexcept
 {
@@ -905,36 +905,30 @@ static inline uint32_t TickPeriodToFreq(StepTimer::Ticks tickPeriod) noexcept
 
 #endif
 
-void Move::Diagnostics(MessageType mtype) noexcept
+void Move::Diagnostics(unsigned int part, const StringRef& reply) noexcept
 {
-	// Get the type of bed compensation in use
-#if STEPS_DEBUG
-	String<StringLength256> scratchString;
-#else
-	String<StringLength100> scratchString;
-#endif
-	scratchString.copy(GetCompensationTypeString());
-
-	const float totalDelayToReport = (float)StepTimer::GetMovementDelay() * (1000.0/(float)StepTimer::GetTickRate());
+	switch (part)
+	{
+	case 0:
+		{
+			const float totalDelayToReport = (float)StepTimer::GetMovementDelay() * (1000.0/(float)StepTimer::GetTickRate());
 
 #if SUPPORT_CAN_EXPANSION
-	const float ownDelayToReport = (float)StepTimer::GetOwnMovementDelay() * (1000.0/(float)StepTimer::GetTickRate());
+			const float ownDelayToReport = (float)StepTimer::GetOwnMovementDelay() * (1000.0/(float)StepTimer::GetTickRate());
 #endif
-
-	Platform& p = reprap.GetPlatform();
-	p.MessageF(mtype,
-				"=== Move ===\nSegments created %u, maxWait %" PRIu32 "ms, bed comp in use: %s, height map offset %.3f, hiccups added %u/%u"
+			reply.printf("=== Move ===\nSegments created %u, maxWait %" PRIu32 "ms, bed comp in use: %s, height map offset %.3f, hiccups added %u/%u"
 #if SUPPORT_CAN_EXPANSION
-				" (%.2f/%.2fms)"
+						" (%.2f/%.2fms)"
 #else
-				" (%.2fms)"
+						" (%.2fms)"
 #endif
-				", max steps late %" PRIi32
+						", max steps late %" PRIi32
 #if 1	//debug
-				", ebfmin %.2f, ebfmax %.2f"
+						", ebfmin %.2f, ebfmax %.2f"
 #endif
-				"\n",
-						MoveSegment::NumCreated(), longestGcodeWaitInterval, scratchString.c_str(), (double)zShift, numPrepareHiccups, numInterruptHiccups,
+						,
+
+						MoveSegment::NumCreated(), longestGcodeWaitInterval, GetCompensationTypeString(), (double)zShift, numPrepareHiccups, numInterruptHiccups,
 #if SUPPORT_CAN_EXPANSION
 						(double)ownDelayToReport, (double)totalDelayToReport,
 #else
@@ -944,90 +938,70 @@ void Move::Diagnostics(MessageType mtype) noexcept
 #if 1
 						, (double)minExtrusionPending, (double)maxExtrusionPending
 #endif
-		);
-	longestGcodeWaitInterval = 0;
-	numInterruptHiccups = numPrepareHiccups = 0;
+			);
+
+			longestGcodeWaitInterval = 0;
+			numInterruptHiccups = numPrepareHiccups = 0;
 #if 1	//debug
-	minExtrusionPending = maxExtrusionPending = 0.0;
+			minExtrusionPending = maxExtrusionPending = 0.0;
 #endif
 
 #if STEPS_DEBUG
-	scratchString.copy("Pos req/act/dcf:");
-	for (size_t drive = 0; drive < reprap.GetGCodes().GetTotalAxes(); ++drive)
-	{
-		scratchString.catf(" %.2f/%" PRIi32 "/%.2f", (double)dms[drive].positionRequested, dms[drive].currentMotorPosition, (double)dms[drive].distanceCarriedForwards);
-	}
-	scratchString.cat('\n');
-	p.Message(mtype, scratchString.c_str());
-#endif
-
-#if DDA_LOG_PROBE_CHANGES
-	// Temporary code to print Z probe trigger positions
-	p.Message(mtype, "Probe change coordinates:");
-	char ch = ' ';
-	for (size_t i = 0; i < numLoggedProbePositions; ++i)
-	{
-		float xyzPos[XYZ_AXES];
-		MotorStepsToCartesian(loggedProbePositions + (XYZ_AXES * i), XYZ_AXES, XYZ_AXES, xyzPos);
-		p.MessageF(mtype, "%c%.2f,%.2f", ch, xyzPos[X_AXIS], xyzPos[Y_AXIS]);
-		ch = ',';
-	}
-	p.Message(mtype, "\n");
-#endif
-
-	scratchString.Clear();
-	StepTimer::Diagnostics(scratchString.GetRef());
-	p.MessageF(mtype, "%s\n", scratchString.c_str());
-	axisShaper.Diagnostics(mtype);
-
-	// Show the motor position and stall status
-	for (size_t drive = 0; drive < NumDirectDrivers; ++drive)
-	{
-		String<StringLength256> driverStatus;
-		driverStatus.printf("Driver %u: ", drive);
-#ifdef DUET3_MB6XD
-		driverStatus.cat((HasDriverError(drive)) ? "error" : "ok");
-#elif HAS_SMART_DRIVERS
-		if (drive < numSmartDrivers)
-		{
-			const StandardDriverStatus status = SmartDrivers::GetStatus(drive, false, false);
-			status.AppendText(driverStatus.GetRef(), 0);
-			if (!status.notPresent)
+			reply.lcat("Pos req/act/dcf:");
+			for (size_t drive = 0; drive < reprap.GetGCodes().GetTotalAxes(); ++drive)
 			{
-				SmartDrivers::AppendDriverStatus(drive, driverStatus.GetRef());
+				reply.catf(" %.2f/%" PRIi32 "/%.2f", (double)dms[drive].positionRequested, dms[drive].currentMotorPosition, (double)dms[drive].distanceCarriedForwards);
 			}
+#endif
+
+			StepTimer::Diagnostics(reply);
 		}
-#endif
-		driverStatus.cat('\n');
-		p.Message(mtype, driverStatus.c_str());
-	}
+		break;
 
+	case 1:
+	case 2:
+	case 3:
+		// Show the driver diagnostics. We can fit 4 in each response. Duet 2 has 12 drivers so we need up to 3 responses.
+		for (size_t drive = 4 * (part - 1); drive < min<size_t>(NumDirectDrivers, 4 * part); ++drive)
+		{
+			reply.lcatf("Driver %u: ", drive);
+#ifdef DUET3_MB6XD
+			reply.cat((HasDriverError(drive)) ? "error" : "ok");
+#elif HAS_SMART_DRIVERS
+			if (drive < numSmartDrivers)
+			{
+				const StandardDriverStatus status = SmartDrivers::GetStatus(drive, false, false);
+				status.AppendText(reply, 0);
+				if (!status.notPresent)
+				{
+					SmartDrivers::AppendDriverStatus(drive, reply);
+				}
+			}
+#endif
+		}
+		break;
+
+	case 4:
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
-	p.MessageF(mtype, "Phase step loop runtime (us): min=%" PRIu32 ", max=%" PRIu32 ", frequency (Hz): min=%" PRIu32 ", max=%" PRIu32 "\n",
-			StepTimer::TicksToIntegerMicroseconds(minPSControlLoopRuntime), StepTimer::TicksToIntegerMicroseconds(maxPSControlLoopRuntime),
-			TickPeriodToFreq(maxPSControlLoopCallInterval), TickPeriodToFreq(minPSControlLoopCallInterval));
-	ResetPhaseStepMonitoringVariables();
+		reply.lcatf("Phase step loop runtime (us): min=%" PRIu32 ", max=%" PRIu32 ", frequency (Hz): min=%" PRIu32 ", max=%" PRIu32,
+				StepTimer::TicksToIntegerMicroseconds(minPSControlLoopRuntime), StepTimer::TicksToIntegerMicroseconds(maxPSControlLoopRuntime),
+				TickPeriodToFreq(maxPSControlLoopCallInterval), TickPeriodToFreq(minPSControlLoopCallInterval));
+		ResetPhaseStepMonitoringVariables();
 #endif
-
-	// Show the status of each DDA ring
-	for (size_t i = 0; i < ARRAY_SIZE(rings); ++i)
-	{
-		rings[i].Diagnostics(mtype, i);
-	}
-}
 
 #if SUPPORT_REMOTE_COMMANDS
-
-void Move::AppendDiagnostics(const StringRef& reply) noexcept
-{
-	const float totalDelayToReport = (float)StepTimer::GetMovementDelay() * (1000.0/(float)StepTimer::GetTickRate());
-	const float ownDelayToReport = (float)StepTimer::GetOwnMovementDelay() * (1000.0/(float)StepTimer::GetTickRate());
-
-	reply.lcatf("Hiccups %u (%.2f/%.2fms), segs %u", numInterruptHiccups, (double)ownDelayToReport, (double)totalDelayToReport, MoveSegment::NumCreated());
-	numInterruptHiccups = 0;
-}
-
+		if (!CanInterface::InExpansionMode())
 #endif
+		{
+			// Show the status of each DDA ring
+			for (size_t i = 0; i < ARRAY_SIZE(rings); ++i)
+			{
+				rings[i].Diagnostics(reply, i);
+			}
+		}
+		break;
+	}
+}
 
 // Convert distance to steps for a particular drive
 int32_t Move::MotorMovementToSteps(size_t drive, float coord) const noexcept
@@ -3081,7 +3055,7 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 		drivers = LocalDriversBitmap::MakeLowestNBits(numSmartDrivers);
 	}
 
-	if (!OutputBuffer::Allocate(buf))
+	if (!OutputBuffer::Allocate(buf, false))
 	{
 		return GCodeResult::notFinished;
 	}

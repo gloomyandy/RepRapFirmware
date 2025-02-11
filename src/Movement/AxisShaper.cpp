@@ -74,8 +74,6 @@ AxisShaper::AxisShaper() noexcept
 // Process M593 (configure input shaping)
 GCodeResult AxisShaper::Configure(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {
-	constexpr float MinimumInputShapingFrequency = (float)StepClockRate/(2 * 65535);		// we use a 16-bit number of step clocks to represent half the input shaping period
-	constexpr float MaximumInputShapingFrequency = 1000.0;
 	bool seen = false;
 
 	// If we are changing the type, frequency, damping or custom parameters, we will change multiple stored values used by the motion planner, so wait until movement has stopped.
@@ -306,11 +304,6 @@ GCodeResult AxisShaper::Configure(GCodeBuffer& gb, const StringRef& reply) THROW
 		}
 	}
 	return GCodeResult::ok;
-}
-
-void AxisShaper::Diagnostics(MessageType mtype) noexcept
-{
-	// We no longer report anything here
 }
 
 #if SUPPORT_CAN_EXPANSION

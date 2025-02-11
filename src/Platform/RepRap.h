@@ -51,9 +51,12 @@ public:
  	void Init() noexcept;
 	void Spin() noexcept;
 	void Exit() noexcept;
-	void Diagnostics(MessageType mtype) noexcept;
+
+	void Diagnostics(MessageType mtype, const StringRef& reply) noexcept;
+	unsigned int GetNumberOfDiagnosticParts() const noexcept;
+	void GetDiagnosticsPart(unsigned int partNumber, const StringRef& reply) noexcept;
 	void DeferredDiagnostics(MessageType mtype) noexcept { diagnosticsDestination = mtype; }
-	void Timing(MessageType mtype) noexcept;
+	void Timing(const StringRef& reply) noexcept;
 
 	bool Debug(Module module) const noexcept { return debugMaps[module.ToBaseType()].IsNonEmpty(); }
 	DebugFlags GetDebugFlags(Module m) const noexcept { return debugMaps[m.ToBaseType()]; }

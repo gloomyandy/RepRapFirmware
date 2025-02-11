@@ -53,8 +53,6 @@ public:
 	GCodeResult EutSetInputShaping(const CanMessageSetInputShapingNew& msg, size_t dataLength, const StringRef& reply) noexcept;
 #endif
 
-	void Diagnostics(MessageType mtype) noexcept;
-
 protected:
 	DECLARE_OBJECT_MODEL_WITH_ARRAYS
 
@@ -64,8 +62,10 @@ private:
 	GCodeResult UpdateRemoteInputShaping(const StringRef& reply) const noexcept;
 #endif
 
-	static constexpr unsigned int MaxImpulses = 5;
+	static constexpr float MinimumInputShapingFrequency = 4.0;
+	static constexpr float MaximumInputShapingFrequency = 400.0;
 	static constexpr float DefaultFrequency = 40.0;
+	static constexpr unsigned int MaxImpulses = 5;
 	static constexpr float DefaultDamping = 0.05;
 
 	// Input shaping parameters input by the user

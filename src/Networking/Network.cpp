@@ -561,6 +561,7 @@ void Network::Exit() noexcept
 }
 
 #if HAS_NETWORKING
+
 GCodeResult Network::ConfigureNetworkProtocol(GCodeBuffer& gb, const StringRef& reply)
 {
 	GCodeResult result = GCodeResult::ok;
@@ -592,7 +593,7 @@ GCodeResult Network::ConfigureNetworkProtocol(GCodeBuffer& gb, const StringRef& 
 							const int port = (gb.Seen('R')) ? gb.GetIValue() : -1;
 							const int secure = (gb.Seen('T')) ? gb.GetIValue() : -1;
 
-#if SUPPORT_MQTT
+# if SUPPORT_MQTT
 							if (interface < GetNumNetworkInterfaces() && protocol == MqttProtocol)
 							{
 								IPAddress ip;
@@ -621,7 +622,7 @@ GCodeResult Network::ConfigureNetworkProtocol(GCodeBuffer& gb, const StringRef& 
 								}
 							}
 							else
-#endif
+# endif
 							{
 								result = EnableProtocol(interface, protocol, port, AcceptAnyIp, secure, reply);
 							}
@@ -629,7 +630,7 @@ GCodeResult Network::ConfigureNetworkProtocol(GCodeBuffer& gb, const StringRef& 
 						else
 						{
 							result = DisableProtocol(interface, protocol, reply);
-#if SUPPORT_MQTT
+# if SUPPORT_MQTT
 							if (protocol == MqttProtocol && result == GCodeResult::ok)
 							{
 								if (MqttClient::GetInterface() == static_cast<int>(interface))
@@ -637,7 +638,7 @@ GCodeResult Network::ConfigureNetworkProtocol(GCodeBuffer& gb, const StringRef& 
 									MqttClient::SetInterface(-1); // do not associate with any interface
 								}
 							}
-#endif
+# endif
 						}
 						seen = true;
 					}
@@ -673,6 +674,7 @@ GCodeResult Network::ConfigureNetworkProtocol(GCodeBuffer& gb, const StringRef& 
 
 	return result;
 }
+
 #endif
 
 // Get the network state into the reply buffer, returning true if there is some sort of error
@@ -720,7 +722,7 @@ void Network::Spin() noexcept
 			}
 		}
 
-#if HAS_RESPONDERS
+# if HAS_RESPONDERS
 		// Poll the responders
 		NetworkResponder *_ecv_from _ecv_null nr = nextResponderToPoll;
 		bool doneSomething = false;
@@ -729,19 +731,19 @@ void Network::Spin() noexcept
 			if (nr == nullptr)
 			{
 				nr = responders;		// 'responders' can't be null at this point
-#if SUPPORT_MULTICAST_DISCOVERY
+#  if SUPPORT_MULTICAST_DISCOVERY
 				MulticastResponder::Spin();
-#endif
+#  endif
 			}
 			doneSomething = nr->Spin();
 			nr = nr->GetNext();
 		} while (!doneSomething && nr != nextResponderToPoll);
 		nextResponderToPoll = nr;
-#endif
+# endif
 
-#if SUPPORT_HTTP
+# if SUPPORT_HTTP
 		HttpResponder::CheckSessions();		// time out any sessions that have gone away
-#endif
+# endif
 
 		// Keep track of the loop time
 		const uint32_t dt = StepTimer::GetTimerTicks() - lastTime;
@@ -765,40 +767,45 @@ void Network::Spin() noexcept
 #endif
 
 // Get network diagnostics
-void Network::Diagnostics(MessageType mtype) noexcept
+void Network::Diagnostics(unsigned int part, const StringRef& reply) noexcept
 {
 #if HAS_NETWORKING
-	platform.Message(mtype, "=== Network ===\n");
-
-	platform.MessageF(mtype, "Slowest loop: %.2fms; fastest: %.2fms\n", (double)(slowLoop * StepClocksToMillis), (double)(fastLoop * StepClocksToMillis));
-	fastLoop = UINT32_MAX;
-	slowLoop = 0;
-
-#if HAS_RESPONDERS
-	platform.Message(mtype, "Responder states:");
-	for (NetworkResponder *_ecv_from _ecv_null r = responders; r != nullptr; r = r->GetNext())
+	switch (part)
 	{
-		r->Diagnostics(mtype);
-	}
-	platform.Message(mtype, "\n");
-#endif
+	case 0:
+		reply.printf("=== Network ===\nSlowest loop: %.2fms; fastest: %.2fms", (double)(slowLoop * StepClocksToMillis), (double)(fastLoop * StepClocksToMillis));
+		fastLoop = UINT32_MAX;
+		slowLoop = 0;
 
-#if SUPPORT_HTTP
-	HttpResponder::CommonDiagnostics(mtype);
-#endif
-
-	for (NetworkInterface *_ecv_from _ecv_null iface : interfaces)
-	{
-		if (iface != nullptr)
+# if HAS_RESPONDERS
+		reply.lcat("Responder states:");
+		for (NetworkResponder *_ecv_from _ecv_null r = responders; r != nullptr; r = r->GetNext())
 		{
-			iface->Diagnostics(mtype);
+			r->Diagnostics(reply);
 		}
-	}
-#endif
+# endif
 
-#if SUPPORT_MULTICAST_DISCOVERY
-	MulticastResponder::Diagnostics(mtype);
-#endif
+# if SUPPORT_HTTP
+		HttpResponder::CommonDiagnostics(reply);
+# endif
+# if SUPPORT_MULTICAST_DISCOVERY
+		MulticastResponder::Diagnostics(reply);
+# endif
+		break;
+
+	case 1:
+	case 2:
+		if (part <= MaxNetworkInterfaces)
+		{
+			NetworkInterface *_ecv_from _ecv_null iface = interfaces[part - 1];
+			if (iface != nullptr)
+			{
+				iface->Diagnostics(reply);
+			}
+		}
+		break;
+	}
+	#endif
 }
 
 IPAddress Network::GetIPAddress(unsigned int interface) const noexcept

@@ -30,6 +30,10 @@
 # include <Accelerometers/Accelerometers.h>
 #endif
 
+#if SUPPORT_REMOTE_COMMANDS
+# include <Hardware/NonVolatileMemory.h>
+#endif
+
 // Handle a firmware update request
 static void HandleFirmwareBlockRequest(CanMessageBuffer *buf) noexcept
 pre(buf->id.MsgType() == CanMessageType::firmwareBlockRequest)
@@ -199,13 +203,9 @@ static void HandleInputStateChanged(const CanMessageInputChangedNew& msg, CanAdd
 
 static GCodeResult EutGetInfo(const CanMessageReturnInfo& msg, const StringRef& reply, uint8_t& extra)
 {
-	static constexpr uint8_t LastDiagnosticsPart = 9;				// the last diagnostics part is typeDiagnosticsPart0 + 9
-
 	switch (msg.type)
 	{
 	case CanMessageReturnInfo::typeFirmwareVersion:
-	default:
-		// This must be formatted in a specific way for the ATE, starting with the electronics string
 		reply.printf("%s firmware version " VERSION " (%s%s)", reprap.GetPlatform().GetElectronicsString(), DATE, TIME_SUFFIX);
 		break;
 
@@ -245,77 +245,18 @@ static GCodeResult EutGetInfo(const CanMessageReturnInfo& msg, const StringRef& 
 		reprap.GetPlatform().GetUniqueId().AppendCharsToString(reply);
 		break;
 
-	case CanMessageReturnInfo::typeDiagnosticsPart0:
-		extra = LastDiagnosticsPart;
-		// Report the firmware version and board type
-		reply.lcatf("%s version %s (%s%s) running on %s", FIRMWARE_NAME, VERSION, DATE, TIME_SUFFIX, reprap.GetPlatform().GetElectronicsString());
-		// Show the up time and reason for the last reset
+	default:
+		if (msg.type >= CanMessageReturnInfo::typeDiagnosticsPart0 && msg.type < CanMessageReturnInfo::typeDiagnosticsPart0 + reprap.GetNumberOfDiagnosticParts())
 		{
-			const uint32_t now = (uint32_t)(millis64()/1000u);		// get up time in seconds
-			reply.lcatf("Last reset %02d:%02d:%02d ago, cause: %s", (unsigned int)(now/3600), (unsigned int)((now % 3600)/60), (unsigned int)(now % 60), Platform::GetResetReasonText());
+			reply.Clear();
+			reprap.GetDiagnosticsPart(msg.type - CanMessageReturnInfo::typeDiagnosticsPart0, reply);
+			extra = reprap.GetNumberOfDiagnosticParts() - 1;
 		}
-		reprap.GetMove().AppendDiagnostics(reply);
-		break;
-
-	case CanMessageReturnInfo::typeDiagnosticsPart0 + 1:
-	case CanMessageReturnInfo::typeDiagnosticsPart0 + 2:
-	case CanMessageReturnInfo::typeDiagnosticsPart0 + 3:
-	case CanMessageReturnInfo::typeDiagnosticsPart0 + 4:
-	case CanMessageReturnInfo::typeDiagnosticsPart0 + 5:
-	case CanMessageReturnInfo::typeDiagnosticsPart0 + 6:
-	case CanMessageReturnInfo::typeDiagnosticsPart0 + 7:
-		// We send each driver status in a separate message because we can't fit more than three in one reply
-		extra = LastDiagnosticsPart;
+		else
 		{
-			const size_t driver = msg.type - (CanMessageReturnInfo::typeDiagnosticsPart0 + 1);
-			if (driver < NumDirectDrivers)			// we have up to 7 drivers on the Duet 3 Mini but only 6 on the 6HC and 6XD
-			{
-				reply.lcatf("Driver %u: %.1f steps/mm"
-#if HAS_SMART_DRIVERS
-					", "							// the call to status.AppendText always appends something
-#endif
-					, driver, (double)reprap.GetMove().DriveStepsPerMm(driver));
-#if HAS_SMART_DRIVERS
-				const StandardDriverStatus status = SmartDrivers::GetStatus(driver, false, false);
-				status.AppendText(reply, 0);
-				if (!status.notPresent)
-				{
-					SmartDrivers::AppendDriverStatus(driver, reply);
-				}
-#endif
-			}
+			reply.copy("unknown GetInfo subfunction");
+			return GCodeResult::error;
 		}
-		break;
-
-	case CanMessageReturnInfo::typeDiagnosticsPart0 + 8:
-		extra = LastDiagnosticsPart;
-		{
-#if HAS_VOLTAGE_MONITOR && HAS_12V_MONITOR
-			reply.catf("VIN: %.1fV, V12: %.1fV", (double)reprap.GetPlatform().GetCurrentPowerVoltage(), (double)reprap.GetPlatform().GetCurrentV12Voltage());
-#elif HAS_VOLTAGE_MONITOR
-			reply.catf("VIN: %.1fV", (double)reprap.GetPlatform().GetCurrentPowerVoltage());
-#elif HAS_12V_MONITOR
-			reply.catf("V12: %.1fV", (double)reprap.GetPlatform().GetCurrentV12Voltage());
-#endif
-#if HAS_CPU_TEMP_SENSOR
-			const MinCurMax temps = reprap.GetPlatform().GetMcuTemperatures();
-			reply.catf(
-# if HAS_VOLTAGE_MONITOR || HAS_12V_MONITOR
-				", "
-# endif
-				"MCU temperature: min %.1fC, current %.1fC, max %.1fC", (double)temps.minimum, (double)temps.current, (double)temps.maximum);
-#endif
-		}
-		break;
-
-	case CanMessageReturnInfo::typeDiagnosticsPart0 + 9:
-		extra = LastDiagnosticsPart;
-		StepTimer::Diagnostics(reply);
-#if 0	// We don't currently support accelerometers on main boards used as expansion boards
-//#if SUPPORT_ACCELEROMETERS
-		Accelerometers::Diagnostics(reply);
-#endif
-		FilamentMonitor::GetDiagnostics(reply);
 		break;
 	}
 	return GCodeResult::ok;

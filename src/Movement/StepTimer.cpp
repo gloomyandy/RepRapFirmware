@@ -537,7 +537,7 @@ void StepTimer::CancelCallback() noexcept
 #if SUPPORT_REMOTE_COMMANDS
 	if (CanInterface::InExpansionMode())
 	{
-		reply.lcatf("Peak sync jitter %" PRIi32 "/%" PRIi32 ", peak Rx sync delay %" PRIu32 ", resyncs %u/%u, ", peakNegJitter, peakPosJitter, peakReceiveDelay, numTimeoutResyncs, numJitterResyncs);
+		reply.lcatf("Peak sync jitter %" PRIi32 "/%" PRIi32 ", peak Rx sync delay %" PRIu32 ", resyncs %u/%u", peakNegJitter, peakPosJitter, peakReceiveDelay, numTimeoutResyncs, numJitterResyncs);
 		gotJitter = false;
 		numTimeoutResyncs = numJitterResyncs = 0;
 		peakReceiveDelay = 0;
@@ -546,11 +546,11 @@ void StepTimer::CancelCallback() noexcept
 	StepTimer *_ecv_null pst = pendingList;
 	if (pst == nullptr)
 	{
-		reply.cat("no step interrupt scheduled");
+		reply.lcat("No step interrupt scheduled");
 	}
 	else
 	{
-		reply.catf("next step interrupt due in %" PRIu32 " ticks, %s",
+		reply.lcatf("Next step interrupt due in %" PRIu32 " ticks, %s",
 					pst->whenDue - GetTimerTicks(),
 # if SAME5x
 					((StepTc->INTENSET.reg & TC_INTFLAG_MC0) == 0)

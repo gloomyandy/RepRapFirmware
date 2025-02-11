@@ -122,7 +122,7 @@ namespace MassStorage
 	GCodeResult GetFileInfo(const char *_ecv_array filePath, GCodeFileInfo& info, bool quitEarly, GlobalVariables *_ecv_null customVars) noexcept;
 	GCodeResult Mount(size_t card, const StringRef& reply, bool reportSuccess, uint32_t timeout = 5000) noexcept;
 	GCodeResult Unmount(size_t card, const StringRef& reply) noexcept;
-	void Diagnostics(MessageType mtype) noexcept;
+	void Diagnostics(const StringRef& reply) noexcept;
 
 # if SUPPORT_ASYNC_MOVES
 	FileStore *_ecv_null DuplicateOpenHandle(const FileStore *f) noexcept;	// Duplicate a file handle, with the duplicate having its own position in the file. Use only when files opened in read-only mode.

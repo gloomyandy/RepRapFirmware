@@ -997,7 +997,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					}
 					else
 					{
-						if (!OutputBuffer::Allocate(outBuf))
+						if (!OutputBuffer::Allocate(outBuf, false))
 						{
 							return false;												// cannot allocate an output buffer, try again later
 						}
@@ -2182,7 +2182,8 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #endif
 					if (type == 0)
 					{
-						reprap.Diagnostics(mt);
+						reprap.Diagnostics(mt, reply);
+						reply.Clear();
 					}
 #if STM32
 					else if (type == (unsigned int)DiagnosticTestType::PrintBoardConfiguration)
@@ -3283,7 +3284,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					}
 
 					// Need a valid output buffer to continue
-					if (!OutputBuffer::Allocate(outBuf))
+					if (!OutputBuffer::Allocate(outBuf, false))
 					{
 						// No buffer available, try again later
 						return false;

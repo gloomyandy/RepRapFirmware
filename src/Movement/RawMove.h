@@ -150,7 +150,7 @@ public:
 	void ResumePrinting(GCodeBuffer& gb) noexcept;
 
 	// Reporting
-	void Diagnostics(MessageType mtype) const noexcept;
+	void Diagnostics(const StringRef& reply) const noexcept;
 
 	// These variables are currently all public, but we ought to make most of them private
 	Tool *_ecv_null currentTool;									// the current tool of this movement system
