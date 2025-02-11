@@ -797,8 +797,7 @@ void RepRap::Spin() noexcept
 	// Check if we need to send diagnostics
 	if (diagnosticsDestination != MessageType::NoDestinationMessage)
 	{
-		String<GCodeReplyLength> buf;
-		Diagnostics(diagnosticsDestination, buf.GetRef());
+		GenerateDeferredDiagnostics(diagnosticsDestination);				// call out to separate function to keep stack usage under control
 		diagnosticsDestination = MessageType::NoDestinationMessage;
 	}
 
@@ -873,6 +872,13 @@ void RepRap::Spin() noexcept
 	}
 
 	RTOSIface::Yield();
+}
+
+// Send diagnostics to the specified destination. This is in a separate function so that the large string doesn't take up main task stack space all the time.
+__attribute__((noinline)) void RepRap::GenerateDeferredDiagnostics(MessageType destination) noexcept
+{
+	String<GCodeReplyLength> buf;
+	Diagnostics(destination, buf.GetRef());
 }
 
 void RepRap::Timing(const StringRef& reply) noexcept

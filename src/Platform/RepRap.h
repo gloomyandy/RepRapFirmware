@@ -182,6 +182,7 @@ protected:
 	ReadWriteLock *_ecv_null GetObjectLock(unsigned int tableNumber) const noexcept override;
 
 private:
+	__attribute__((noinline)) void GenerateDeferredDiagnostics(MessageType destination) noexcept;
 
 #ifndef DUET_NG			// Duet 2 doesn't currently need this feature, so omit it to save memory
 	struct DebugLogRecord

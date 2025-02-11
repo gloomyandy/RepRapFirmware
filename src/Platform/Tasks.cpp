@@ -39,13 +39,13 @@ const char memPattern = (char)0xA5;		// this must be the same pattern as FreeRTO
 // The worst case stack usage points are as follows:
 // 1. After running delta auto calibration with Move debugging enabled
 // 2. We create an array of (2 * MaxAxes^2) floats when inverting the movement matrix for Core kinematics.
-#if SAME70 || STM32H7
-// On the SAME70 we use matrices of doubles when doing auto calibration, so we need 1800 words of stack even when MaxAxes is only 15
-constexpr unsigned int MainTaskStackWords = max<unsigned int>(1800, (MaxAxes * MaxAxes * 2) + 550);
+#if SAME70
+// On the SAME70 we use matrices of doubles when doing auto calibration, so we need 1800 words of stack even when MaxAxes is only 15 (now 1860 after increasing GCodeReplyLength)
+constexpr unsigned int MainTaskStackWords = max<unsigned int>(1860, (MaxAxes * MaxAxes * 2) + 610);
 #else
 // On other processors we use matrices of floats when doing auto calibration
-// Increase minimum stack words to 1370 for WPA Enterprise support
-constexpr unsigned int MainTaskStackWords = max<unsigned int>(1370, (MaxAxes * MaxAxes * 2) + 550);
+// Increase minimum stack words to 1370 for WPA Enterprise support (now 1430 after increasing GCodeReplyLength)
+constexpr unsigned int MainTaskStackWords = max<unsigned int>(1430, (MaxAxes * MaxAxes * 2) + 610);
 #endif
 
 static TASKMEM Task<MainTaskStackWords> mainTask;
