@@ -219,7 +219,7 @@ float ZProbe::GetScanningHeight() const noexcept
 
 float ZProbe::GetActiveModeTriggerHeight() const noexcept
 {
-	return (type == ZProbeType::scanningAnalog && useTouchMode) ? touchTriggered : GetActualTriggerHeight();
+	return (type == ZProbeType::scanningAnalog && useTouchMode) ? touchModeTriggerHeight : GetActualTriggerHeight();
 }
 
 float ZProbe::GetProbingSpeed(int tapsDone) const noexcept

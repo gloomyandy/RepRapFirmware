@@ -69,7 +69,8 @@ protected:
 	virtual void ConnectionLost() noexcept;
 
 	IPAddress GetRemoteIP() const noexcept;
-	void ReportOutputBufferExhaustion(const char *_ecv_array sourceFile, int line) noexcept;
+
+	static void ReportOutputBufferExhaustion(const char *_ecv_array sourceFile, int line) noexcept;
 
 	static Platform& GetPlatform() noexcept { return reprap.GetPlatform(); }
 	static Network& GetNetwork() noexcept { return reprap.GetNetwork(); }

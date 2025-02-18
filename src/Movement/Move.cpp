@@ -990,7 +990,7 @@ void Move::Diagnostics(unsigned int part, const StringRef& reply) noexcept
 #endif
 
 #if SUPPORT_REMOTE_COMMANDS
-		if (!CanInterface::InExpansionMode())
+		if (inExpansionMode)
 #endif
 		{
 			// Show the status of each DDA ring
@@ -1340,9 +1340,12 @@ void Move::SetLatestMeshDeviation(const Deviation& d) noexcept
 	latestMeshDeviation = d;
 }
 
-void Move::WakeMoveTaskFromISR() noexcept
+inline void Move::WakeMoveTaskFromISR() noexcept
 {
-	if (moveTask.IsRunning())
+	// No need to check whether the Move task is running because GiveFromISR does that
+#if SUPPORT_REMOTE_COMMANDS
+	if (!inExpansionMode)
+#endif
 	{
 		moveTask.GiveFromISR(NotifyIndices::Move);
 	}
@@ -1711,12 +1714,12 @@ finished:
 
 // Add some linear segments to be executed by a driver, taking account of possible input shaping. This is used by linear axes and by extruders.
 // We never add a segment that starts earlier than the earliest existing segment (if any).
-void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t startTime, const PrepParams& params, motioncalc_t steps, MovementFlags moveFlags) noexcept
+void Move::AddLinearSegments(size_t logicalDrive, uint32_t startTime, const PrepParams& params, motioncalc_t steps, MovementFlags moveFlags) noexcept
 {
 	if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::Segments))
 	{
 		debugPrintf("AddLin: st=%" PRIu32 " steps=%.1f\n", startTime, (double)steps);
-		dda.DebugPrint("addlin");
+		//dda.DebugPrint("addlin");
 		params.DebugPrint();
 	}
 
@@ -1786,7 +1789,7 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 
 	const uint32_t steadyStartTime = startTime + params.accelClocks;
 	const uint32_t decelStartTime = steadyStartTime + params.steadyClocks;
-	const motioncalc_t totalDistance = (motioncalc_t)dda.totalDistance;
+	const motioncalc_t totalDistance = (motioncalc_t)params.totalDistance;
 	const motioncalc_t stepsPerMm = (motioncalc_t)steps/totalDistance;
 
 	// Phases with zero duration will not get executed and may lead to infinities in the calculations. Avoid introducing them. Keep the total distance correct.
@@ -1832,7 +1835,7 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 	{
 		if (params.accelClocks != 0)
 		{
-			tail = AddSegment(tail, startTime, params.accelClocks, accelDistance * stepsPerMm, (motioncalc_t)dda.acceleration * stepsPerMm J_ACTUAL_PARAMETER(j * stepsPerMm), moveFlags, accelPressureAdvance);
+			tail = AddSegment(tail, startTime, params.accelClocks, accelDistance * stepsPerMm, (motioncalc_t)params.acceleration * stepsPerMm J_ACTUAL_PARAMETER(j * stepsPerMm), moveFlags, accelPressureAdvance);
 		}
 		if (params.steadyClocks != 0)
 		{
@@ -1840,7 +1843,7 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 		}
 		if (params.decelClocks != 0)
 		{
-			tail = AddSegment(tail, decelStartTime, params.decelClocks, decelDistance * stepsPerMm, -((motioncalc_t)dda.deceleration * stepsPerMm) J_ACTUAL_PARAMETER(j * stepsPerMm), moveFlags, decelPressureAdvance);
+			tail = AddSegment(tail, decelStartTime, params.decelClocks, decelDistance * stepsPerMm, -((motioncalc_t)params.deceleration * stepsPerMm) J_ACTUAL_PARAMETER(j * stepsPerMm), moveFlags, decelPressureAdvance);
 		}
 	}
 	else
@@ -1851,7 +1854,7 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 			const uint32_t startDelay = axisShaper.GetImpulseDelay(index);
 			if (params.accelClocks != 0)
 			{
-				tail = AddSegment(tail, startTime + startDelay, params.accelClocks, accelDistance * factor, (motioncalc_t)dda.acceleration * factor J_ACTUAL_PARAMETER(j * factor), moveFlags, accelPressureAdvance);
+				tail = AddSegment(tail, startTime + startDelay, params.accelClocks, accelDistance * factor, (motioncalc_t)params.acceleration * factor J_ACTUAL_PARAMETER(j * factor), moveFlags, accelPressureAdvance);
 			}
 			if (params.steadyClocks != 0)
 			{
@@ -1859,7 +1862,7 @@ void Move::AddLinearSegments(const DDA& dda, size_t logicalDrive, uint32_t start
 			}
 			if (params.decelClocks != 0)
 			{
-				tail = AddSegment(tail, decelStartTime + startDelay, params.decelClocks, decelDistance * factor, -((motioncalc_t)dda.deceleration * factor) J_ACTUAL_PARAMETER(j * factor), moveFlags, decelPressureAdvance);
+				tail = AddSegment(tail, decelStartTime + startDelay, params.decelClocks, decelDistance * factor, -((motioncalc_t)params.deceleration * factor) J_ACTUAL_PARAMETER(j * factor), moveFlags, decelPressureAdvance);
 			}
 		}
 	}
@@ -2251,7 +2254,7 @@ void Move::Interrupt() noexcept
 #endif
 #if SUPPORT_CAN_EXPANSION
 # if SUPPORT_REMOTE_COMMANDS
-						if (CanInterface::InExpansionMode())
+						if (inExpansionMode)
 						{
 							//TODO tell the main board we are behind schedule
 						}
@@ -3249,7 +3252,7 @@ void Move::PollOneDriver(size_t driver) noexcept
 		{
 			// It's a new error
 # if SUPPORT_REMOTE_COMMANDS
-			if (CanInterface::InExpansionMode())
+			if (inExpansionMode)
 			{
 				CanInterface::RaiseEvent(EventType::driver_error, stat.AsU16(), driver, "", va_list());
 			}
@@ -3263,7 +3266,7 @@ void Move::PollOneDriver(size_t driver) noexcept
 		{
 			// It's a new warning
 # if SUPPORT_REMOTE_COMMANDS
-			if (CanInterface::InExpansionMode())
+			if (inExpansionMode)
 			{
 				CanInterface::RaiseEvent(EventType::driver_warning, stat.AsU16(), driver, "", va_list());
 			}
@@ -3279,7 +3282,7 @@ void Move::PollOneDriver(size_t driver) noexcept
 		{
 			// This stall is new so check whether we need to perform some action in response to the stall
 #  if SUPPORT_REMOTE_COMMANDS
-			if (CanInterface::InExpansionMode())
+			if (inExpansionMode)
 			{
 				if (eventOnStallDrivers.Intersects(mask))
 				{
