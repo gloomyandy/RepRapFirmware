@@ -1,4 +1,10 @@
-Version 3.6.0-beta.2
+Version 3.6.0-beta.4
+======================
+* Duet3d 3.6.0-beta.4
+* Added bootloader support for H723 based boards
+* Fix wrong pin on Afc Lite and tidy up pin files
+
+Version 3.6.0-beta.3
 ======================
 * Duet3d 3.6.0-beta.3
 * Added support for AFC lite board
