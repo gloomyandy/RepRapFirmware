@@ -192,8 +192,6 @@ LocalDriversBitmap AxisDriversConfig::GetLocalDriversBitmap() const noexcept
 //*************************************************************************************************
 // Platform class
 
-#if SUPPORT_OBJECT_MODEL
-
 // Object model table and functions
 // Note: if using GCC version 7.3.1 20180622 and lambda functions are used in this table, you must compile this file with option -std=gnu++17.
 // Otherwise the table will be allocate in RAM instead of flash, which wastes too much RAM.
@@ -343,8 +341,6 @@ size_t Platform::GetNumGpOutputsToReport() const noexcept
 	}
 	return ret;
 }
-
-#endif
 
 bool Platform::deliberateError = false;						// true if we deliberately caused an exception for testing purposes
 String<StringLength256> Platform::genericDebugBuffer;
@@ -2194,18 +2190,38 @@ bool Platform::WritePlatformParameters(FileStore *f, bool includingG31) const no
 
 // USB port functions
 
-void Platform::AppendUsbReply(OutputBuffer *buffer) noexcept
+void Platform::AppendUsbReply(OutputBuffer *buffer, bool rawMessage) noexcept
 {
 	if (!SERIAL_MAIN_DEVICE.IsConnected())
 	{
 		// If the serial USB line is not open, discard the message right away
 		OutputBuffer::ReleaseAll(buffer);
+		usbMessageSeq = 0;							// reset the sequence number for when the USB port connects
 	}
 	else
 	{
 		// Else append incoming data to the stack
 		MutexLocker lock(usbMutex);
-		usbOutput.Push(buffer);
+		if (rawMessage || GetChannelMode(0) == AuxMode::raw)
+		{
+			usbOutput.Push(buffer);
+		}
+		else
+		{
+			OutputBuffer *buf;
+			if (OutputBuffer::Allocate(buf))
+			{
+				usbMessageSeq++;
+				buf->printf("{\"seq\":%" PRIu32 ",\"resp\":", usbMessageSeq);
+				buf->EncodeReply(buffer);
+				buf->cat("}\n");
+				usbOutput.Push(buf);
+			}
+			else
+			{
+				OutputBuffer::ReleaseAll(buffer);
+			}
+		}
 	}
 }
 
@@ -3099,22 +3115,37 @@ void Platform::RawMessage(MessageType type, const char *_ecv_array message) noex
 		// Message that is to be sent via the USB line (non-blocking)
 		MutexLocker lock(usbMutex);
 
-		// Ensure we have a valid buffer to write to that isn't referenced for other destinations
-		OutputBuffer *_ecv_null usbOutputBuffer = usbOutput.GetLastItem();
-		if (usbOutputBuffer == nullptr || usbOutputBuffer->IsReferenced())
+		if (GetChannelMode(0) == AuxMode::raw || message[0] == '{' || (type & RawMessageFlag) != 0)
 		{
-			if (OutputBuffer::Allocate(usbOutputBuffer))
+			// Ensure we have a valid buffer to write to that isn't referenced for other destinations
+			OutputBuffer *_ecv_null usbOutputBuffer = usbOutput.GetLastItem();
+			if (usbOutputBuffer == nullptr || usbOutputBuffer->IsReferenced())
 			{
-				if (usbOutput.Push(usbOutputBuffer))
+				if (OutputBuffer::Allocate(usbOutputBuffer))
 				{
-					usbOutputBuffer->cat(message);
+					if (usbOutput.Push(usbOutputBuffer))
+					{
+						usbOutputBuffer->cat(message);
+					}
+					// else the stack is full, so discard the message
 				}
-				// else the message buffer has been released, so discard the message
+				// else we can't allocate a buffer, so discard the message
+			}
+			else
+			{
+				usbOutputBuffer->cat(message);		// append the message
 			}
 		}
 		else
 		{
-			usbOutputBuffer->cat(message);		// append the message
+			OutputBuffer *buf;
+			if (OutputBuffer::Allocate(buf))
+			{
+				usbMessageSeq++;
+				buf->printf("{\"seq\":%" PRIu32 ",\"resp\":\"%.s\"}\n", usbMessageSeq, message);
+				usbOutput.Push(buf);
+			}
+			// else we can't allocate a buffer, so discard the message
 		}
 	}
 }
@@ -3177,7 +3208,7 @@ void Platform::Message(MessageType type, OutputBuffer *buffer) noexcept
 
 		if ((type & (UsbMessage | BlockingUsbMessage)) != 0)
 		{
-			AppendUsbReply(buffer);
+			AppendUsbReply(buffer, (type & RawMessageFlag) != 0);
 		}
 
 #if HAS_SBC_INTERFACE

@@ -15,8 +15,6 @@
 #include <Math/Matrix.h>
 #include <Movement/MoveDebugFlags.h>
 
-#if SUPPORT_OBJECT_MODEL
-
 // Object model table and functions
 // Note: if using GCC version 7.3.1 20180622 and lambda functions are used in this table, you must compile this file with option -std=gnu++17.
 // Otherwise the table will be allocated in RAM instead of flash, which wastes too much RAM.
@@ -25,33 +23,33 @@
 #define OBJECT_MODEL_FUNC(...)							OBJECT_MODEL_FUNC_BODY(ZProbe, __VA_ARGS__)
 #define OBJECT_MODEL_FUNC_IF(_condition, ...)			OBJECT_MODEL_FUNC_IF_BODY(ZProbe, _condition, __VA_ARGS__)
 #define OBJECT_MODEL_FUNC_ARRAY_IF(_condition, ...)		OBJECT_MODEL_FUNC_ARRAY_IF_BODY(ZProbe, _condition, __VA_ARGS__)
+#define OBJECT_MODEL_ARRAY_COUNT(_value)				OBJECT_MODEL_ARRAY_COUNT_BODY(ZProbe, _value)
+#define OBJECT_MODEL_ARRAY_VALUE(...)					OBJECT_MODEL_ARRAY_VALUE_BODY(ZProbe, __VA_ARGS__)
 
 constexpr ObjectModelArrayTableEntry ZProbe::objectModelArrayTable[] =
 {
 	// 0. Offsets
 	{
 		nullptr,					// no lock needed
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return reprap.GetGCodes().GetVisibleAxes(); },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(((const ZProbe*)self)->offsets[context.GetLastIndex()], 2); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(reprap.GetGCodes().GetVisibleAxes()),
+		OBJECT_MODEL_ARRAY_VALUE(self->offsets[context.GetLastIndex()], 2)
 	},
 	// 1. Speeds
 	{
 		nullptr,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return (((const ZProbe*)self)->type == ZProbeType::scanningAnalog) ? 3 : 2; },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
-					{ return ExpressionValue(InverseConvertSpeedToMmPerMin(((const ZProbe*)self)->probeSpeeds[context.GetLastIndex()]), 1); }
+		OBJECT_MODEL_ARRAY_COUNT((self->type == ZProbeType::scanningAnalog) ? 3 : 2),
+		OBJECT_MODEL_ARRAY_VALUE(InverseConvertSpeedToMmPerMin(self->probeSpeeds[context.GetLastIndex()]), 1)
 	},
 	// 2. Temperature coefficients
 	{
 		nullptr,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return ARRAY_SIZE(ZProbe::temperatureCoefficients); },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
-					{ return ExpressionValue(((const ZProbe*)self)->temperatureCoefficients[context.GetLastIndex()], 5); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(ARRAY_SIZE(ZProbe::temperatureCoefficients)),
+		OBJECT_MODEL_ARRAY_VALUE(self->temperatureCoefficients[context.GetLastIndex()], 5)
 	},
 	// 3. Values
 	{
 		nullptr,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return (((const ZProbe*)self)->type == ZProbeType::dumbModulated) ? 2 : 1; },
+		OBJECT_MODEL_ARRAY_COUNT((self->type == ZProbeType::dumbModulated) ? 2 : 1),
 		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
 					{	int32_t v1 = 0;
 						return ExpressionValue
@@ -64,17 +62,15 @@ constexpr ObjectModelArrayTableEntry ZProbe::objectModelArrayTable[] =
 	// 4. Dive heights
 	{
 		nullptr,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return ARRAY_SIZE(ZProbe::diveHeights); },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
-				{ return ExpressionValue(((const ZProbe*)self)->diveHeights[context.GetLastIndex()], 1); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(ARRAY_SIZE(ZProbe::diveHeights)),
+		OBJECT_MODEL_ARRAY_VALUE(self->diveHeights[context.GetLastIndex()], 1)
 	},
 #if SUPPORT_SCANNING_PROBES
 	// 5. Scanning probe coefficients
 	{
 		nullptr,
-		[] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return ARRAY_SIZE(ZProbe::scanCoefficients); },
-		[] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue
-				{ return ExpressionValue(((const ZProbe*)self)->scanCoefficients[context.GetLastIndex()], 7); }
+		OBJECT_MODEL_ARRAY_COUNT_NOSELF(ARRAY_SIZE(ZProbe::scanCoefficients)),
+		OBJECT_MODEL_ARRAY_VALUE(self->scanCoefficients[context.GetLastIndex()], 7)
 	},
 #endif
 };
@@ -133,8 +129,6 @@ constexpr uint8_t ZProbe::objectModelTableDescriptor[] =
 };
 
 DEFINE_GET_OBJECT_MODEL_TABLE(ZProbe)
-
-#endif
 
 ZProbe::ZProbe(unsigned int num, ZProbeType p_type) noexcept : EndstopOrZProbe(Z_AXIS), lastStopHeight(0.0), number(num), isDeployedByUser(false)
 {
