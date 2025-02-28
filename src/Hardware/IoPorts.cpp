@@ -351,7 +351,7 @@ bool IoPort::SetMode(PinAccess access) noexcept
 		{
 			return false;
 		}
-		IoPort::SetPinMode(GetPinNoCheck(), desiredMode);
+		IoPort::SetPinMode(GetPinNoCheck(), desiredMode, access == PinAccess::read);	// debounce pins with external inputs, don't debounce pins with internL
 		logicalPinModes[logicalPin] = (int8_t)desiredMode;
 	}
 	return true;
@@ -574,26 +574,23 @@ uint16_t IoPort::ReadAnalog() const noexcept
 
 // Low level pin access methods
 
-/*static*/ void IoPort::SetPinMode(Pin pin, PinMode mode) noexcept
-{
 #ifdef DUET_NG
+
+/*static*/ void IoPort::SetPinMode(Pin pin, PinMode mode, bool debounce) noexcept
+{
 	if (pin >= DueXnExpansionStart)
 	{
 		// Note: the SX1509B I/O expander chip doesn't seem to work if you set PWM mode and then set digital output mode.
-		DuetExpansion::SetPinMode(pin, mode);
+		DuetExpansion::SetPinMode(pin, mode, debounce);
 	}
 	else
 	{
-		pinMode(pin, mode);
+		::SetPinMode(pin, mode, debounce);
 	}
-#else
-	pinMode(pin, mode);
-#endif
 }
 
 /*static*/ bool IoPort::ReadPin(Pin pin) noexcept
 {
-#ifdef DUET_NG
 	if (pin >= DueXnExpansionStart)
 	{
 		return DuetExpansion::DigitalRead(pin);
@@ -602,14 +599,10 @@ uint16_t IoPort::ReadAnalog() const noexcept
 	{
 		return digitalRead(pin);
 	}
-#else
-	return digitalRead(pin);
-#endif
 }
 
 /*static*/ void IoPort::WriteDigital(Pin pin, bool high) noexcept
 {
-#ifdef DUET_NG
 	if (pin >= DueXnExpansionStart)
 	{
 		DuetExpansion::DigitalWrite(pin, high);
@@ -618,24 +611,21 @@ uint16_t IoPort::ReadAnalog() const noexcept
 	{
 		digitalWrite(pin, high);
 	}
-#else
-	digitalWrite(pin, high);
-#endif
 }
 
 /*static*/ void IoPort::WriteAnalog(Pin pin, float pwm, uint16_t freq) noexcept
 {
-#if defined(DUET_NG)
 	if (pin >= DueXnExpansionStart)
 	{
 		DuetExpansion::AnalogOut(pin, pwm);
 	}
 	else
-#endif
 	{
 		AnalogOut::Write(pin, pwm, freq);
 	}
 }
+
+#endif	//ifdef DUET_NG
 
 // Members of class PwmPort
 PwmPort::PwmPort() noexcept

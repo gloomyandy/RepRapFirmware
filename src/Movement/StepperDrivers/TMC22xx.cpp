@@ -1143,7 +1143,7 @@ pre(!driversPowered)
 
 #if HAS_STALL_DETECT
 	diagPin = p_diagPin;
-	IoPort::SetPinMode(p_diagPin, INPUT_PULLDOWN);						// pull down not up so that missing drivers don't signal stalls
+	SetPinMode(p_diagPin, INPUT_PULLDOWN, false);						// pull down not up so that missing drivers don't signal stalls
 #endif
 
 #if !TMC22xx_SINGLE_UART
@@ -2228,7 +2228,7 @@ void SmartDrivers::Init() noexcept
 #endif
 
 	// Make sure the ENN pins are high
-	IoPort::SetPinMode(GlobalTmc22xxEnablePin, OUTPUT_HIGH);
+	SetPinMode(GlobalTmc22xxEnablePin, OUTPUT_HIGH);
 
 #if TMC22xx_SINGLE_UART
 	// Set up the single UART that communicates with all TMC22xx drivers
@@ -2261,7 +2261,7 @@ void SmartDrivers::Init() noexcept
 	// Set up the multiplexer control pins as outputs
 	for (Pin p : TMC22xxMuxPins)
 	{
-		IoPort::SetPinMode(p, OUTPUT_LOW);
+		SetPinMode(p, OUTPUT_LOW);
 	}
 
 # if TMC22xx_USE_SLAVEADDR
@@ -2326,7 +2326,7 @@ void SmartDrivers::Init() noexcept
 // Shut down the drivers and stop any related interrupts
 void SmartDrivers::Exit() noexcept
 {
-	IoPort::SetPinMode(GlobalTmc22xxEnablePin, OUTPUT_HIGH);
+	SetPinMode(GlobalTmc22xxEnablePin, OUTPUT_HIGH);
 #if TMC22xx_SINGLE_UART
 # if TMC22xx_USES_SERCOM
 	DmacManager::SetInterruptCallback(DmacChanTmcRx, nullptr, CallbackParameter(nullptr));
@@ -2568,7 +2568,7 @@ static void InitStallDetectionLogic() noexcept
 	// Set up the DIAG inputs as CCL inputs
 	for (Pin p : DriverDiagPins)
 	{
-		pinMode(p, INPUT_PULLDOWN);								// enable pulldown in case of missing drivers
+		SetPinMode(p, INPUT_PULLDOWN, false);					// enable pulldown in case of missing drivers
 		SetPinFunction(p, GpioPinFunction::N);
 	}
 

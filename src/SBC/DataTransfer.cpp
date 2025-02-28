@@ -467,7 +467,7 @@ void DataTransfer::FreeMemory() noexcept
 void DataTransfer::Init() noexcept
 {
 	// Initialise transfer ready pin
-	pinMode(SbcTfrReadyPin, OUTPUT_LOW);
+	SetPinMode(SbcTfrReadyPin, OUTPUT_LOW);
 
 #if HAS_LWIP_NETWORKING
 	// We are going try allocating the transfer buffer memory from the PBUF pool.
