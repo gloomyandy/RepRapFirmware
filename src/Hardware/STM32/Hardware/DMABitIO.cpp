@@ -221,7 +221,7 @@ static void DmaInterrupt(DMA_HandleTypeDef *_hdma)
     case SUStates::writing:
         // we get called at the end of writing
         SUTimer.pause();
-        pinMode(SUPin, INPUT_PULLUP);
+        SetPinMode(SUPin, INPUT_PULLUP, false);
         SUDma.Init.Direction = DMA_PERIPH_TO_MEMORY;
         HAL_DMA_Start_IT(&SUDma, (uint32_t)SUPinReadPtr, (uint32_t)SUDmaBits, sizeof(SUDmaBits)/sizeof(uint32_t));
     	SUTimer.setOverflow(SUPeriod, TICK_FORMAT);
@@ -233,7 +233,7 @@ static void DmaInterrupt(DMA_HandleTypeDef *_hdma)
         // Last bit of read operation captured
         SUTimer.pause();
         SUState = SUStates::complete;
-        pinMode(SUPin, OUTPUT_HIGH);
+        SetPinMode(SUPin, OUTPUT_HIGH, false);
         // fall through
     case SUStates::complete:
     case SUStates::error:
@@ -270,7 +270,7 @@ static void DmaStart()
     // data by half of this time.
     for(uint32_t i = 0; i < SU_GAP_BITS; i++)
         SUDmaBits[SUBitCnt++] = SUSetBit;
-    pinMode(SUPin, OUTPUT_HIGH);
+    SetPinMode(SUPin, OUTPUT_HIGH, false);
     SUDma.Init.Direction = DMA_MEMORY_TO_PERIPH;
     SUDma.Init.Mode = DMA_NORMAL;
     HAL_DMA_RegisterCallback(&SUDma, HAL_DMA_XFER_HALFCPLT_CB_ID, nullptr);
@@ -319,7 +319,7 @@ bool TMCSoftUARTTransfer(Pin pin, volatile uint8_t *WritePtr, uint32_t WriteCnt,
             if (cnt == SUReadCnt)
                 ret = true;
         }
-        pinMode(SUPin, OUTPUT_HIGH);
+        SetPinMode(SUPin, OUTPUT_HIGH, false);
         SUState = SUStates::idle;
 	}
     return ret;
@@ -394,7 +394,7 @@ bool NeopixelDMAWrite(Pin pin, uint32_t freq, uint8_t *bits, uint32_t cnt, uint3
     //debugPrintf("SU base freq %d setting period %d\n", static_cast<int>(SUTimer.getTimerClkFreq()), static_cast<int>(period));
     //debugPrintf("SuState %d\n", SUState);
     SUPin = pin;
-    pinMode(SUPin, OUTPUT_LOW);
+    SetPinMode(SUPin, OUTPUT_LOW, false);
     pin_speed(SUPin, GPIO_SPEED_FREQ_LOW);
     SetupPins();
     NeoSetupBitTiming(NEOZeroBits, (zeroTime+NEO_BASE_TIME-1)/NEO_BASE_TIME);

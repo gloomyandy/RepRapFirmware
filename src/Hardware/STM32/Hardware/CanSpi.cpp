@@ -55,7 +55,7 @@ extern "C" bool DRV_SPI_Initialize()
 {
     if (CanCsPin == NoPin || CanSpiChannel == SSPNONE) return false;
 	spiDev = new CanSpiClient(SharedSpiDevice::GetSharedSpiDevice(CanSpiChannel), CanSpiFrequency, SpiMode::mode0);
-    pinMode(CanCsPin, OUTPUT_HIGH);
+    SetPinMode(CanCsPin, OUTPUT_HIGH);
     return true;
 }
 

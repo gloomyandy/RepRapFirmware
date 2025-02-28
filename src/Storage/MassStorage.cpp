@@ -388,7 +388,7 @@ void MassStorage::Init2() noexcept
 	{
 		SdCardInfo& inf = info[card];
 		inf.cdPin = SdCardDetectPins[card];
-		pinMode(SdCardDetectPins[card], INPUT_PULLUP);
+		SetPinMode(SdCardDetectPins[card], INPUT_PULLUP, false);
 		inf.cardState = (inf.cdPin == NoPin) ? CardDetectState::present : CardDetectState::notPresent;
 	}
 }

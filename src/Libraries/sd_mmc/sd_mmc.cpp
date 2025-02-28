@@ -1806,7 +1806,7 @@ void sd_mmc_init(const Pin wpPins[], const Pin spiCsPins[]) noexcept
 		card->wp_gpio = wpPins[slot];
 		if (card->wp_gpio != NoPin)
 		{
-			pinMode(card->wp_gpio, INPUT_PULLUP);
+			SetPinMode(card->wp_gpio, INPUT_PULLUP, false);
 		}
 #endif
 #if SD_MMC_HSMCI_MEM_CNT != 0

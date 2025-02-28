@@ -440,24 +440,24 @@ static void ConfigureGPIOPins() noexcept
     initInterruptPins();
     for(size_t i = 0; i < MaxInitialPins; i++)
     {
-        pinMode(PinsSetLow[i], OUTPUT_LOW);
-        pinMode(PinsSetHigh[i], OUTPUT_HIGH);
-        pinMode(SpiTempSensorCsPins[i], INPUT_PULLUP);
+        SetPinMode(PinsSetLow[i], OUTPUT_LOW);
+        SetPinMode(PinsSetHigh[i], OUTPUT_HIGH);
+        SetPinMode(SpiTempSensorCsPins[i], INPUT_PULLUP, false);
     }
 #if HAS_SMART_DRIVERS
     for(size_t i = 0; i < NumDirectDrivers; i++)
-        pinMode(TMC_PINS[i], OUTPUT_HIGH);
+        SetPinMode(TMC_PINS[i], OUTPUT_HIGH);
 #endif
     // Handle special cases
     //Init pins for LCD
     //make sure to init ButtonPin as input incase user presses button
-    pinMode(PanelButtonPin, INPUT);
-    pinMode(LcdA0Pin, OUTPUT_HIGH);
-    pinMode(LcdBeepPin, OUTPUT_LOW);
+    SetPinMode(PanelButtonPin, INPUT, false);
+    SetPinMode(LcdA0Pin, OUTPUT_HIGH);
+    SetPinMode(LcdBeepPin, OUTPUT_LOW);
     // Set the 12864 display CS pin low to prevent it from receiving garbage due to other SPI traffic
-    pinMode(LcdCSPin, OUTPUT_LOW);
+    SetPinMode(LcdCSPin, OUTPUT_LOW);
 #if SUPPORT_SPICAN
-    pinMode(CanCsPin, OUTPUT_HIGH);
+    SetPinMode(CanCsPin, OUTPUT_HIGH);
 #endif
 
     //Init Diagnostcs Pin
@@ -470,11 +470,11 @@ static void ConfigureGPIOPins() noexcept
     } 
 #endif
 
-    pinMode(DiagPin, OUTPUT_LOW);
+    SetPinMode(DiagPin, OUTPUT_LOW);
 
     // Configure ATX power control
     ATX_POWER_STATE = ATX_INITIAL_POWER_ON;
-    pinMode(StepperPowerEnablePin, (ATX_POWER_STATE ? OUTPUT_HIGH : OUTPUT_LOW));
+    SetPinMode(StepperPowerEnablePin, (ATX_POWER_STATE ? OUTPUT_HIGH : OUTPUT_LOW));
 }
 
 static void ConfigureSPIPins(SSPChannel dev, Pin clk, Pin miso, Pin mosi) noexcept
@@ -626,7 +626,7 @@ static bool TryConfig(uint32_t config, bool mount) noexcept
     if (conf->device != SSPSDIO)
         ((HardwareSPI *)(SPI::getSSPDevice(conf->device)))->disable();
     for (size_t i = 0; i < ARRAY_SIZE(conf->pins); i++)
-        pinMode(conf->pins[i], INPUT);    
+        SetPinMode(conf->pins[i], INPUT, false);    
     sd_mmc_setSSPChannel(0, SSPNONE, NoPin);
     return false;
 }    
