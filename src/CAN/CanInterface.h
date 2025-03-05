@@ -55,6 +55,10 @@ namespace CanInterface
 	void Diagnostics(const StringRef& reply) noexcept;
 	CanMessageBuffer *AllocateBuffer(const GCodeBuffer* gb) THROWS(GCodeException);
 	void CheckCanAddress(uint32_t address, const GCodeBuffer& gb) THROWS(GCodeException);
+#if STM32
+	void SendFirmwareUpdateRequest(CanMessageBuffer *buf) noexcept;
+	bool GetFirmwareUpdateResponse(CanMessageBuffer *buf) noexcept;
+#endif
 
 #if SUPPORT_SPICAN
 	void GetTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) noexcept;

@@ -1016,6 +1016,25 @@ void CanInterface::SendMessageNoReplyNoFree(CanMessageBuffer *buf) noexcept
 	}
 }
 
+#if STM32
+void CanInterface::SendFirmwareUpdateRequest(CanMessageBuffer *buf) noexcept
+{
+	if (can0dev != nullptr)
+	{
+		SendCanMessage(TxBufferIndexRequest, MaxRequestSendWait, buf);
+	}
+}
+
+bool CanInterface::GetFirmwareUpdateResponse(CanMessageBuffer *buf) noexcept
+{
+	if (can0dev != nullptr)
+	{
+		return can0dev->ReceiveMessage(RxBufferIndexResponse, UsualResponseTimeout, buf);
+	}
+	return false;
+}
+#endif
+
 #if DUAL_CAN
 
 uint32_t CanInterface::SendPlainMessageNoFree(CanMessageBuffer *buf, uint32_t const timeout) noexcept
