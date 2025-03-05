@@ -49,7 +49,9 @@ public:
     static Pin StringToPin(const char *strvalue) noexcept;
     static Pin LookupPin(char *strvalue) noexcept;
     static bool LoadBoardConfigFromFile(const char *filePath, bool restricted = true) noexcept;
-
+#if STM32H7
+    static bool IsBootloaderCanEnabled() noexcept;
+#endif
 #if HAS_SBC_INTERFACE
     static bool LoadBoardConfigFromSBC() noexcept;
     static void InvalidateBoardConfiguration() noexcept;

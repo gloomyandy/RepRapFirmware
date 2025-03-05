@@ -566,6 +566,14 @@ static const char *GetBootloaderString() noexcept
     return BootloaderString;
 }
 
+bool BoardConfig::IsBootloaderCanEnabled() noexcept
+{
+    const char *bootStr = GetBootloaderString();
+    if (bootStr == nullptr) return false;
+    const char * canPtr = strstr(bootStr, " C:");
+    return (canPtr != nullptr) && canPtr[3] == '1';
+}
+
 // Determine how to access the SD card
 typedef struct {
     SSPChannel device;

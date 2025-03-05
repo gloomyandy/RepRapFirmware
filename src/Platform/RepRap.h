@@ -103,8 +103,11 @@ public:
 #if SUPPORT_REMOTE_COMMANDS
  	void ScheduleReset() noexcept { whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::reboot; }
  	void ScheduleFirmwareUpdateOverCan() noexcept { whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::updateFirmware; }
+#if STM32
+	bool CheckFirmwareUpdatePossible() noexcept;
 #if STM32H7
  	void ScheduleBootloaderUpdateOverCan() noexcept { whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::updateBootloader; }
+#endif
 #endif
 #endif
 

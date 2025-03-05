@@ -289,7 +289,13 @@ static GCodeResult InitiateFirmwareUpdate(const CanMessageUpdateYourFirmware& ms
 	if (msg.module == 0)
 	{
 // We use a built in IAP on STM32
-#if !STM32
+#if STM32
+		if (!reprap.CheckFirmwareUpdatePossible())
+		{
+			reply.printf("Fimware update unavailable, no SD or CAN bootloader\n");
+			return GCodeResult::error;
+		}
+#else
 		if (!reprap.GetPlatform().FileExists(FIRMWARE_DIRECTORY, IAP_CAN_LOADER_FILE))
 		{
 			reply.printf("In-application programming binary \"%s\" not found on board %u", FIRMWARE_DIRECTORY IAP_CAN_LOADER_FILE, CanInterface::GetCanAddress());

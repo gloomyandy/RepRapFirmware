@@ -4,6 +4,7 @@
 */
 
 extern uint32_t _estack;			// defined in the linker script
+static constexpr size_t BootloaderFlashStart = 0x8000000;
 
 
 // Update the firmware from SD. Prerequisites should be checked before calling this.
@@ -51,49 +52,20 @@ void RepRap::RunSdIap(c_string _ecv_null  filename) noexcept
 }
 
 #if SUPPORT_REMOTE_COMMANDS
-
-#if 0
-int32_t RequestFirmwareBlock(FirmwareModule modType, uint32_t fileOffset, uint32_t numBytes, uint8_t *buffer, uint32_t *fileSize)
+bool RepRap::CheckFirmwareUpdatePossible() noexcept
 {
-    CanMessageBuffer *buf = CanMessageBuffer::Allocate();
-    if (buf == nullptr)
+    // check to see if we have an SD card
+    if (!MassStorage::CheckDriveMounted(FIRMWARE_DIRECTORY))
     {
-        debugPrintf("No Message buffer available\n");
-        return -1;
-    }
-    digitalWrite(DiagPin, XNor(DiagOnPolarity, millis() & 32) != 0);
-    CanMessageFirmwareUpdateRequest * const msg = buf->SetupRequestMessageNoRid<CanMessageFirmwareUpdateRequest>(CanInterface::GetCanAddress(), CanId::MasterAddress);
-    SafeStrncpy(msg->boardType, BOARD_SHORT_NAME, sizeof(msg->boardType));
-    msg->boardVersion = 0;
-    msg->bootloaderVersion = CanMessageFirmwareUpdateRequest::BootloaderVersion0;
-    msg->fileOffset = fileOffset;
-    msg->lengthRequested = (numBytes > sizeof(CanMessageFirmwareUpdateResponse::data)) ? sizeof(CanMessageFirmwareUpdateResponse::data) : numBytes;
-    msg->fileWanted = (uint32_t)modType;
-    msg->uf2Format = 0;
-    buf->dataLength = msg->GetActualDataLength();
-    String<1> dummy;
-    int32_t ret = -5;
-    CanInterface::SendRequestAndGetCustomReply(buf, fileOffset & 0xfff, dummy.GetRef(), nullptr, CanMessageType::firmwareBlockResponse,
-                                                            [buffer, &ret, fileSize](const CanMessageBuffer *buf)
-                                                                {
-                                                                    auto response = buf->msg.firmwareUpdateResponse;
-                                                                    if (response.err != CanMessageFirmwareUpdateResponse::ErrNone )
-                                                                        ret = - response.err;
-                                                                    else
-                                                                    {
-                                                                        ret = response.dataLength;
-                                                                        for (int32_t i = 0; i < ret; ++i)
-                                                                        {
-                                                                            buffer[i] = response.data[i];
-                                                                        }
-                                                                    }
-                                                                    *fileSize = response.fileLength;
-                                                                });
-    if (ret < 0)
-        debugPrintf("FirmwareUpdateRequest error %d\n", (int)-ret);
-    return ret;
-}
+        // No sd card available, do we have a suitable bootloader that can handle CAD updates
+#if STM32H7
+        return BoardConfig::IsBootloaderCanEnabled();
+#else
+        return false;
 #endif
+    }
+    return true;
+}
 
 static void RequestFirmwareBlock(FirmwareModule modType, uint32_t fileOffset, uint32_t numBytes, CanMessageBuffer& buf)
 {
@@ -128,33 +100,29 @@ static int32_t GetBlock(FirmwareModule modType, uint32_t startingOffset, uint32_
             if (buf.id.MsgType() == CanMessageType::firmwareBlockResponse)
             {
                 const CanMessageFirmwareUpdateResponse& response = buf.msg.firmwareUpdateResponse;
-                switch (response.err)
+                if (response.err != CanMessageFirmwareUpdateResponse::ErrNone)
                 {
-                case CanMessageFirmwareUpdateResponse::ErrNoFile:
-                case CanMessageFirmwareUpdateResponse::ErrBadOffset:
-                case CanMessageFirmwareUpdateResponse::ErrOther:
                     return -response.err;
-
-                case CanMessageFirmwareUpdateResponse::ErrNone:
-                    if (response.fileOffset >= startingOffset && response.fileOffset <= startingOffset + bytesReceived)
-                    {
-                        const uint32_t bufferOffset = response.fileOffset - startingOffset;
-                        const uint32_t bytesToCopy = min<uint32_t>(numBytes - bufferOffset, response.dataLength);
-                        memcpy(buffer + bufferOffset, response.data, bytesToCopy);
-                        if (response.fileOffset + bytesToCopy > startingOffset + bytesReceived)
-                        {
-                            bytesReceived = response.fileOffset - startingOffset + bytesToCopy;
-                        }
-                        if (bytesReceived == numBytes || bytesReceived >= response.fileLength - startingOffset)
-                        {
-                            // Reached the end of the file
-                            memset(buffer + bytesReceived, 0xFF, numBytes - bytesReceived);
-                            fileSize = response.fileLength;
-                            done = true;
-                        }
-                    }
-                    whenStartedWaiting = millis();
                 }
+
+                if (response.fileOffset >= startingOffset && response.fileOffset <= startingOffset + bytesReceived)
+                {
+                    const uint32_t bufferOffset = response.fileOffset - startingOffset;
+                    const uint32_t bytesToCopy = min<uint32_t>(numBytes - bufferOffset, response.dataLength);
+                    memcpy(buffer + bufferOffset, response.data, bytesToCopy);
+                    if (response.fileOffset + bytesToCopy > startingOffset + bytesReceived)
+                    {
+                        bytesReceived = response.fileOffset - startingOffset + bytesToCopy;
+                    }
+                    if (bytesReceived == numBytes || bytesReceived >= response.fileLength - startingOffset)
+                    {
+                        // Reached the end of the file
+                        memset(buffer + bytesReceived, 0xFF, numBytes - bytesReceived);
+                        fileSize = response.fileLength;
+                        done = true;
+                    }
+                }
+                whenStartedWaiting = millis();
             }
         }
         else if (millis() - whenStartedWaiting > 2000)
@@ -176,6 +144,27 @@ void RepRap::RunCanIap(c_string _ecv_null  filenameRef) noexcept
     debugPrintf("Update firmware over CAN\n");
     uint32_t start = millis();
     EmergencyStop();			// turn off heaters etc.
+#if STM32H7
+    if (!MassStorage::CheckDriveMounted(FIRMWARE_DIRECTORY))
+    {
+        // no SD card available, request that the bootloader performs the update
+        const uint32_t topOfStack = *reinterpret_cast<uint32_t *>(BootloaderFlashStart);
+        debugPrintf("Params address is %x\n", topOfStack);
+        delay(1000);
+	    SERIAL_MAIN_DEVICE.end();
+	    // Disable all IRQs
+	    SysTick->CTRL  = SysTick_CTRL_CLKSOURCE_Msk;	// disable the system tick exception
+	    IrqDisable();
+        //const uint32_t topOfStack = *reinterpret_cast<uint32_t *>(BootloaderFlashStart);
+	    BOOTIAPParams* paramsPtr = reinterpret_cast<BOOTIAPParams*>(topOfStack);
+        paramsPtr->sig1 = BOOTIAPParamSig;
+        paramsPtr->sig2 = BOOTIAPParamSig;
+        paramsPtr->state = BootState::LoadCANFirmware;
+        paramsPtr->bootParam = (uint32_t) CanInterface::GetCanAddress();
+        Cache::FlushECC(paramsPtr, sizeof(BOOTIAPParams));
+        SoftwareReset(SoftwareResetReason::user); // Reboot
+    }
+#endif
     String<MaxFilenameLength> fileName;
     MassStorage::CombineName(fileName.GetRef(), FIRMWARE_DIRECTORY, IAP_FIRMWARE_FILE);
     FileStore * const f = MassStorage::OpenFile(fileName.c_str(), OpenMode::write, 0);
@@ -210,7 +199,6 @@ void RepRap::RunCanIap(c_string _ecv_null  filenameRef) noexcept
 
 #if STM32H7
 #include <Flash.h>
-constexpr size_t BootloaderFlashStart = 0x8000000;
 
 // Update the Bootloader. Prerequisites should be checked before calling this.
 void RepRap::RunCanBootloaderIap(c_string _ecv_null  filenameRef) noexcept
