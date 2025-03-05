@@ -26,6 +26,7 @@
 #include "ff.h"
 #include "Hardware/SoftwareReset.h"
 #include "Hardware/ExceptionHandlers.h"
+#include "NonVolatileMemory.h"
 
 #include "pinmap.h"
 
@@ -201,6 +202,9 @@ static const boardConfigEntry_t boardConfigs[]=
     {"can.readPin", &CanReadPin, 1, cvPinType},
     {"can.writePin", &CanWritePin, 1, cvPinType},
 #endif
+#if SUPPORT_REMOTE_COMMANDS
+    {"CAN.exp.address", &DefaultCanExpAddress, 1, cvUint8Type}
+#endif
 };
 
 
@@ -281,6 +285,9 @@ static void ClearConfig() noexcept
 #if STM32H7
     CanReadPin = PB_8;
     CanWritePin = PB_9;
+#endif
+#if SUPPORT_REMOTE_COMMANDS
+    DefaultCanExpAddress = 255;
 #endif
 #if HAS_VOLTAGE_MONITOR
     VInDummyReading = 24;
@@ -671,6 +678,24 @@ static SSPChannel InitSDCard(SDConfigs conf, bool mount, bool needed) noexcept
     return SSPNONE;
 }
 
+#if SUPPORT_REMOTE_COMMANDS
+void BoardConfig::SetSavedCanExpansionAddress(CanAddress addr) noexcept
+{
+    if (addr != 255)
+    {
+        NonVolatileMemory mem;
+        mem.SetCanExpansionAddress(addr == 0 ? 255 : addr);
+        mem.EnsureWritten();
+    }
+}
+
+CanAddress BoardConfig::GetSavedCanExpansionAddress() noexcept
+{
+    NonVolatileMemory mem;
+    const CanAddress addr = mem.GetCanExpansionAddress();
+    return (addr == 255 ? 0 : addr);
+}
+#endif
 
 void BoardConfig::Init() noexcept
 {
@@ -876,6 +901,24 @@ void BoardConfig::Init() noexcept
 
 #if SUPPORT_TMC22xx || SUPPORT_DMA_NEOPIXEL
     DMABitIOInit();
+#endif
+
+#if SUPPORT_REMOTE_COMMANDS
+    if (DefaultCanExpAddress == 0)
+    {
+        // Clear any saved address
+        SetSavedCanExpansionAddress(0);
+    }
+    else
+    {
+        CanAddress nvmAddr = GetSavedCanExpansionAddress();
+        debugPrintf("CAN def %d nvm %d\n", DefaultCanExpAddress, nvmAddr);
+        if (nvmAddr != 0)
+        {
+            debugPrintf("Set default address\n");
+            DefaultCanExpAddress = nvmAddr;
+        }
+    }
 #endif
 }
 

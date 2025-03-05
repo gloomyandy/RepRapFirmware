@@ -52,6 +52,10 @@ public:
 #if STM32H7
     static bool IsBootloaderCanEnabled() noexcept;
 #endif
+#if SUPPORT_REMOTE_COMMANDS
+    static void SetSavedCanExpansionAddress(CanAddress addr) noexcept;
+    static CanAddress GetSavedCanExpansionAddress() noexcept;
+#endif
 #if HAS_SBC_INTERFACE
     static bool LoadBoardConfigFromSBC() noexcept;
     static void InvalidateBoardConfiguration() noexcept;

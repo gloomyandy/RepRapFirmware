@@ -27,6 +27,10 @@ public:
 	int8_t GetThermistorHighCalibration(unsigned int inputNumber) noexcept;
 	void SetThermistorLowCalibration(unsigned int inputNumber, int8_t val) noexcept;
 	void SetThermistorHighCalibration(unsigned int inputNumber, int8_t val) noexcept;
+#if STM32 && SUPPORT_REMOTE_COMMANDS
+	void SetCanExpansionAddress(CanAddress addr) noexcept;
+	CanAddress GetCanExpansionAddress() noexcept;
+#endif
 
 	static constexpr unsigned int NumberOfResetDataSlots = 3;
 	static constexpr unsigned int MaxCalibratedThermistors = 8;
@@ -41,7 +45,12 @@ private:
 		uint16_t magic;
 		uint8_t thermistorLowCalibration[MaxCalibratedThermistors];
 		uint8_t thermistorHighCalibration[MaxCalibratedThermistors];
+#if STM32 && SUPPORT_REMOTE_COMMANDS
+		uint8_t canExpansionAddress;
+		uint8_t spare[37];
+#else
 		uint8_t spare[38];
+#endif
 		// 56 bytes up to here
 		SoftwareResetData resetData[NumberOfResetDataSlots];			// 3 slots of 152 bytes each
 

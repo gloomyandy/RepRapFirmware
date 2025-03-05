@@ -41,7 +41,6 @@ void RepRap::RunSdIap(c_string _ecv_null  filename) noexcept
     fout->Close();
     if (!stopped)
     {
-        debugPrintf("Sending estop\n");
         EmergencyStop();			// turn off heaters etc.
     }
     debugPrintf("Restarting....\n");
@@ -147,15 +146,15 @@ void RepRap::RunCanIap(c_string _ecv_null  filenameRef) noexcept
 #if STM32H7
     if (!MassStorage::CheckDriveMounted(FIRMWARE_DIRECTORY))
     {
-        // no SD card available, request that the bootloader performs the update
-        const uint32_t topOfStack = *reinterpret_cast<uint32_t *>(BootloaderFlashStart);
-        debugPrintf("Params address is %x\n", topOfStack);
+        debugPrintf("Using bootloader\n");
         delay(1000);
+        // no SD card available, request that the bootloader performs the update
 	    SERIAL_MAIN_DEVICE.end();
 	    // Disable all IRQs
 	    SysTick->CTRL  = SysTick_CTRL_CLKSOURCE_Msk;	// disable the system tick exception
 	    IrqDisable();
-        //const uint32_t topOfStack = *reinterpret_cast<uint32_t *>(BootloaderFlashStart);
+        // Tell the bootloader what we want and what our CAN address is
+        const uint32_t topOfStack = *reinterpret_cast<uint32_t *>(BootloaderFlashStart);
 	    BOOTIAPParams* paramsPtr = reinterpret_cast<BOOTIAPParams*>(topOfStack);
         paramsPtr->sig1 = BOOTIAPParamSig;
         paramsPtr->sig2 = BOOTIAPParamSig;
@@ -214,7 +213,6 @@ void RepRap::RunCanBootloaderIap(c_string _ecv_null  filenameRef) noexcept
         ret = GetBlock(FirmwareModule::bootloader, offset, fileSize, sizeof(buf), buf);
         if (ret > 0)
         {
-            debugPrintf("Got block size %d\n", ret);
             if (offset == 0)
             {
                 Flash::FlashEraseSector(0);
@@ -224,7 +222,7 @@ void RepRap::RunCanBootloaderIap(c_string _ecv_null  filenameRef) noexcept
         }
     } while (ret > 0 && offset < fileSize);
     if (ret < 0)
-        debugPrintf("got error %d\n", ret);
+        debugPrintf("got error %d\n", (int)ret);
     debugPrintf("Update time %ums\n", (unsigned)(millis() - start));
     debugPrintf("Restarting....\n");
     delay(1000);

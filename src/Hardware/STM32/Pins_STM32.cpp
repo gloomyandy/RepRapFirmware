@@ -113,6 +113,9 @@ Pin SPIPins[NumSPIDevices][NumSPIPins];                 //GPIO pins for hardware
     Pin CanWritePin;
 #endif
 
+#if SUPPORT_REMOTE_COMMANDS
+    CanAddress DefaultCanExpAddress;
+#endif
 #if SUPPORT_LED_STRIPS
 Pin NeopixelOutPin;
 #endif

@@ -318,6 +318,43 @@ static GCodeResult InitiateFirmwareUpdate(const CanMessageUpdateYourFirmware& ms
 	return GCodeResult::error;
 }
 
+#if STM32
+static GCodeResult ChangeAddressAndDataRate(const CanMessageSetAddressAndNormalTiming &msg, const StringRef &reply) noexcept
+{
+	if (msg.oldAddress == CanInterface::GetCanAddress())
+	{
+		bool seen = false;
+
+		// Check whether we are setting the address
+		if (msg.newAddress != 0 && msg.newAddress <= CanId::MaxCanAddress && msg.newAddress == (uint8_t)~msg.newAddressInverted)
+		{
+			seen = true;
+		}
+		if (seen)
+		{
+			reprap.ScheduleChangeCanExpansionAddress(msg.newAddress);
+		}
+		else
+		{
+#if 0
+			CanTiming timing;
+			can0dev->GetLocalCanTiming(timing);
+			reply.printf("CAN bus speed %.1fkbps, tseg1 %.2f, jump width %.2f",
+							(double)((float)CanTiming::ClockFrequency/(1000 * timing.period)),
+							(double)((float)timing.tseg1/(float)timing.period),
+							(double)((float)timing.jumpWidth/(float)timing.period));
+#else
+			reply.printf("Timing data not available");
+#endif
+		}
+		return GCodeResult::ok;
+	}
+
+	reply.copy("Received ChangeAddress message for wrong board");
+	return GCodeResult::error;
+}
+#endif
+
 #endif	// SUPPORT_REMOTE_COMMANDS
 
 // Process a received broadcast or request message. Don't free the message buffer
@@ -578,6 +615,12 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				InputMonitor::ReadInputs(buf);
 				CanInterface::SendResponseNoFree(buf);
 				return;
+#if STM32
+			case CanMessageType::setAddressAndNormalTiming:
+				requestId = buf->msg.setAddressAndNormalTiming.requestId;
+				rslt = ChangeAddressAndDataRate(buf->msg.setAddressAndNormalTiming, replyRef);
+				break;
+#endif
 
 			// Filament monitor commands
 			case CanMessageType::createFilamentMonitor:

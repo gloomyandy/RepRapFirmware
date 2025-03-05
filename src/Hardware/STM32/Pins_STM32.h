@@ -69,6 +69,7 @@
 constexpr size_t NumFirmwareUpdateModules = 5;        // 3 modules, plus one for manual upload to WiFi module (module 2 is now unused)
 
 // Features definition
+#define SUPPORT_REMOTE_COMMANDS          (SUPPORT_CAN_EXPANSION)
 #define SUPPORT_OBJECT_MODEL             1
 #define HAS_CPU_TEMP_SENSOR              1	// enabling the CPU temperature sensor disables Due pin 13 due to bug in SAM3X
 #define HAS_HIGH_SPEED_SD                0
@@ -284,6 +285,9 @@ extern SSPChannel TempSensorSSPChannel;
 #if STM32H7
     extern Pin CanReadPin;
     extern Pin CanWritePin;
+#endif
+#if SUPPORT_REMOTE_COMMANDS
+    extern CanAddress DefaultCanExpAddress;
 #endif
 
 // Power control

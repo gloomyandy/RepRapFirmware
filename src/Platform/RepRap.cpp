@@ -655,6 +655,13 @@ void RepRap::Init() noexcept
 	else
 	{
 		GetSbcInterface().FreeMemory();
+#if SUPPORT_REMOTE_COMMANDS
+		if (!CanInterface::InExpansionMode() && DefaultCanExpAddress != 0)
+		{
+			debugPrintf("Switch to Can Expansion mode\n");
+			CanInterface::SwitchToExpansionMode(DefaultCanExpAddress, false);
+		}
+#endif
 	}
 # endif
 
@@ -815,6 +822,11 @@ void RepRap::Spin() noexcept
 #if STM32
 		case DeferredCommand::updateFirmware:
 			RunCanIap("");
+			break;
+
+		case DeferredCommand::setAddress:
+			BoardConfig::SetSavedCanExpansionAddress(DefaultCanExpAddress);
+			deferredCommand = DeferredCommand::none;
 			break;
 
 #if STM32H7

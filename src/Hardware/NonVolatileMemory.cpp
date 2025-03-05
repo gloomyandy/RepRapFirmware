@@ -176,4 +176,27 @@ void NonVolatileMemory::SetThermistorCalibration(unsigned int inputNumber, int8_
 	}
 }
 
+#if STM32 && SUPPORT_REMOTE_COMMANDS
+void NonVolatileMemory::SetCanExpansionAddress(CanAddress addr) noexcept
+{
+	EnsureRead();
+	const uint8_t oldVal = buffer.canExpansionAddress;
+	if (oldVal != addr)
+	{
+		buffer.canExpansionAddress = addr;
+		if ((addr & ~oldVal) != 0)
+			state = NvmState::eraseAndWriteNeeded;
+		else if (state == NvmState::clean)
+		{
+			state = NvmState::writeNeeded;
+		}
+	}
+}
+
+CanAddress NonVolatileMemory::GetCanExpansionAddress() noexcept
+{
+	EnsureRead();
+	return buffer.canExpansionAddress;
+}
+#endif
 // End
