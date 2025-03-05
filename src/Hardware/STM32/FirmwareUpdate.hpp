@@ -6,7 +6,7 @@
 extern uint32_t _estack;			// defined in the linker script
 
 
-// Update the firmware. Prerequisites should be checked before calling this.
+// Update the firmware from SD. Prerequisites should be checked before calling this.
 void RepRap::RunSdIap(c_string _ecv_null  filename) noexcept
 {
     debugPrintf("Update firmware from SD card based file\n");
@@ -52,47 +52,48 @@ void RepRap::RunSdIap(c_string _ecv_null  filename) noexcept
 
 #if SUPPORT_REMOTE_COMMANDS
 
-int32_t RequestFirmwareBlock(uint32_t fileOffset, uint32_t numBytes, uint8_t *buffer, uint32_t *fileSize)
+int32_t RequestFirmwareBlock(FirmwareModule modType, uint32_t fileOffset, uint32_t numBytes, uint8_t *buffer, uint32_t *fileSize)
 {
-	CanMessageBuffer *buf = CanMessageBuffer::Allocate();
-	if (buf == nullptr)
-	{
-		debugPrintf("No Message buffer available\n");
+    CanMessageBuffer *buf = CanMessageBuffer::Allocate();
+    if (buf == nullptr)
+    {
+        debugPrintf("No Message buffer available\n");
         return -1;
-	}
+    }
+    digitalWrite(DiagPin, XNor(DiagOnPolarity, millis() & 32) != 0);
     CanMessageFirmwareUpdateRequest * const msg = buf->SetupRequestMessageNoRid<CanMessageFirmwareUpdateRequest>(CanInterface::GetCanAddress(), CanId::MasterAddress);
-	SafeStrncpy(msg->boardType, BOARD_SHORT_NAME, sizeof(msg->boardType));
-	msg->boardVersion = 0;
-	msg->bootloaderVersion = CanMessageFirmwareUpdateRequest::BootloaderVersion0;
-	msg->fileOffset = fileOffset;
-	msg->lengthRequested = numBytes;
-    msg->fileWanted = (uint32_t)FirmwareModule::main;
+    SafeStrncpy(msg->boardType, BOARD_SHORT_NAME, sizeof(msg->boardType));
+    msg->boardVersion = 0;
+    msg->bootloaderVersion = CanMessageFirmwareUpdateRequest::BootloaderVersion0;
+    msg->fileOffset = fileOffset;
+    msg->lengthRequested = (numBytes > sizeof(CanMessageFirmwareUpdateResponse::data)) ? sizeof(CanMessageFirmwareUpdateResponse::data) : numBytes;
+    msg->fileWanted = (uint32_t)modType;
     msg->uf2Format = 0;
-	buf->dataLength = msg->GetActualDataLength();
+    buf->dataLength = msg->GetActualDataLength();
     String<1> dummy;
-    uint32_t ret = -5;
-	CanInterface::SendRequestAndGetCustomReply(buf, fileOffset & 0xfff, dummy.GetRef(), nullptr, CanMessageType::firmwareBlockResponse,
-															[buffer, &ret, fileSize](const CanMessageBuffer *buf)
-																{
-																	auto response = buf->msg.firmwareUpdateResponse;
+    int32_t ret = -5;
+    CanInterface::SendRequestAndGetCustomReply(buf, fileOffset & 0xfff, dummy.GetRef(), nullptr, CanMessageType::firmwareBlockResponse,
+                                                            [buffer, &ret, fileSize](const CanMessageBuffer *buf)
+                                                                {
+                                                                    auto response = buf->msg.firmwareUpdateResponse;
                                                                     if (response.err != CanMessageFirmwareUpdateResponse::ErrNone )
                                                                         ret = - response.err;
                                                                     else
                                                                     {
                                                                         ret = response.dataLength;
-                                                                        for (unsigned int i = 0; i < ret; ++i)
+                                                                        for (int32_t i = 0; i < ret; ++i)
                                                                         {
                                                                             buffer[i] = response.data[i];
                                                                         }
                                                                     }
                                                                     *fileSize = response.fileLength;
-																});
+                                                                });
     if (ret < 0)
         debugPrintf("FirmwareUpdateRequest error %d\n", (int)-ret);
     return ret;
 }
 
-// Update the firmware. Prerequisites should be checked before calling this.
+// Update the firmware over CAN. Prerequisites should be checked before calling this.
 void RepRap::RunCanIap(c_string _ecv_null  filenameRef) noexcept
 {
     debugPrintf("Update firmware over CAN\n");
@@ -111,8 +112,8 @@ void RepRap::RunCanIap(c_string _ecv_null  filenameRef) noexcept
     int32_t ret;
     uint32_t fileSize;
     do {
-        uint8_t buf[56];
-        ret = RequestFirmwareBlock(offset, sizeof(buf), buf, &fileSize);
+        uint8_t buf[sizeof(CanMessageFirmwareUpdateResponse::data)];
+        ret = RequestFirmwareBlock(FirmwareModule::main, offset, sizeof(buf), buf, &fileSize);
         if (ret > 0)
             if (!f->Write(buf, ret))
             {
@@ -129,5 +130,50 @@ void RepRap::RunCanIap(c_string _ecv_null  filenameRef) noexcept
     SoftwareReset(SoftwareResetReason::user); // Reboot
 
 }
+
+#if STM32H7
+#include <Flash.h>
+constexpr size_t BootloaderFlashStart = 0x8000000;
+
+// Update the Bootloader. Prerequisites should be checked before calling this.
+void RepRap::RunCanBootloaderIap(c_string _ecv_null  filenameRef) noexcept
+{
+    debugPrintf("Update bootloader over CAN\n");
+    uint32_t start = millis();
+    EmergencyStop();			// turn off heaters etc.
+    uint32_t offset = 0;
+    int32_t ret;
+    uint32_t fileSize;
+    do {
+        uint8_t buf[1024];
+        uint32_t bufOffset = 0;
+        do {
+            ret = RequestFirmwareBlock(FirmwareModule::bootloader, offset + bufOffset, sizeof(buf) - bufOffset, buf + bufOffset, &fileSize);
+            if (ret > 0)
+                bufOffset += ret;
+        } while (ret > 0 && bufOffset < sizeof(buf) && offset + bufOffset < fileSize);
+        if (ret > 0)
+        {
+            if (offset == 0)
+            {
+                Flash::FlashEraseSector(0);
+            }
+            if (bufOffset < sizeof(buf))
+            {
+                //debugPrintf("Fill last block len %d\n", bufOffset);
+                memset(buf+bufOffset, 0xff, sizeof(buf)-bufOffset);
+            }
+            Flash::FlashWrite(BootloaderFlashStart+offset, buf, sizeof(buf));
+            offset += bufOffset;
+        }
+    } while (ret > 0 && offset < fileSize);
+    if (ret < 0)
+        debugPrintf("got error %d\n", ret);
+    debugPrintf("Update time %ums\n", (unsigned)(millis() - start));
+    debugPrintf("Restarting....\n");
+    delay(1000);
+    SoftwareReset(SoftwareResetReason::user); // Reboot
+}
+#endif
 #endif
 

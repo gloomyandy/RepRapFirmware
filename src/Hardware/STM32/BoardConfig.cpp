@@ -552,20 +552,6 @@ static void CheckDriverPins() noexcept
 #endif
 
 
-static void UnknownHardware() noexcept
-{
-    for(;;)
-    {
-        debugPrintf("\nRRF has been unable to identify the current hardware.\n");
-        debugPrintf("This may be because it is a new board or has a new bootloader installed.\n");
-        debugPrintf("To register the hardware configuration please contact TeamGloomy via our\n");
-        debugPrintf("discord server (https://discord.gg/uS97Qs7) and supply details of\n");
-        debugPrintf("the board and the board.\n");
-        delay(2000);
-    }
-}
-
-
 static const char *GetBootloaderString() noexcept
 {
     const uint32_t *BootVectors = (const uint32_t *)0x8000000;
@@ -651,7 +637,7 @@ static SSPChannel InitSDCard(SDConfigs conf, bool mount, bool needed) noexcept
 {
     if (conf == SD_UNKNOWN)
     {
-        UnknownHardware();
+        FatalError("Unknown SD card configuration\n");
     }
     else if (conf == SD_NONE)
     {

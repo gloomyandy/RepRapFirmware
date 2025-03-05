@@ -61,7 +61,7 @@ pre(buf->id.MsgType() == CanMessageType::firmwareBlockRequest)
 		// allow use of non Duet firmware
 		if (IsSTM32Firmware(msg.boardType, Strnlen(msg.boardType, msg.GetBoardTypeLength(buf->dataLength))))
 		{
-			fname.copy("firmware_");
+			fname.copy((msg.fileWanted == (unsigned int)FirmwareModule::bootloader) ? "bootloader_" : "firmware_");
 		}
 		else
 #endif
@@ -229,7 +229,11 @@ static GCodeResult EutGetInfo(const CanMessageReturnInfo& msg, const StringRef& 
 		break;
 
 	case CanMessageReturnInfo::typeBootloaderName:
+#if STM32H7
+		reply.copy(BOARD_SHORT_NAME);
+#else
 		reply.copy("(n/a)");
+#endif
 		break;
 
 	case CanMessageReturnInfo::typeM408:
@@ -296,6 +300,14 @@ static GCodeResult InitiateFirmwareUpdate(const CanMessageUpdateYourFirmware& ms
 		reprap.ScheduleFirmwareUpdateOverCan();
 		return GCodeResult::ok;
 	}
+#if STM32H7
+	if (msg.module == 3)
+	{
+		reply.printf("Board %u starting BootLoader update", CanInterface::GetCanAddress());
+		reprap.ScheduleBootloaderUpdateOverCan();
+		return GCodeResult::ok;
+	}
+#endif
 	reply.copy("unknown firmware module number");
 	return GCodeResult::error;
 }

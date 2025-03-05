@@ -103,6 +103,9 @@ public:
 #if SUPPORT_REMOTE_COMMANDS
  	void ScheduleReset() noexcept { whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::reboot; }
  	void ScheduleFirmwareUpdateOverCan() noexcept { whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::updateFirmware; }
+#if STM32H7
+ 	void ScheduleBootloaderUpdateOverCan() noexcept { whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::updateBootloader; }
+#endif
 #endif
 
 	void Tick() noexcept;
@@ -140,6 +143,9 @@ public:
 #if STM32
 	void RunSdIap(c_string _ecv_null  filename) noexcept;
 	void RunCanIap(c_string _ecv_null  filename) noexcept;
+#if STM32H7
+	void RunCanBootloaderIap(c_string _ecv_null  filename) noexcept;
+#endif
 #endif
 	[[noreturn]] void StartIap(c_string _ecv_null filename) noexcept;
 
@@ -260,7 +266,11 @@ private:
 #endif
 
 #if SUPPORT_REMOTE_COMMANDS
+#if STM32H7
+	enum class DeferredCommand : uint8_t { none, reboot, updateFirmware, updateBootloader };
+#else
 	enum class DeferredCommand : uint8_t { none, reboot, updateFirmware };
+#endif
 	volatile uint32_t whenDeferredCommandScheduled;
 	volatile DeferredCommand deferredCommand;
 #endif

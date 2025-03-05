@@ -23,8 +23,6 @@ MEMORY
     RAM_D2	(xrw)	: ORIGIN = 0x30000000,	LENGTH = 32K
     RAM_D3	(xrw)	: ORIGIN = 0x38000000,	LENGTH = 16K
     FLASH	(rx)	: ORIGIN = 0x8020000,	LENGTH = 1024K - 128K - 128K
-    /* We currently don't have a bootloader for the Fly H7 board so load us at the start address */
-    /*FLASH	(rx)	: ORIGIN = 0x8000000,	LENGTH = 1024K - 128K*/
     RESETDATA (rx) : ORIGIN = 0x80E0000, LENGTH = 128K
 
 }

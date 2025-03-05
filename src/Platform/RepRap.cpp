@@ -812,11 +812,23 @@ void RepRap::Spin() noexcept
 		case DeferredCommand::reboot:
 			SoftwareReset(SoftwareResetReason::user);
 			break;
+#if STM32
+		case DeferredCommand::updateFirmware:
+			RunCanIap("");
+			break;
 
+#if STM32H7
+		case DeferredCommand::updateBootloader:
+			RunCanBootloaderIap("");
+			break;
+
+#endif
+#else
 		case DeferredCommand::updateFirmware:
 			UpdateFirmware(IAP_CAN_LOADER_FILE, "");
 			break;
 
+#endif
 		default:
 			deferredCommand = DeferredCommand::none;
 			break;
@@ -2696,13 +2708,6 @@ void RepRap::UpdateFirmware(c_string iapFilename, c_string iapParam) noexcept
 		RunSdIap(iapParam);
 		return;
 	}
-# if SUPPORT_REMOTE_COMMANDS
-	if (!strcmp(iapFilename, IAP_CAN_LOADER_FILE))
-	{
-		RunCanIap(iapParam);
-		return;
-	}
-# endif
 #endif
 	FileStore *_ecv_null iapFile = platform->OpenFile(FIRMWARE_DIRECTORY, iapFilename, OpenMode::read);
 	if (iapFile == nullptr)
