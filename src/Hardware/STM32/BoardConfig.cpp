@@ -203,7 +203,7 @@ static const boardConfigEntry_t boardConfigs[]=
     {"can.writePin", &CanWritePin, 1, cvPinType},
 #endif
 #if SUPPORT_REMOTE_COMMANDS
-    {"CAN.exp.address", &DefaultCanExpAddress, 1, cvUint8Type}
+    {"can.exp.address", &DefaultCanExpAddress, 1, cvUint8Type}
 #endif
 };
 
@@ -573,6 +573,7 @@ static const char *GetBootloaderString() noexcept
     return BootloaderString;
 }
 
+#if STM32H7
 bool BoardConfig::IsBootloaderCanEnabled() noexcept
 {
     const char *bootStr = GetBootloaderString();
@@ -580,6 +581,7 @@ bool BoardConfig::IsBootloaderCanEnabled() noexcept
     const char * canPtr = strstr(bootStr, " C:");
     return (canPtr != nullptr) && canPtr[3] == '1';
 }
+#endif
 
 // Determine how to access the SD card
 typedef struct {
