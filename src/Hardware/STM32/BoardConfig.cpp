@@ -920,6 +920,8 @@ void BoardConfig::Init() noexcept
             debugPrintf("Set default address\n");
             DefaultCanExpAddress = nvmAddr;
         }
+        if (DefaultCanExpAddress == 255)
+            DefaultCanExpAddress = 0;
     }
 #endif
 }
