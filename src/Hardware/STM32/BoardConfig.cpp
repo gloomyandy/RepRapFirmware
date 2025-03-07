@@ -72,6 +72,10 @@ static constexpr const char* boardConfigFile = "0:/sys/board.txt";
 static constexpr const char* bootConfigFile = "0:/rrfboot.txt";
 static constexpr const char* pinsConfigFile = "0:/rrfpins.txt";
 
+#if SUPPORT_REMOTE_COMMANDS
+static CanAddress DefaultCanExpAddress;
+#endif
+
 // board configs
 static const boardConfigEntry_t boardConfigs[]=
 {
@@ -906,6 +910,7 @@ void BoardConfig::Init() noexcept
 #endif
 
 #if SUPPORT_REMOTE_COMMANDS
+    CanExpansionAddress = (DefaultCanExpAddress == 255 ? 0 : DefaultCanExpAddress);
     if (DefaultCanExpAddress == 0)
     {
         // Clear any saved address
@@ -917,11 +922,9 @@ void BoardConfig::Init() noexcept
         debugPrintf("CAN def %d nvm %d\n", DefaultCanExpAddress, nvmAddr);
         if (nvmAddr != 0)
         {
-            debugPrintf("Set default address\n");
-            DefaultCanExpAddress = nvmAddr;
+            debugPrintf("Set expansion address %d\n", nvmAddr);
+            CanExpansionAddress = nvmAddr;
         }
-        if (DefaultCanExpAddress == 255)
-            DefaultCanExpAddress = 0;
     }
 #endif
 }

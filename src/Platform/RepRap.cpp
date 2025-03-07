@@ -656,10 +656,10 @@ void RepRap::Init() noexcept
 	{
 		GetSbcInterface().FreeMemory();
 #if SUPPORT_REMOTE_COMMANDS
-		if (!CanInterface::InExpansionMode() && DefaultCanExpAddress != 0)
+		if (!CanInterface::InExpansionMode() && CanExpansionAddress != 0)
 		{
 			debugPrintf("Switch to Can Expansion mode\n");
-			CanInterface::SwitchToExpansionMode(DefaultCanExpAddress, false);
+			CanInterface::SwitchToExpansionMode(CanExpansionAddress, false);
 		}
 #endif
 	}
@@ -825,7 +825,7 @@ void RepRap::Spin() noexcept
 			break;
 
 		case DeferredCommand::setAddress:
-			BoardConfig::SetSavedCanExpansionAddress(DefaultCanExpAddress);
+			BoardConfig::SetSavedCanExpansionAddress(CanExpansionAddress);
 			deferredCommand = DeferredCommand::none;
 			break;
 

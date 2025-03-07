@@ -287,7 +287,7 @@ extern SSPChannel TempSensorSSPChannel;
     extern Pin CanWritePin;
 #endif
 #if SUPPORT_REMOTE_COMMANDS
-    extern CanAddress DefaultCanExpAddress;
+    extern CanAddress CanExpansionAddress;
 #endif
 
 // Power control

@@ -105,7 +105,7 @@ public:
  	void ScheduleFirmwareUpdateOverCan() noexcept { whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::updateFirmware; }
 #if STM32
 	bool CheckFirmwareUpdatePossible() noexcept;
-	void ScheduleChangeCanExpansionAddress(CanAddress addr) noexcept { DefaultCanExpAddress = addr; whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::setAddress; }
+	void ScheduleChangeCanExpansionAddress(CanAddress addr) noexcept { CanExpansionAddress = addr; whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::setAddress; }
 #if STM32H7
  	void ScheduleBootloaderUpdateOverCan() noexcept { whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::updateBootloader; }
 #endif
