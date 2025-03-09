@@ -7,6 +7,7 @@ Version 3.6.0-rc.1
 * Improve speed of expansion mode firmware updates over CAN
 * Various fixes to board configs
 * Use diag LED during firmware updates
+* Fix bug with initial reading from probes on expasnion boards
 
 Version 3.6.0-beta.4
 ======================
