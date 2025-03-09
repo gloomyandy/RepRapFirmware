@@ -2,12 +2,12 @@ Version 3.6.0-rc.1
 ======================
 * Duet3d 3.6.0-rc.1
 * New Can capable bootloaders for H7 boards
-* Allow update expasnion mode boards over can without an SD card
+* Allow update of expansion mode boards over can without an SD card
 * Allow CAN address of expansion mode to be changed
 * Improve speed of expansion mode firmware updates over CAN
 * Various fixes to board configs
 * Use diag LED during firmware updates
-* Fix bug with initial reading from probes on expasnion boards
+* Fix bug with initial reading from probes on expansion boards
 
 Version 3.6.0-beta.4
 ======================
