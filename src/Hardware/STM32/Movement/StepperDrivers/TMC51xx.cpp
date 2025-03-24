@@ -389,7 +389,9 @@ public:
 	void SetMaxCurrent(float value) noexcept;
 	void AppendDriverStatus(const StringRef& reply) noexcept;
 	float GetDriverTemperature() noexcept;
-	uint32_t GetDriverClockFrequency() noexcept;
+	uint32_t GetDriverMaxClockFrequency() noexcept;
+	uint32_t GetDriverNominalClockFrequency() noexcept;
+	uint32_t GetDriverMinClockFrequency() noexcept;
 	bool UpdatePending() const noexcept { return (registersToUpdate.load() | newRegistersToUpdate.load()) != 0; }
 #if HAS_STALL_DETECT
 	void SetStallDetectThreshold(int sgThreshold) noexcept;
@@ -1112,9 +1114,19 @@ float Tmc51xxDriverState::GetDriverTemperature() noexcept
 	}
 }
 
-uint32_t Tmc51xxDriverState::GetDriverClockFrequency() noexcept
+uint32_t Tmc51xxDriverState::GetDriverMaxClockFrequency() noexcept
+{
+	return HighestTmcClockSpeed;
+}
+
+uint32_t Tmc51xxDriverState::GetDriverNominalClockFrequency() noexcept
 {
 	return NominalTmcClockSpeed;
+}
+
+uint32_t Tmc51xxDriverState::GetDriverMinClockFrequency() noexcept
+{
+	return LowestTmcClockSpeed;
 }
 
 #if HAS_STALL_DETECT

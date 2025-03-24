@@ -60,7 +60,9 @@ namespace SmartDrivers
 	void SetMaxCurrent(size_t driver, float value) noexcept;
 	float GetMaxCurrent(size_t driver) noexcept;
 	float GetDriverTemperature(size_t driver) noexcept;
-	uint32_t GetDriverClockFrequency(size_t driver) noexcept;
+	uint32_t GetDriverMaxClockFrequency(size_t driver) noexcept;
+	uint32_t GetDriverNominalClockFrequency(size_t driver) noexcept;
+	uint32_t GetDriverMinClockFrequency(size_t driver) noexcept;
 #if SUPPORT_PHASE_STEPPING
 	bool EnablePhaseStepping(size_t driver, bool enable) noexcept;
 	bool IsPhaseSteppingEnabled(size_t driver) noexcept;

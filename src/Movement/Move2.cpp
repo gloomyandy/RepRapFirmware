@@ -21,6 +21,62 @@
 # include <CanMessageGenericTables.h>
 #endif
 
+void Move::SetAcceleration(size_t drive, float value, bool reduced) noexcept
+{
+	const float val = max<float>(value, ConvertAcceleration(MinimumAcceleration));						// don't allow zero or negative acceleration
+	if (reduced)
+	{
+		reducedAccelerations[drive] = val;
+	}
+	else
+	{
+		normalAccelerations[drive] = val;
+#if SUPPORT_S_CURVE
+		if (accelerationTime > 0.0)
+		{
+			jerks[drive] = val / accelerationTime;
+		}
+#endif
+	}
+}
+
+#if SUPPORT_S_CURVE
+
+void Move::SetAccelerationTime(float value) noexcept
+{
+	accelerationTime = value * (float)StepClockRate;
+	if (accelerationTime > 0.0)
+	{
+		// Enable S-curve acceleration if all drives are using phase stepping
+		bool allUsingPhaseStepping = true;
+		for (size_t axis = 0; axis < reprap.GetGCodes().GetTotalAxes(); axis++)
+		{
+			jerks[axis] = normalAccelerations[axis] / accelerationTime;
+			if (GetStepMode(axis) != StepMode::phase)
+			{
+				allUsingPhaseStepping = false;
+			}
+		}
+
+		for (size_t extruder = 0; extruder < reprap.GetGCodes().GetNumExtruders(); extruder++)
+		{
+			const size_t drive = ExtruderToLogicalDrive(extruder);
+			jerks[drive] = normalAccelerations[drive] / accelerationTime;
+			if (GetStepMode(drive) != StepMode::phase)
+			{
+				allUsingPhaseStepping = false;
+			}
+		}
+		UseSCurve(allUsingPhaseStepping);
+	}
+	else
+	{
+		UseSCurve(false);
+	}
+}
+
+#endif
+
 // Set the microstepping for local drivers, returning true if successful. All drivers for the same axis must use the same microstepping.
 // Caller must deal with remote drivers.
 bool Move::SetMicrostepping(size_t drive, unsigned int microsteps, bool interp, const StringRef& reply) noexcept
@@ -1163,9 +1219,9 @@ void Move::ReportM569Parameters(size_t drive, const StringRef& reply) noexcept
 			const uint32_t axis = SmartDrivers::GetAxisNumber(drive);
 			bool bdummy;
 #if STM32
-			const float mmPerSec = (SmartDrivers::GetDriverClockFrequency(drive) * SmartDrivers::GetMicrostepping(drive, bdummy))/(256 * thigh * DriveStepsPerMm(axis));
+			const float mmPerSec = (SmartDrivers::GetDriverNominalClockFrequency(drive) * SmartDrivers::GetMicrostepping(drive, bdummy))/(256 * thigh * DriveStepsPerMm(axis));
 #else
-			const float mmPerSec = (SmartDrivers::GetDriverClockFrequency() * SmartDrivers::GetMicrostepping(drive, bdummy))/(256 * thigh * DriveStepsPerMm(axis));
+			const float mmPerSec = (SmartDrivers::GetDriverNominalClockFrequency() * SmartDrivers::GetMicrostepping(drive, bdummy))/(256 * thigh * DriveStepsPerMm(axis));
 #endif
 			const uint8_t iRun = SmartDrivers::GetIRun(drive);
 			const uint8_t iHold = SmartDrivers::GetIHold(drive);
@@ -1189,24 +1245,25 @@ void Move::ReportM569Parameters(size_t drive, const StringRef& reply) noexcept
 		if (SmartDrivers::GetDriverMode(drive) == DriverMode::stealthChop)
 		{
 			const uint32_t axis = SmartDrivers::GetAxisNumber(drive);
-			const uint32_t tpwmthrs = SmartDrivers::GetRegister(drive, SmartDriverRegister::tpwmthrs);
 			const uint32_t tcoolthrs = SmartDrivers::GetRegister(drive, SmartDriverRegister::tcoolthrs);
+			const uint32_t tpwmthrs = SmartDrivers::GetRegister(drive, SmartDriverRegister::tpwmthrs);
 			bool bdummy;
+			const unsigned int microstepping = SmartDrivers::GetMicrostepping(drive, bdummy);
 #if STM32
-			const unsigned int microsteppingTimesClockRate = SmartDrivers::GetMicrostepping(drive, bdummy) * SmartDrivers::GetDriverClockFrequency(drive);
+			const float tcoolMmPerSec = (microstepping * SmartDrivers::GetDriverMaxClockFrequency(drive))/(256 * tcoolthrs * DriveStepsPerMm(axis));
+			const float tpwmMmPerSec = (microstepping * SmartDrivers::GetDriverMinClockFrequency(drive))/(256 * tpwmthrs * DriveStepsPerMm(axis));
 #else
-			const unsigned int microsteppingTimesClockRate = SmartDrivers::GetMicrostepping(drive, bdummy) * SmartDrivers::GetDriverClockFrequency();
+			const float tcoolMmPerSec = (microstepping * SmartDrivers::GetDriverMaxClockFrequency())/(256 * tcoolthrs * DriveStepsPerMm(axis));
+			const float tpwmMmPerSec = (microstepping * SmartDrivers::GetDriverMinClockFrequency())/(256 * tpwmthrs * DriveStepsPerMm(axis));
 #endif
-			const float tpwmMmPerSec = microsteppingTimesClockRate/(256 * tpwmthrs * DriveStepsPerMm(axis));
-			const float tcoolMmPerSec = microsteppingTimesClockRate/(256 * tcoolthrs * DriveStepsPerMm(axis));
 			const uint32_t pwmScale = SmartDrivers::GetRegister(drive, SmartDriverRegister::pwmScale);
 			const uint32_t pwmAuto = SmartDrivers::GetRegister(drive, SmartDriverRegister::pwmAuto);
 			const unsigned int pwmScaleSum = pwmScale & 0xFF;
 			const int pwmScaleAuto = (int)((((pwmScale >> 16) & 0x01FF) ^ 0x0100) - 0x0100);
 			const unsigned int pwmOfsAuto = pwmAuto & 0xFF;
 			const unsigned int pwmGradAuto = (pwmAuto >> 16) & 0xFF;
-			reply.catf(", tpwmthrs %" PRIu32 " (%.1f mm/sec), tcoolthrs %" PRIu32 " (%.1f mm/sec), pwmScaleSum %u, pwmScaleAuto %d, pwmOfsAuto %u, pwmGradAuto %u",
-						tpwmthrs, (double)tpwmMmPerSec, tcoolthrs, (double)tcoolMmPerSec, pwmScaleSum, pwmScaleAuto, pwmOfsAuto, pwmGradAuto);
+			reply.catf(", tcoolthrs %" PRIu32 " (%.1f mm/sec), tpwmthrs %" PRIu32 " (%.1f mm/sec), pwmScaleSum %u, pwmScaleAuto %d, pwmOfsAuto %u, pwmGradAuto %u",
+						tcoolthrs, (double)tcoolMmPerSec, tpwmthrs, (double)tpwmMmPerSec, pwmScaleSum, pwmScaleAuto, pwmOfsAuto, pwmGradAuto);
 		}
 # endif
 		// Finally, print the microstep position

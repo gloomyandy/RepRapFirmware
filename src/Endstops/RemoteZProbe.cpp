@@ -114,7 +114,7 @@ GCodeResult RemoteZProbe::Create(const StringRef& pinNames, const StringRef& rep
 	bool state = false;
 	const uint16_t threshold = (type == ZProbeType::scanningAnalog) ? DefaultZProbeADValue : 0;		// nonzero threshold makes it an analog handle
 	const GCodeResult rc = CanInterface::CreateHandle(boardAddress, h, pinNames.c_str(), threshold, ActiveProbeReportInterval, &state, reply);
-	if (rc < GCodeResult::error)						// don't set the handle unless it is valid, or we will get an error when this probe is deleted
+	if (rc < GCodeResult::error)								// don't set the handle unless it is valid, or we will get an error when this probe is deleted
 	{
 		handle = h;
 		if (type == ZProbeType::scanningAnalog)
@@ -123,7 +123,9 @@ GCodeResult RemoteZProbe::Create(const StringRef& pinNames, const StringRef& rep
 			(void)GetCalibratedReading(dummyValue);				// get an initial reading for the object model
 		}
 		else
-			lastValue = state ? 1 : 0;
+		{
+			lastValue = (state) ? 1 : 0;						// set the initial state if it's a digital Z probe
+		}
 	}
 	return rc;
 }

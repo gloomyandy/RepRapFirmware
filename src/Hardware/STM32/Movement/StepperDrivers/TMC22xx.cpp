@@ -422,7 +422,9 @@ public:
 	void SetMaxCurrent(float value) noexcept;
 	void AppendDriverStatus(const StringRef& reply) noexcept;
 	float GetDriverTemperature() noexcept;
-	uint32_t GetDriverClockFrequency() noexcept;
+	uint32_t GetDriverMaxClockFrequency() noexcept;
+	uint32_t GetDriverNominalClockFrequency() noexcept;
+	uint32_t GetDriverMinClockFrequency() noexcept;
 	uint8_t GetDriverNumber() const noexcept { return driverNumber; }
 	bool UpdatePending() const noexcept;
 	
@@ -1177,9 +1179,19 @@ float Tmc22xxDriverState::GetDriverTemperature() noexcept
 
 }
 
-uint32_t Tmc22xxDriverState::GetDriverClockFrequency() noexcept
+uint32_t Tmc22xxDriverState::GetDriverMaxClockFrequency() noexcept
+{
+	return HighestTmcClockSpeed;
+}
+
+uint32_t Tmc22xxDriverState::GetDriverNominalClockFrequency() noexcept
 {
 	return NominalTmcClockSpeed;
+}
+
+uint32_t Tmc22xxDriverState::GetDriverMinClockFrequency() noexcept
+{
+	return LowestTmcClockSpeed;
 }
 
 // This is called by the ISR when the SPI transfer has completed

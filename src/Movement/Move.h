@@ -162,6 +162,14 @@ public:
 	float Acceleration(size_t axisOrExtruder, bool reduced) const noexcept;
 	const float *_ecv_array Accelerations(bool reduced) const noexcept { return (reduced) ? reducedAccelerations : normalAccelerations; }
 	void SetAcceleration(size_t axisOrExtruder, float value, bool reduced) noexcept;
+#if SUPPORT_S_CURVE
+	const float *_ecv_array Jerks() const noexcept { return jerks; }
+	void SetAccelerationTime(float value) noexcept;
+	float AccelerationTime() const noexcept { return accelerationTime; }
+	void UseSCurve(bool enable) noexcept { usingSCurve = enable; }
+	bool IsUsingSCurve() const noexcept { return usingSCurve; }
+#endif
+
 	float MaxFeedrate(size_t axisOrExtruder) const noexcept;
 	const float *_ecv_array MaxFeedrates() const noexcept { return maxFeedrates; }
 	void SetMaxFeedrate(size_t axisOrExtruder, float value) noexcept;
@@ -430,28 +438,23 @@ public:
 #endif
 
 #if HAS_SMART_DRIVERS
-	uint32_t GetStepInterval(size_t drive, uint32_t microstepShift) const noexcept;			// Get the current step interval for this axis or extruder
+	uint32_t GetStepInterval(size_t drive, uint32_t microstepShift) const noexcept;				// Get the current step interval for this axis or extruder
 #endif
 
 #if SUPPORT_CLOSED_LOOP
-	bool EnableIfIdle(size_t driver) noexcept;										// if the driver is idle, enable it; return true if driver enabled on return
+	bool EnableIfIdle(size_t driver) noexcept;													// if the driver is idle, enable it; return true if driver enabled on return
 	void InvertCurrentMotorSteps(size_t driver) noexcept;
 #endif
 
 #if SUPPORT_PHASE_STEPPING
-	void ConfigurePhaseStepping(size_t axisOrExtruder, float value, PhaseStepConfig config);							// configure Ka & Kv parameters for phase stepping
-	PhaseStepParams GetPhaseStepParams(size_t axisOrExtruder);
+	void ConfigurePhaseStepping(size_t axisOrExtruder, float value, PhaseStepConfig config);	// configure Ka & Kv parameters for phase stepping
+	PhaseStepParams GetPhaseStepParams(size_t axisOrExtruder) const noexcept;
 	bool GetCurrentMotion(size_t driver, uint32_t when, MotionParameters& mParams) noexcept;	// get the net full steps taken, including in the current move so far, also speed and acceleration; return true if moving
 	bool SetStepMode(size_t axisOrExtruder, StepMode mode, const StringRef& reply) noexcept;
-	StepMode GetStepMode(size_t axisOrExtruder) noexcept;
+	StepMode GetStepMode(size_t axisOrExtruder) const noexcept;
 	void ResetPhaseStepMonitoringVariables() noexcept;
 
 	void PhaseStepControlLoop() noexcept;
-#endif
-
-#if SUPPORT_S_CURVE
-	void UseSCurve(bool enable) noexcept { usingSCurve = enable; }
-	bool IsUsingSCurve() noexcept { return usingSCurve; }
 #endif
 
 	void Interrupt() noexcept;
@@ -490,7 +493,7 @@ public:
 protected:
 	DECLARE_OBJECT_MODEL_WITH_ARRAYS
 
-	size_t GetMaxElementsToReturn(const ObjectModelArrayTableEntry *entry) const noexcept override;
+	size_t GetMaxElementsToReturn(const ObjectModelArrayTableEntry *entry, const ObjectExplorationContext& context) const noexcept override;
 
 private:
 	enum class MoveState : uint8_t
@@ -630,10 +633,6 @@ private:
 	StepTimer::Ticks maxPSControlLoopCallInterval;		// The maximum interval between the control loop being called
 #endif
 
-#if SUPPORT_S_CURVE
-	bool usingSCurve = false;
-#endif
-
 #if SUPPORT_ASYNC_MOVES
 	AsyncMove auxMove;
 	volatile bool auxMoveLocked;
@@ -722,7 +721,13 @@ private:
 	float normalAccelerations[MaxAxesPlusExtruders];		// max accelerations in mm per step clock squared for normal moves
 	float reducedAccelerations[MaxAxesPlusExtruders];		// max accelerations in mm per step clock squared for probing and stall detection moves
 	float printingInstantDvs[MaxAxesPlusExtruders];			// current max jerk in mm per step clock (changed by M205 and M206)
-	float maxInstantDvs[MaxAxesPlusExtruders];				// max jerk in mm per step clock (changed by M206 only)
+	float maxInstantDvs[MaxAxesPlusExtruders];				// max instant velocity change in mm per step clock (changed by M206 only)
+
+#if SUPPORT_S_CURVE
+	float accelerationTime;									// time taken to each max acceleration in step clocks, single value used for all axes.
+	float jerks[MaxAxesPlusExtruders];						// max rate of change of acceleration, calculated from accelerationTime and normalAccelerations. Only used if accelerationTime > 0.0.
+	bool usingSCurve = false;
+#endif
 
 	AxisDriversConfig axisDrivers[MaxAxes];					// the driver numbers assigned to each axis
 	AxesBitmap linearAxes;									// axes that behave like linear axes w.r.t. feedrate handling
@@ -771,9 +776,9 @@ private:
 
 	// Calibration and bed compensation
 	uint8_t numCalibratedFactors;
-	bool bedLevellingMoveAvailable;						// True if a leadscrew adjustment move is pending
-	bool usingMesh;										// True if we are using the height map, false if we are using the random probe point set
-	bool useTaper;										// True to taper off the compensation
+	bool bedLevellingMoveAvailable;							// True if a leadscrew adjustment move is pending
+	bool usingMesh;											// True if we are using the height map, false if we are using the random probe point set
+	bool useTaper;											// True to taper off the compensation
 
 	// Expansion mode control, tracks CanInterface::InExpansionMode()), duplicated here for faster access
 #if SUPPORT_REMOTE_COMMANDS
@@ -794,11 +799,6 @@ inline float Move::NormalAcceleration(size_t drive) const noexcept
 inline float Move::Acceleration(size_t drive, bool useReduced) const noexcept
 {
 	return (useReduced) ? min<float>(reducedAccelerations[drive], normalAccelerations[drive]) : normalAccelerations[drive];
-}
-
-inline void Move::SetAcceleration(size_t drive, float value, bool reduced) noexcept
-{
-	((reduced) ? reducedAccelerations : normalAccelerations)[drive] = max<float>(value, ConvertAcceleration(MinimumAcceleration));	// don't allow zero or negative
 }
 
 inline float Move::MaxFeedrate(size_t drive) const noexcept

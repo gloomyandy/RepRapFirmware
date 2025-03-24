@@ -381,9 +381,19 @@ float SmartDrivers::GetDriverTemperature(size_t driver) noexcept
 	return (driver < numDrivers ? driverStates[driver]->GetDriverTemperature() : 0.0f);
 }
 
-uint32_t SmartDrivers::GetDriverClockFrequency(size_t driver) noexcept
+uint32_t SmartDrivers::GetDriverMaxClockFrequency(size_t driver) noexcept
 {
-	return (driver < numDrivers ? driverStates[driver]->GetDriverClockFrequency() : 0);
+	return (driver < numDrivers ? driverStates[driver]->GetDriverMaxClockFrequency() : 0);
+}
+
+uint32_t SmartDrivers::GetDriverNominalClockFrequency(size_t driver) noexcept
+{
+	return (driver < numDrivers ? driverStates[driver]->GetDriverNominalClockFrequency() : 0);
+}
+
+uint32_t SmartDrivers::GetDriverMinClockFrequency(size_t driver) noexcept
+{
+	return (driver < numDrivers ? driverStates[driver]->GetDriverMinClockFrequency() : 0);
 }
 
 #if SUPPORT_PHASE_STEPPING

@@ -225,7 +225,7 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 	{ "directDisplay",		OBJECT_MODEL_FUNC_IF_NOSELF(reprap.GetDisplay().IsPresent(), &reprap.GetDisplay()),					ObjectModelEntryFlags::none },
 #endif
 	{ "drivers",			OBJECT_MODEL_FUNC_ARRAY(0),																			ObjectModelEntryFlags::liveNotPanelDue },
-	{ "firmwareDate",		OBJECT_MODEL_FUNC_NOSELF(DATE),																		ObjectModelEntryFlags::none },
+	{ "firmwareDate",		OBJECT_MODEL_FUNC_NOSELF(DateText),																	ObjectModelEntryFlags::none },
 	{ "firmwareFileName",	OBJECT_MODEL_FUNC_NOSELF(IAP_FIRMWARE_FILE),														ObjectModelEntryFlags::none },
 	{ "firmwareName",		OBJECT_MODEL_FUNC_NOSELF(FIRMWARE_NAME),															ObjectModelEntryFlags::none },
 	{ "firmwareVersion",	OBJECT_MODEL_FUNC_NOSELF(VERSION),																	ObjectModelEntryFlags::none },
@@ -589,8 +589,6 @@ void Platform::Init() noexcept
 #if HAS_SMART_DRIVERS && (HAS_VOLTAGE_MONITOR || HAS_12V_MONITOR)
 	warnDriversNotPowered = false;
 #endif
-
-	extrusionAncilliaryPwmValue = 0.0;
 
 #if SUPPORT_SPI_SENSORS
 	// Enable pullups on all the SPI CS pins. This is required if we are using more than one device on the SPI bus.
@@ -1452,10 +1450,6 @@ extern void SPWMDiagnostics();
 #endif
 }
 
-#if CORE_USES_TINYUSB	//debug
-extern uint32_t numUsbInterrupts;
-#endif
-
 // Return diagnostic information. Each part must fit in a buffer of length GCodeReplyLength.
 void Platform::Diagnostics(unsigned int part, const StringRef& reply) noexcept
 {
@@ -1904,63 +1898,128 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 	case (unsigned int)DiagnosticTestType::TimeCalculations:	// Show the square root calculation time. Caution: may disable interrupt for several tens of microseconds.
 		{
 			constexpr uint32_t iterations = 100;				// use a value that divides into one million
-			bool ok1 = true;
-			uint32_t tim1 = 0;
-			for (uint32_t i = 0; i < iterations; ++i)
 			{
-				const uint32_t num1 = 0x7fffffff - (67 * i);
-				const uint64_t sq = (uint64_t)num1 * num1;
-				const uint32_t num1a = TimedSqrt(sq, tim1);
-				if (num1a != num1)
+				bool ok1 = true;
+				uint32_t tim1 = 0;
+				for (uint32_t i = 0; i < iterations; ++i)
 				{
-					ok1 = false;
-				}
-			}
-
-			bool ok2 = true;
-			uint32_t tim2 = 0;
-			for (uint32_t i = 0; i < iterations; ++i)
-			{
-				const uint32_t num2 = 0x0000ffff - (67 * i);
-				const uint64_t sq = (uint64_t)num2 * num2;
-				const uint32_t num2a = TimedSqrt(sq, tim2);
-				if (num2a != num2)
-				{
-					ok2 = false;
-				}
-			}
-
-			// We also time floating point square root so we can compare it with sine/cosine in order to consider various optimisations
-			bool ok3 = true;
-			uint32_t tim3 = 0;
-			float val = 10000.0;
-			for (unsigned int i = 0; i < iterations; ++i)
-			{
-				IrqDisable();
-				asm volatile("":::"memory");
-				uint32_t now1 = SysTick->VAL;
-				const float nval = fastSqrtf(val);
-				uint32_t now2 = SysTick->VAL;
-				asm volatile("":::"memory");
-				IrqEnable();
-				now1 &= 0x00FFFFFF;
-				now2 &= 0x00FFFFFF;
-				tim3 += ((now1 > now2) ? now1 : now1 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now2;
-				if (nval != sqrtf(val))
-				{
-					ok3 = false;
-					if (reprap.Debug(Module::Platform))
+					const uint32_t num1 = 0x7fffffff - (67 * i);
+					const uint64_t sq = (uint64_t)num1 * num1;
+					const uint32_t num1a = TimedSqrt(sq, tim1);
+					if (num1a != num1)
 					{
-						debugPrintf("val=%.7e sq=%.7e sqrtf=%.7e\n", (double)val, (double)nval, (double)sqrtf(val));
+						ok1 = false;
 					}
 				}
-				val = nval;
+
+				bool ok2 = true;
+				uint32_t tim2 = 0;
+				for (uint32_t i = 0; i < iterations; ++i)
+				{
+					const uint32_t num2 = 0x0000ffff - (67 * i);
+					const uint64_t sq = (uint64_t)num2 * num2;
+					const uint32_t num2a = TimedSqrt(sq, tim2);
+					if (num2a != num2)
+					{
+						ok2 = false;
+					}
+				}
+
+				// We also time floating point square root so we can compare it with sine/cosine in order to consider various optimisations
+				bool ok3 = true;
+				uint32_t tim3 = 0;
+				float val = 10000.0;
+				for (unsigned int i = 0; i < iterations; ++i)
+				{
+					IrqDisable();
+					asm volatile("":::"memory");
+					uint32_t now1 = SysTick->VAL;
+					const float nval = fastSqrtf(val);
+					uint32_t now2 = SysTick->VAL;
+					asm volatile("":::"memory");
+					IrqEnable();
+					now1 &= 0x00FFFFFF;
+					now2 &= 0x00FFFFFF;
+					tim3 += ((now1 > now2) ? now1 : now1 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now2;
+					const float checkVal = sqrtf(val);
+					if (nval != checkVal)
+					{
+						ok3 = false;
+						if (reprap.Debug(Module::Platform))
+						{
+							debugPrintf("val=%.7e sq=%.7e sqrtf=%.7e\n", (double)val, (double)nval, (double)checkVal);
+						}
+					}
+					val = nval;
+				}
+
+				reply.printf("Square roots: 62-bit %.2fus %s, 32-bit %.2fus %s, float %.2fus %s",
+							(double)((float)(tim1 * (1'000'000/iterations))/SystemCoreClock), (ok1) ? "ok" : "ERROR",
+								(double)((float)(tim2 * (1'000'000/iterations))/SystemCoreClock), (ok2) ? "ok" : "ERROR",
+									(double)((float)(tim3 * (1'000'000/iterations))/SystemCoreClock), (ok3) ? "ok" : "ERROR");
 			}
 
-			reply.printf("Square roots: 62-bit %.2fus %s, 32-bit %.2fus %s, float %.2fus %s",
-						(double)((float)(tim1 * (1'000'000/iterations))/SystemCoreClock), (ok1) ? "ok" : "ERROR",
-							(double)((float)(tim2 * (1'000'000/iterations))/SystemCoreClock), (ok2) ? "ok" : "ERROR",
-								(double)((float)(tim3 * (1'000'000/iterations))/SystemCoreClock), (ok3) ? "ok" : "ERROR");
+#if SUPPORT_S_CURVE
+			// Time and check floating point cube root
+			{
+				bool ok = true;
+				uint32_t tim1 = 0, tim2 = 0;
+				for (unsigned int i = 0; i < iterations; ++i)
+				{
+					float val = 0.5 + (float)i * 3.5 / 1000.0;
+					if (i == 0) { val = 0; }
+					else if (i & 1) { val = -val; }
+
+					IrqDisable();
+					asm volatile("":::"memory");
+					uint32_t now1 = SysTick->VAL;
+					const float nval1 = fastCubeRootf(val);
+					uint32_t now2 = SysTick->VAL;
+					asm volatile("":::"memory");
+					IrqEnable();
+
+					now1 &= 0x00FFFFFF;
+					now2 &= 0x00FFFFFF;
+					tim1 += ((now1 > now2) ? now1 : now1 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now2;
+
+					IrqDisable();
+					asm volatile("":::"memory");
+					uint32_t now3 = SysTick->VAL;
+					const float nval2 = cbrt(val);
+					uint32_t now4 = SysTick->VAL;
+					asm volatile("":::"memory");
+					IrqEnable();
+
+					now3 &= 0x00FFFFFF;
+					now4 &= 0x00FFFFFF;
+					tim2 += ((now3 > now4) ? now3 : now3 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now4;
+
+					bool thisOneOk = true;
+					if (val == 0.0)
+					{
+						thisOneOk = (nval1 == 0.0);
+					}
+					else if (val > 0.0)
+					{
+						thisOneOk = fcube(std::nextafter(nval1, nval1 * 2)) >= val && fcube(std::nextafter(nval1, 0.0)) <= val;
+					}
+					else
+					{
+						thisOneOk = fcube(std::nextafter(nval1, nval1 * 2)) <= val && fcube(std::nextafter(nval1, 0.0)) >= val;
+					}
+					if (!thisOneOk || nval1 != nval2)
+					{
+						ok = false;
+						if (reprap.Debug(Module::Platform))
+						{
+							debugPrintf("val=%.7e fcr=%.7e cbrt=%.7e\n", (double)val, (double)nval1, (double)nval2);
+						}
+					}
+				}
+
+				reply.lcatf("Cube roots: fcbrt %.2f cbrt %.2fus %s", (double)((float)(tim1 * (1'000'000/iterations))/SystemCoreClock), (double)((float)(tim2 * (1'000'000/iterations))/SystemCoreClock), (ok) ? "ok" : "ERROR");
+			}
+#endif
 		}
 
 		// We now also time sine and cosine in the same test
@@ -4161,16 +4220,24 @@ void Platform::OnProcessingCanMessage() noexcept
 // Configure the ancillary PWM
 GCodeResult Platform::GetSetAncillaryPwm(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {
-	bool seen = false;
-	if (gb.Seen('P'))
+	int32_t tempPort;
+	bool seen = gb.TryGetLimitedIValue('P', tempPort, seen, -1, MaxGpOutPorts - 1);
+	if (seen)
 	{
-		seen = true;
-		if (!extrusionAncilliaryPwmPort.AssignPort(gb, reply, PinUsedBy::gpout, PinAccess::pwm))
+		if (   tempPort >= 0
+			&& (   GetGpOutPort(tempPort).IsUnused()
+#if SUPPORT_CAN_EXPANSION
+				|| !GetGpOutPort(tempPort).IsLocal()
+#endif
+			   )
+		   )
 		{
+			reply.printf("GpOut port %" PRIu32 " is not valid", tempPort);
 			return GCodeResult::error;
 		}
-		const PwmFrequency freq = (gb.Seen('Q') || gb.Seen('F')) ? gb.GetPwmFrequency() : DefaultPinWritePwmFreq;
-		extrusionAncilliaryPwmPort.SetFrequency(freq);
+
+		extrusionAncilliaryPwmGpOutNumber = tempPort;
+		Move::CreateLaserTask();									// we use the laser task to manage ancillary PWM
 	}
 	if (gb.Seen('S'))
 	{
@@ -4180,8 +4247,14 @@ GCodeResult Platform::GetSetAncillaryPwm(GCodeBuffer& gb, const StringRef& reply
 
 	if (!seen)
 	{
-		reply.copy("Extrusion ancillary PWM");
-		extrusionAncilliaryPwmPort.AppendFullDetails(reply);
+		if (extrusionAncilliaryPwmGpOutNumber < 0)
+		{
+			reply.copy("Extrusion ancillary PWM is not configured");
+		}
+		else
+		{
+			reply.printf("Extrusion ancillary PWM port %" PRIu32 ", PWM value %.2f", extrusionAncilliaryPwmGpOutNumber, (double)extrusionAncilliaryPwmValue);
+		}
 	}
 	return GCodeResult::ok;
 }

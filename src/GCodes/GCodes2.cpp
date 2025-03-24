@@ -1936,7 +1936,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #if defined(DUET3_ATE)
 				reply.lcatf("ATE firmware version %s date %s %s", Duet3Ate::GetFirmwareVersionString(), Duet3Ate::GetFirmwareDateString(), Duet3Ate::GetFirmwareTimeString());
 #else
-				reply.catf(" FIRMWARE_DATE: %s%s", DATE, TIME_SUFFIX);
+				reply.catf(" FIRMWARE_DATE: %s%s", DateText, TIME_SUFFIX);
 #endif
 				break;
 
@@ -2432,6 +2432,17 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						}
 					}
 
+#if SUPPORT_S_CURVE
+					if (frac < 1 && gb.Seen('T'))
+					{
+						if (!LockAllMovementSystemsAndWaitForStandstill(gb))
+						{
+							return false;
+						}
+						move.SetAccelerationTime(gb.GetNonNegativeFValue());
+						seen = true;
+					}
+#endif
 					if (seen)
 					{
 						reprap.MoveUpdated();
@@ -2450,7 +2461,21 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							reply.catf("%c%.1f", sep, (double)InverseConvertAcceleration(move.Acceleration(ExtruderToLogicalDrive(extruder), frac == 1)));
 							sep = ':';
 						}
+#if SUPPORT_S_CURVE
+						if (frac < 1)
+						{
+							reply.catf(", acceleration time %.2f sec", (double)(move.AccelerationTime() * (1.0/StepClockRate)));
+						}
+#endif
 					}
+
+#if SUPPORT_S_CURVE
+					if (frac < 1 && move.AccelerationTime() != 0.0 && !move.IsUsingSCurve())
+					{
+						reply.lcat("Acceleration time (S-curve acceleration) is disabled because phase stepping is not enabled");
+						result = GCodeResult::warning;
+					}
+#endif
 				}
 				break;
 
@@ -3999,7 +4024,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 
 #if SUPPORT_IOBITS
 			case 670:
-				result = GetGCodeResultFromError(reprap.GetPortControl().Configure(gb, reply));
+				result = reprap.GetPortControl().Configure(gb, reply);
 				Move::CreateLaserTask();
 				break;
 #endif
@@ -4487,12 +4512,6 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #if SUPPORT_PHASE_STEPPING
 			case 970:	// configure step mode (phase stepping)
 				result = ConfigureStepMode(gb, reply);
-				break;
-#endif
-
-#if SUPPORT_S_CURVE
-			case 971:	// configure s curve acceleration
-				result = ConfigureSCurve(gb, reply);
 				break;
 #endif
 

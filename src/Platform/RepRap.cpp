@@ -961,7 +961,7 @@ void RepRap::GetDiagnosticsPart(unsigned int partNumber, const StringRef& reply)
 #if STM32
 				BoardName,
 #endif
-				VERSION, DATE, TIME_SUFFIX, platform->GetElectronicsString()
+				VERSION, DateText, TIME_SUFFIX, platform->GetElectronicsString()
 #ifdef DUET_NG
 				, ((expansionName == nullptr) ? "" : " + ")
 				, ((expansionName == nullptr) ? "" : expansionName)

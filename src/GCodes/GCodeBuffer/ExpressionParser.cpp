@@ -72,7 +72,7 @@ void LineReader::SkipTabsAndSpaces() noexcept
 
 // These can't be declared locally inside ParseIdentifierExpression because NamedEnum includes static data
 NamedEnum(NamedConstant, unsigned int, _false, iterations, line, _null, pi, _result, _true, input);
-NamedEnum(Function, unsigned int, abs, acos, asin, atan, atan2, ceil, cos, datetime, degrees, drop, exists, exp, fileexists, fileread, find, floor, isnan, log, max, min, mod, pow, radians, random, sin, sqrt, take, tan, vector);
+NamedEnum(Function, unsigned int, abs, acos, asin, atan, atan2, ceil, cos, datetime, degrees, drop, exists, exp, fileexists, fileread, find, floor, isnan, log, max, min, mod, pow, radians, random, sin, sqrt, square, take, tan, vector);
 
 const char *_ecv_array const InvalidExistsMessage = "invalid 'exists' expression";
 const char *_ecv_array const ExpectedNonNegativeIntMessage = "expected non-negative integer";
@@ -1091,7 +1091,11 @@ void ExpressionParser::GetNextOperand(ExpressionValue& operand, bool evaluate) T
 // We don't need to handle Port and UniqueId types here because we convent them to string before calling this.
 /*static*/ bool ExpressionParser::TypeHasNoLiterals(TypeCode t) noexcept
 {
-	return t == TypeCode::Char || t == TypeCode::DateTime_tc || t == TypeCode::IPAddress_tc || t == TypeCode::MacAddress_tc || t == TypeCode::DriverId_tc;
+	return t == TypeCode::Char || t == TypeCode::DateTime_tc || t == TypeCode::IPAddress_tc || t == TypeCode::MacAddress_tc || t == TypeCode::DriverId_tc
+#if SUPPORT_CAN_EXPANSION
+		|| t == TypeCode::CanExpansionBoardDetails
+#endif
+		;
 }
 
 // Balance types for a comparison operator
@@ -1681,6 +1685,11 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 				ConvertToFloat(rslt, evaluate);
 				rslt.fVal = fastSqrtf(rslt.fVal);
 				rslt.param = MaxFloatDigitsDisplayedAfterPoint;
+				break;
+
+			case Function::square:
+				ConvertToFloat(rslt, evaluate);
+				rslt.fVal = fsquare(rslt.fVal);
 				break;
 
 			case Function::isnan:
