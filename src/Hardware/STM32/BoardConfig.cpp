@@ -562,8 +562,7 @@ static void CheckDriverPins() noexcept
 }
 #endif
 
-
-static const char *GetBootloaderString() noexcept
+const char *BoardConfig::GetBootloaderString() noexcept
 {
     const uint32_t *BootVectors = (const uint32_t *)0x8000000;
     const char *BootloaderString = (const char *) BootVectors[8];

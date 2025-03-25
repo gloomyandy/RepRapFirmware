@@ -983,6 +983,12 @@ void RepRap::GetDiagnosticsPart(unsigned int partNumber, const StringRef& reply)
 		reply.lcat("Board ID: ");
 		platform->GetUniqueId().AppendCharsToString(reply);
 #endif
+#if STM32
+		if (BoardConfig::GetBootloaderString() != nullptr)
+		{
+			reply.lcatf("Bootloader: %s", BoardConfig::GetBootloaderString());
+		}
+#endif
 		break;
 
 	case 1:
