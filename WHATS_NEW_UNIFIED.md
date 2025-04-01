@@ -1,9 +1,18 @@
+Version 3.6.0-rc.2
+======================
+* Duet3d 3.6.0-rc.2
+* Added Fly M2 expansion board
+* Added support for RP2040 based expansion boards with multiple TMC22xx drivers
+* Fix afclite pins
+* Report bootloader details in M122 output if it is ours
+
 Version 3.6.0-rc.1
 ======================
 * Duet3d 3.6.0-rc.1
 * New Can capable bootloaders for H7 boards
 * Allow update of expansion mode boards over can without an SD card
-* Allow CAN address of expansion mode to be changed
+* Allow CAN address of a board in expansion mode to be changed
+* Allow board to be set into expansion mode using board.txt setting
 * Improve speed of expansion mode firmware updates over CAN
 * Various fixes to board configs
 * Use diag LED during firmware updates
