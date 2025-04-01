@@ -1219,7 +1219,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 			case 601: // Pause, used on Prusa printers
 				if (!gb.IsFileChannel())
 				{
-					reply.copy("use M226 and M601 only within a file being printed");		//TODO handle streaming over USB too
+					reply.copy("use M226/600/601 only within a file being printed");		//TODO handle streaming over USB too
 					result = GCodeResult::error;
 				}
 				else if (pauseState == PauseState::notPaused)
@@ -2445,6 +2445,12 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #endif
 					if (seen)
 					{
+#if SUPPORT_S_CURVE
+						if (frac < 1)
+						{
+							move.UpdateSCurveFlagAndJerk();
+						}
+#endif
 						reprap.MoveUpdated();
 					}
 					else
