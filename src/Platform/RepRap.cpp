@@ -50,6 +50,11 @@
 # include <Duet3Ate.h>
 #endif
 
+#if SUPPORT_REMOTE_COMMANDS
+# include <CanMessageGenericParser.h>
+# include <CanMessageGenericTables.h>
+#endif
+
 #if HAS_HIGH_SPEED_SD
 
 # if !SAME5x
@@ -447,13 +452,12 @@ RepRap::RepRap() noexcept
 	  ticksInSpinState(0), heatTaskIdleTicks(0),
 	  beepFrequency(0), beepDuration(0), beepTimer(0),
 	  diagnosticsDestination(MessageType::NoDestinationMessage), justSentDiagnostics(false),
-	  spinningModule(Module::none), stopped(false), active(false), processingConfig(true)
+	  spinningModule(Module::numModules), stopped(false), active(false), processingConfig(true)
 #if HAS_SBC_INTERFACE
 	  , usingSbcInterface(false)						// default to not using the SBC interface until we have checked for config.g on an SD card,
 														// because a disconnected SBC interface can generate noise which may trigger interrupts and DMA
 #endif
 {
-	ClearDebug();
 	// Don't call constructors for other objects here
 }
 
@@ -799,7 +803,7 @@ void RepRap::Spin() noexcept
 #endif
 
 	ticksInSpinState = 0;
-	spinningModule = Module::none;
+	spinningModule = Module::numModules;
 
 	// Check if we need to send diagnostics
 	if (diagnosticsDestination != MessageType::NoDestinationMessage)
@@ -1011,6 +1015,11 @@ void RepRap::GetDiagnosticsPart(unsigned int partNumber, const StringRef& reply)
 	case 3:
 	case 4:
 	case 5:
+	case 6:
+	case 7:
+	case 8:
+	case 9:
+		static_assert(Platform::NumPlatformDiagnosticParts == 9 - 3 + 1);
 		platform->Diagnostics(partNumber - 3, reply);
 		break;
 
@@ -1019,7 +1028,7 @@ void RepRap::GetDiagnosticsPart(unsigned int partNumber, const StringRef& reply)
 		MassStorage::Diagnostics(reply);
 #endif
 #ifndef DUET_NG			// Duet 2 doesn't currently need this feature, so omit it to save memory
-		// Print and clear any disgnostic messages we have accumulated
+		// Print and clear any diagnostic messages we have accumulated
 		for (DebugLogRecord& r : debugRecords)
 		{
 			if (r.msg != nullptr)
@@ -1169,12 +1178,23 @@ void RepRap::EmergencyStop() noexcept
 
 GCodeResult RepRap::ProcessM111(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {
-	bool seen = false;
+#if SUPPORT_CAN_EXPANSION
 	if (gb.Seen('B'))
+	{
+		const uint32_t board = gb.GetUIValue();
+		if (board != CanInterface::GetCanAddress())
+		{
+			return CanInterface::HandleM111(board, gb, reply);
+		}
+	}
+#endif
+
+	bool seen = false;
+	if (gb.Seen('F'))
 	{
 		if (!Platform::SetDebugBufferSize(gb.GetUIValue()))
 		{
-			reply.copy("B must be a power of 2");
+			reply.copy("F must be a power of 2");
 			return GCodeResult::error;
 		}
 		seen = true;
@@ -1196,16 +1216,16 @@ GCodeResult RepRap::ProcessM111(GCodeBuffer& gb, const StringRef& reply) THROWS(
 		flags = 0;
 	}
 
-	uint8_t module = Module::none;
+	uint8_t module = Module::numModules;
 	if (gb.Seen('P'))
 	{
-		module = gb.GetLimitedUIValue('P', NumRealModules);
+		module = gb.GetLimitedUIValue('P', Module::numModules);
 		seen = true;
 	}
 
 	if (seen)
 	{
-		if (module != Module::none)
+		if (module != Module::numModules)
 		{
 			debugMaps[module].SetFromRaw(flags);
 		}
@@ -1223,29 +1243,82 @@ GCodeResult RepRap::ProcessM111(GCodeBuffer& gb, const StringRef& reply) THROWS(
 		}
 	}
 
-	// Print the current debug settings
-	const MessageType mt = (MessageType)((uint32_t)gb.GetResponseMessageType() | (uint32_t)PushFlag);
-	platform->Message(mt, "Debugging on for modules:");
-	for (size_t i = 0; i < NumRealModules; i++)
+	ReportDebugSettings(reply);
+	return GCodeResult::ok;
+}
+
+// Report the current debug settings
+void RepRap::ReportDebugSettings(const StringRef& reply) noexcept
+{
+	reply.copy("Debugging on for modules:");
+	for (size_t i = 0; i < Module::numModules; i++)
 	{
 		if (debugMaps[i].IsNonEmpty())
 		{
-			platform->MessageF(mt, " %s(%u - %#" PRIx16 ")", Module(i).ToString(), i, debugMaps[i].GetRaw());
+			reply.catf(" %s(%u - %#" PRIx16 ")", Module(i).ToString(), i, debugMaps[i].GetRaw());
 		}
 	}
 
-	platform->Message(mt, "\nDebugging off for modules:");
-	for (size_t i = 0; i < NumRealModules; i++)
+	reply.lcat("Debugging off for modules:");
+	for (size_t i = 0; i < Module::numModules; i++)
 	{
 		if (debugMaps[i].IsEmpty())
 		{
-			platform->MessageF(mt, " %s(%u)", Module(i).ToString(), i);
+			reply.catf(" %s(%u)", Module(i).ToString(), i);
 		}
 	}
-	platform->Message(mt, "\n");
+}
 
+#if SUPPORT_REMOTE_COMMANDS
+
+GCodeResult RepRap::ProcessRemoteM111(const CanMessageGeneric& msg, const StringRef& reply) noexcept
+{
+	CanMessageGenericParser parser(msg, M111Params);
+
+	// Debug flags are as set by the D parameter. If D is not specified then S0 means all off, S1 means lower 8 bits on.
+	uint32_t flags = 0;
+	bool seen = parser.GetUintParam('D', flags);
+	if (!seen)
+	{
+		uint8_t sParam;
+		seen = parser.GetUintParam('S', sParam);
+		if (seen && sParam != 0)
+		{
+			flags = DefaultDebugFlags;
+		}
+	}
+
+	uint8_t module = Module::numModules;
+	if (parser.GetUintParam('P', module))
+	{
+		seen = true;
+	}
+
+	if (seen)
+	{
+		if (module < Module::numModules)
+		{
+			debugMaps[module].SetFromRaw(flags);
+		}
+		else if (flags != 0)
+		{
+			// Repetier Host sends M111 with various S parameters to enable echo and similar features, which used to turn on all our debugging.
+			// But it's not useful to enable all debugging anyway. So we no longer allow debugging to be enabled without a P parameter.
+			reply.copy("Use P parameter to specify which module to debug");
+			return GCodeResult::error;
+		}
+		else
+		{
+			// M111 S0 with no P parameter still clears all debugging
+			ClearDebug();
+		}
+	}
+
+	ReportDebugSettings(reply);
 	return GCodeResult::ok;
 }
+
+#endif
 
 void RepRap::ClearDebug() noexcept
 {
@@ -2915,6 +2988,17 @@ void RepRap::StartIap(c_string _ecv_null filename) noexcept
 /*static*/ uint32_t RepRap::DoDivide(uint32_t a, uint32_t b) noexcept
 {
 	return a/b;
+}
+
+// Helper function for diagnostic tests in Platform.cpp, to cause a deliberate OOM fault
+/*static*/ void RepRap::DoMemoryLeak() noexcept
+{
+	void * leak;
+	while (true)
+	{
+		leak = Tasks::AllocPermanent(1024); 	// Allocate memory continuously
+		(void)leak;								// Prevent unused variable warning
+	}
 }
 
 // Helper function for diagnostic tests in Platform.cpp, to cause a deliberate bus fault or memory protection error

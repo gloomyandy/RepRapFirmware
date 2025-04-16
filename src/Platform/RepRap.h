@@ -78,6 +78,7 @@ public:
 	FansManager& GetFansManager() const noexcept { return *fansManager; }
 
 	GCodeResult ProcessM111(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
+	void ReportDebugSettings(const StringRef& reply) noexcept;
 
 	// Message box functions
 	uint32_t SendAlert(MessageType mt, c_string p_message, c_string title, int sParam, float tParam, AxesBitmap controls, MessageBoxLimits *_ecv_null limits = nullptr) noexcept;
@@ -110,6 +111,7 @@ public:
  	void ScheduleBootloaderUpdateOverCan() noexcept { whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::updateBootloader; }
 #endif
 #endif
+	GCodeResult ProcessRemoteM111(const CanMessageGeneric& msg, const StringRef& reply) noexcept;
 #endif
 
 	void Tick() noexcept;
@@ -156,6 +158,7 @@ public:
 	void ReportInternalError(c_string file, c_string func, int line) const noexcept;	// report an internal error
 
 	static uint32_t DoDivide(uint32_t a, uint32_t b) noexcept;			// helper function for diagnostic tests
+	static void DoMemoryLeak() noexcept;								// helper function for diagnostic tests
 	static void GenerateBusFault() noexcept;							// helper function for diagnostic tests
 	static float SinfCosf(float angle) noexcept;						// helper function for diagnostic tests
 	static float FastSqrtf(float f) noexcept;							// helper function for diagnostic tests
@@ -263,7 +266,7 @@ private:
 	uint16_t heatTaskIdleTicks;
 	uint32_t fastLoop, slowLoop;
 
-	DebugFlags debugMaps[NumRealModules];
+	DebugFlags debugMaps[Module::numModules];
 
 #ifndef DUET_NG			// Duet 2 doesn't currently need this feature, so omit it to save memory
 	DebugLogRecord debugRecords[NumDebugRecords];

@@ -72,13 +72,14 @@ namespace CanInterface
 #endif
 
 #if !SAME70
-	uint16_t GetTimeStampPeriod() noexcept;
+	uint16_t GetTimeStampPeriod() noexcept;					// return the period of the time stamp counter in units of 48MHz CAN clocks
 #endif
 
 	// Info functions
 	GCodeResult GetRemoteFirmwareDetails(uint32_t boardAddress, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 	GCodeResult RemoteDiagnostics(MessageType mt, uint32_t boardAddress, unsigned int type, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 	GCodeResult RemoteM408(uint32_t boardAddress, unsigned int type, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
+	GCodeResult HandleM111(uint32_t boardAddress, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 
 	// Motor control functions
 	void SendMotion(CanMessageBuffer *buf) noexcept;

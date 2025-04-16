@@ -55,6 +55,9 @@ public:
 	// Get the current tick count
 	static Ticks GetTimerTicks() noexcept SPEED_CRITICAL;
 
+	// Get the current tick count when we know that interrupts are disabled
+	static Ticks GetTimerTicksWhenInterruptsDisabled() noexcept SPEED_CRITICAL;
+
 	// Get the current tick count, adjusted for the movement delay
 	static Ticks GetMovementTimerTicks() noexcept SPEED_CRITICAL;
 
@@ -149,8 +152,9 @@ private:
 #if STM32
 extern TIM_HandleTypeDef *STHandle;
 #endif
-// Function GetTimerTicks() is quite long for SAM4S and SAME70 processors, so it is moved to StepTimer.cpp and no longer inlined
-#if !(SAM4S || SAME70 || SAME5x)
+
+// Function GetTimerTicks() is very short on SAM4E processors so we inline it
+#if SAM4E || STM32
 
 inline __attribute__((always_inline)) StepTimer::Ticks StepTimer::GetTimerTicks() noexcept
 {
@@ -161,16 +165,26 @@ inline __attribute__((always_inline)) StepTimer::Ticks StepTimer::GetTimerTicks(
 # endif
 }
 
+inline __attribute__((always_inline)) StepTimer::Ticks StepTimer::GetTimerTicksWhenInterruptsDisabled() noexcept
+{
+# if STM32
+	return __HAL_TIM_GET_COUNTER(STHandle);
+# else
+	return STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_CV;
+# endif
+}
+
 #endif
 
+// Sometimes we only need the lowest 16 bits of the step timer. On some processors this is faster than reading all 32 bits.
 inline __attribute__((always_inline)) uint16_t StepTimer::GetTimerTicks16() noexcept
 {
-#if SAME5x
-	return (uint16_t)GetTimerTicks();
+#if SAME70 || SAM4S
+	return (uint16_t)STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_CV;
 #elif STM32
 	return (uint16_t)__HAL_TIM_GET_COUNTER(STHandle);
 #else
-	return (uint16_t)STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_CV;
+	return (uint16_t)GetTimerTicks();
 #endif
 }
 

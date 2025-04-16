@@ -351,6 +351,16 @@ GCodeResult GCodes::DefineGrid(GCodeBuffer& gb, const StringRef &reply) THROWS(G
 		}
 	}
 
+	// If the axis letters were given as U and Y then the parser will find Y before it finds U. Swap them so that IDEX machines behave as the user expects, i.e. U behaves like X.
+	// An alternative would be to add a function to GCodeBuffer to report the position at which a letter was seen, then we could make it sensitive to the order of parameters in the command
+	if (axesLetters[0] == 'Y' && axesLetters[1] == 'U')
+	{
+		std::swap(axesLetters[0], axesLetters[1]);
+		std::swap(axis0Values[0], axis1Values[0]);
+		std::swap(axis0Values[1], axis1Values[1]);
+		std::swap(spacings[0], spacings[1]);
+	}
+
 	const bool ok = defaultGrid.Set(axesLetters, axis0Values, axis1Values, radius, spacings);
 	reprap.MoveUpdated();
 	if (ok)
@@ -386,8 +396,8 @@ GCodeResult GCodes::ProbeGrid(GCodeBuffer& gb, const StringRef& reply) THROWS(GC
 #if SUPPORT_ASYNC_MOVES
 	// We allocate the axes we are going to move before doing anything else so that we can abort cleanly if they are in use by another motion system.
 	// However, this assumes that deploying the probe can't release axes. See issue 978.
-	constexpr AxesBitmap XyzAxes = AxesBitmap::MakeFromBits(X_AXIS, Y_AXIS) | AxesBitmap::MakeFromBits(Z_AXIS);
-	AllocateAxes(gb, GetMovementState(gb), XyzAxes, ParameterLetterToBitmap('Z'));		// don't cache axis letters X and Y because they may be mapped
+	const AxesBitmap axesUsed = AxesBitmap::MakeFromBits(defaultGrid.GetAxisNumber(0), defaultGrid.GetAxisNumber(1), Z_AXIS);
+	AllocateAxes(gb, GetMovementState(gb), axesUsed, ParameterLetterToBitmap('Z'));		// don't cache the other axis letters because they may be mapped
 #endif
 
 #if SUPPORT_PROBE_POINTS_FILE
@@ -594,6 +604,7 @@ GCodeResult GCodes::StraightProbe(GCodeBuffer& gb, const StringRef& reply) THROW
 	float userPositionTarget[MaxAxes];
 	MovementState& ms = GetMovementState(gb);
 	memcpyf(userPositionTarget, ms.currentUserPosition, numVisibleAxes);
+	memcpyf(straightProbeSettings.GetTarget(), ms.coords, numVisibleAxes);		// this is needed in case there are mapped axes, see ToolOffsetTransform
 
 	bool seen = false;
 	bool doesMove = false;
@@ -656,7 +667,7 @@ GCodeResult GCodes::StraightProbe(GCodeBuffer& gb, const StringRef& reply) THROW
 	// Convert target user position to machine coordinates and save them in StraightProbeSettings
 	ToolOffsetTransform(ms, userPositionTarget, straightProbeSettings.GetTarget());
 
-	// See whether we are using a user-defined Z probe or just current one
+	// Find which probe we are using
 	const size_t probeToUse = (gb.Seen('K') || gb.Seen('P')) ? gb.GetUIValue() : 0;
 
 	// Check if this probe exists to not run into a nullptr dereference later

@@ -94,7 +94,6 @@ constexpr float DefaultJumpWidth = 0.25;
 
 static Mutex transactionMutex;
 
-static uint32_t lastTimeSent = 0;
 static uint32_t longestWaitTime = 0;
 static uint16_t longestWaitMessageType = 0;
 
@@ -108,10 +107,6 @@ static unsigned int timeSyncMessagesSent = 0;
 
 static volatile uint16_t timeSyncTxTimeStamp;
 static volatile bool gotTimeSyncTxTimeStamp = false;
-
-#if !SAME70
-static uint16_t lastTimeSyncTxPreparedStamp;
-#endif
 
 static CanAddress myAddress =
 #ifdef DUET3_ATE
@@ -141,18 +136,18 @@ constexpr CanDevice::Config Can0Config =
 	.rxFifo0Size = 32,				// increased from 16 to help with accelerometer and closed loop data collection
 	.rxFifo1Size = 16,
 	.numShortFilterElements = 0,
-# ifdef DUET3_ATE
+#ifdef DUET3_ATE
 	.numExtendedFilterElements = 4,
-# else
+#else
 	.numExtendedFilterElements = 3,
-# endif
+#endif
 	.txEventFifoSize = 16
 };
 
 static_assert(Can0Config.IsValid());
 
 #if !STM32
-// CAN buffer memory must be in the first 64Kb of RAM (SAME5x) or in non-cached RAM (SAME70), so put it in its own segment
+// CAN buffer memory must be in the first 64Kb of RAM (SAME5x) or in non-cached RAM (SAME70), so put it in its own memory section
 static uint32_t can0Memory[Can0Config.GetMemorySize()] __attribute__ ((section (".CanMessage")));
 #endif
 
@@ -652,7 +647,11 @@ extern "C" [[noreturn]] void CanClockLoop(void *) noexcept
 {
 	CanMessageBuffer buf;
 	uint32_t lastWakeTime = xTaskGetTickCount();
+	uint32_t lastTimeSent = 0;
 	uint32_t lastRealTimeSent = 0;
+#if !SAME70
+	uint16_t lastTimeSyncTxPreparedStamp = 0;
+#endif
 
 	for (;;)
 	{
@@ -666,12 +665,13 @@ extern "C" [[noreturn]] void CanClockLoop(void *) noexcept
 		//uint32_t prevDelay = 0;
 		if (gotTimeSyncTxTimeStamp)
 		{
+			// Calculate the delay in sending the last time sync message, in step clocks
 # if SAME70
 			// On the SAME70 the step clock is also the external time stamp counter
 			const uint32_t timeSyncTxDelay = (timeSyncTxTimeStamp - (uint16_t)lastTimeSent) & 0xFFFF;
 # else
-			// On the SAME5x the time stamp counter counts CAN bit times divided by 64
-			const uint32_t timeSyncTxDelay = (((timeSyncTxTimeStamp - lastTimeSyncTxPreparedStamp) & 0xFFFF) * CanInterface::GetTimeStampPeriod()) >> 6;
+			// On the SAME5x the time stamp counter counts CAN bit times. The step clock is the CAN clock divided by 64.
+			const uint32_t timeSyncTxDelay = ((uint32_t)((timeSyncTxTimeStamp - lastTimeSyncTxPreparedStamp) & 0xFFFF) * CanInterface::GetTimeStampPeriod()) >> 6;
 # endif
 			if (timeSyncTxDelay > peakTimeSyncTxDelay)
 			{
@@ -727,7 +727,7 @@ extern "C" [[noreturn]] void CanClockLoop(void *) noexcept
 #else
 		{
 			AtomicCriticalSectionLocker lock;
-			lastTimeSent = StepTimer::GetTimerTicks();
+			lastTimeSent = StepTimer::GetTimerTicksWhenInterruptsDisabled();
 			lastTimeSyncTxPreparedStamp = CanInterface::GetTimeStampCounter();
 		}
 #endif
@@ -748,13 +748,13 @@ extern "C" [[noreturn]] void CanClockLoop(void *) noexcept
 #endif
 
 		// Check that the message was sent and get the time stamp
-		if (can0dev->IsSpaceAvailable((CanDevice::TxBufferNumber)TxBufferIndexTimeSync, 0))		// if the buffer is free already then the message was sent
+		if (can0dev->IsSpaceAvailable(TxBufferIndexTimeSync, 0))			// if the buffer is free already then the message was sent
 		{
 			can0dev->PollTxEventFifo(TxCallback);
 		}
 		else
 		{
-			(void)can0dev->IsSpaceAvailable((CanDevice::TxBufferNumber)TxBufferIndexTimeSync, MaxTimeSyncSendWait);		// free the buffer
+			(void)can0dev->IsSpaceAvailable(TxBufferIndexTimeSync, MaxTimeSyncSendWait);		// free the buffer
 			can0dev->PollTxEventFifo(TxCallback);							// empty the fifo
 			gotTimeSyncTxTimeStamp = false;									// ignore any values read from it
 		}
@@ -1424,6 +1424,13 @@ GCodeResult CanInterface::RemoteM408(uint32_t boardAddress, unsigned int type, G
 GCodeResult CanInterface::GetRemoteFirmwareDetails(uint32_t boardAddress, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {
 	return GetRemoteInfo(CanMessageReturnInfo::typeFirmwareVersion, boardAddress, 0, gb, reply);
+}
+
+GCodeResult CanInterface::HandleM111(uint32_t boardAddress, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
+{
+	CanMessageGenericConstructor cons(M111Params);
+	cons.PopulateFromCommand(gb);
+	return cons.SendAndGetResponse(CanMessageType::m111, boardAddress, reply);
 }
 
 void CanInterface::WakeAsyncSender() noexcept

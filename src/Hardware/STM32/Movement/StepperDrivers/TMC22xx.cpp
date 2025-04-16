@@ -1043,8 +1043,7 @@ void Tmc22xxDriverState::UpdateCurrent() noexcept
 	iRun = constrain<uint32_t>((unsigned int)(idealIRunCs + 0.2), 1, 32) - 1;
 	const float idealIHoldCs = idealIRunCs * standstillCurrentFraction * (1.0/256.0);
 	iHold = constrain<uint32_t>((unsigned int)(idealIHoldCs + 0.2), 1, 32) - 1;
-	if (reprap.Debug(Module::Driver))
-		debugPrintf("TMC current set I %d IH %d csBits 0x%x 0x%x vsense 0x%x\n", (int)motorCurrent, (int)idealIHoldCs, (unsigned)iRun, (unsigned)iHold, (unsigned)vsense);
+	//debugPrintf("TMC current set I %d IH %d csBits 0x%x 0x%x vsense 0x%x\n", (int)motorCurrent, (int)idealIHoldCs, (unsigned)iRun, (unsigned)iHold, (unsigned)vsense);
 
 	UpdateRegister(WriteIholdIrun,
 					(writeRegisters[WriteIholdIrun] & ~(IHOLDIRUN_IRUN_MASK | IHOLDIRUN_IHOLD_MASK))
@@ -1386,8 +1385,7 @@ DriversState Tmc22xxDriverState::SetupDriver(bool reset) noexcept
 	if (numTimeouts > DriverNotPresentTimeouts || readErrors > DriverNotPresentTimeouts)
 	{
 		//debugPrintf(" disabling driver %d\n", driverNumber);
-		if (reprap.Debug(Module::Driver))
-			debugPrintf("TMCUART: Too many errors drive %d driver disabled\n", driverNumber);
+		debugPrintf("TMCUART: Too many errors drive %d driver disabled\n", driverNumber);
 		ResetReadRegisters();
 		state = DriversState::noDriver;
 		typ = DriverType::none;
@@ -1415,15 +1413,13 @@ DriversState Tmc22xxDriverState::SetupDriver(bool reset) noexcept
 				{
 					// We could potentially stop here and declare the driver unknown, but for now
 					// we issue a warning and assume it is a 2209.
-					if (reprap.Debug(Module::Driver))
-						debugPrintf("TMCUART:: Warning driver %d unknown version number 0x%x\n", driverNumber, (unsigned)version);
+					debugPrintf("TMCUART:: Warning driver %d unknown version number 0x%x\n", driverNumber, (unsigned)version);
 					typ = DriverType::tmc2209;
 				}
 				// did our discovery match the request driver type?
 				if (TMC_DRIVER_TYPE[driverNumber] != DriverType::tmcuartauto && typ != TMC_DRIVER_TYPE[driverNumber])
 				{
-					if (reprap.Debug(Module::Driver))
-						debugPrintf("TMCUART:: Warning driver %d type mismatch requested %s actual %s\n", driverNumber, TMC_DRIVER_TYPE[driverNumber].ToString(), typ.ToString());
+					debugPrintf("TMCUART:: Warning driver %d type mismatch requested %s actual %s\n", driverNumber, TMC_DRIVER_TYPE[driverNumber].ToString(), typ.ToString());
 					typ = TMC_DRIVER_TYPE[driverNumber];
 				}
 				WriteAll();

@@ -1280,8 +1280,7 @@ void Tmc51xxDriverState::TransferSucceeded(const uint8_t *rcvDataBlock) noexcept
 		previousRegIndexRequested -= (NumReadRegisters + 1);
 		if (writeRegisters[previousRegIndexRequested] != regVal)
 		{
-			if (reprap.Debug(Module::Driver))
-				debugPrintf("TMC5160: Write error driver %d register index %d expected %x got %x\n", driverNumber, previousRegIndexRequested, (unsigned)writeRegisters[previousRegIndexRequested], (unsigned)regVal); 
+			debugPrintf("TMC5160: Write error driver %d register index %d expected %x got %x\n", driverNumber, previousRegIndexRequested, (unsigned)writeRegisters[previousRegIndexRequested], (unsigned)regVal); 
 			numWriteErrors++;
 			// retry the write
 			registersToUpdate |= (1u << previousRegIndexRequested);
@@ -1433,15 +1432,13 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 				{
 					// We could potentially stop here and declare the driver unknown, but for now
 					// we issue a warning and assume it is a 5160.
-					if (reprap.Debug(Module::Driver))
-						debugPrintf("TMCSPI:: Warning driver %d unknown version number 0x%x\n", driverNumber, (unsigned)version);
+					debugPrintf("TMCSPI:: Warning driver %d unknown version number 0x%x\n", driverNumber, (unsigned)version);
 					typ = DriverType::tmc5160;
 				}
 				// did our discovery match the request driver type?
 				if (TMC_DRIVER_TYPE[driverNumber] != DriverType::tmcspiauto && typ != TMC_DRIVER_TYPE[driverNumber])
 				{
-					if (reprap.Debug(Module::Driver))
-						debugPrintf("TMCSPI:: Warning driver %d type mismatch requested %s actual %s\n", driverNumber, TMC_DRIVER_TYPE[driverNumber].ToString(), typ.ToString());
+					debugPrintf("TMCSPI:: Warning driver %d type mismatch requested %s actual %s\n", driverNumber, TMC_DRIVER_TYPE[driverNumber].ToString(), typ.ToString());
 					typ = TMC_DRIVER_TYPE[driverNumber];
 				}
 				WriteAll();
@@ -1454,8 +1451,7 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 	// check for errors
 	if (numWriteErrors > NumWriteRegisters)
 	{
-		if (reprap.Debug(Module::Driver))
-			debugPrintf("TMCSPI: Too many write errors drive %d error cnt %d driver disabled\n", driverNumber, numWriteErrors);
+		debugPrintf("TMCSPI: Too many write errors drive %d error cnt %d driver disabled\n", driverNumber, numWriteErrors);
 		// Too many write errors, probably means no driver or config error
 		ResetReadRegisters();
 		state = DriversState::noDriver;

@@ -1846,6 +1846,15 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 		// We don't actually generate a fault any more, instead we let this function identify existing unaligned accesses in the code
 		break;
 
+	case (unsigned int)DiagnosticTestType::MemoryLeak:			// allocate memory until OOM fault occurs
+		if (!gb.DoDwellTime(1000))								// wait a second to allow the response to be sent back to the web server, otherwise it may retry
+		{
+			return GCodeResult::notFinished;
+		}
+		deliberateError = true;
+		(void)RepRap::DoMemoryLeak();
+		break;
+
 	case (unsigned int)DiagnosticTestType::BusFault:
 #if SAME70 && !USE_MPU
 		Message(WarningMessage, "There is no abort area on the SAME70 with MPU disabled");
@@ -1962,12 +1971,12 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 #if SUPPORT_S_CURVE
 			// Time and check floating point cube root
 			{
-				bool ok = true;
+				unsigned int numBad = 0, numBetter = 0, numWorse = 0, numEqual = 0, numSameError = 0;
 				uint32_t tim1 = 0, tim2 = 0;
 				for (unsigned int i = 0; i < iterations; ++i)
 				{
 					float val = 0.5 + (float)i * 3.5 / 1000.0;
-					if (i == 0) { val = 0; }
+					if (i == 0) { val = 0.0; }
 					else if (i & 1) { val = -val; }
 
 					IrqDisable();
@@ -1985,7 +1994,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 					IrqDisable();
 					asm volatile("":::"memory");
 					uint32_t now3 = SysTick->VAL;
-					const float nval2 = cbrt(val);
+					const volatile float nval2 = cbrt(val);
 					uint32_t now4 = SysTick->VAL;
 					asm volatile("":::"memory");
 					IrqEnable();
@@ -2007,17 +2016,56 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 					{
 						thisOneOk = fcube(std::nextafter(nval1, nval1 * 2)) <= val && fcube(std::nextafter(nval1, 0.0)) >= val;
 					}
-					if (!thisOneOk || nval1 != nval2)
+
+					if (!thisOneOk)
 					{
-						ok = false;
+						++numBad;
+					}
+					else if (nval1 == nval2)
+					{
+						++numEqual;
+					}
+					else
+					{
+						const float err1 = fcube(nval1) - val;
+						const float err2 = fcube(nval2) - val;
+						if (fabsf(err1) < fabsf(err2)) { ++numBetter; }
+						else if (fabsf(err1) > fabsf(err2)) { ++numWorse; }
+						else { ++numSameError; }
 						if (reprap.Debug(Module::Platform))
 						{
-							debugPrintf("val=%.7e fcr=%.7e cbrt=%.7e\n", (double)val, (double)nval1, (double)nval2);
+							debugPrintf("val=% .7e fcr=% .7e cbrt=% .7e fcre=% .7e cbrte=% .7e\n", (double)val, (double)nval1, (double)nval2, (double)err1, (double)err1);
 						}
 					}
 				}
 
-				reply.lcatf("Cube roots: fcbrt %.2f cbrt %.2fus %s", (double)((float)(tim1 * (1'000'000/iterations))/SystemCoreClock), (double)((float)(tim2 * (1'000'000/iterations))/SystemCoreClock), (ok) ? "ok" : "ERROR");
+				reply.lcatf("Cube roots: fcbrt %.2fus cbrt %.2fus, bad %u, equal %u, better %u, worse %u, sameError %u",
+							(double)((float)(tim1 * (1'000'000/iterations))/SystemCoreClock), (double)((float)(tim2 * (1'000'000/iterations))/SystemCoreClock),
+							numBad, numEqual, numBetter, numWorse, numSameError
+							);
+			}
+
+			// Time and check a cubic equation with three real roots (the most complicated case)
+			{
+				uint32_t tim1 = 0;
+				size_t numRoots;
+				float rslt[3] = { std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN() };
+				for (unsigned int i = 0; i < iterations; ++i)
+				{
+					IrqDisable();
+					asm volatile("":::"memory");
+					uint32_t now1 = SysTick->VAL;
+					numRoots = SolveCubic(1.0, -6.0, 11.0, -6.0, rslt);
+					uint32_t now2 = SysTick->VAL;
+					asm volatile("":::"memory");
+					IrqEnable();
+
+					now1 &= 0x00FFFFFF;
+					now2 &= 0x00FFFFFF;
+					tim1 += ((now1 > now2) ? now1 : now1 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now2;
+				}
+
+				reply.lcatf("Cubic equation solver: %.2fus, %u roots %.6f %.6f %.6f", (double)((float)(tim1 * (1'000'000/iterations))/SystemCoreClock), numRoots, (double)rslt[0], (double)rslt[1], (double)rslt[2]);
 			}
 #endif
 		}
@@ -2151,7 +2199,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 			do
 			{
 				--i;
-				(void)StepTimer::GetTimerTicks();
+				(void)StepTimer::GetTimerTicksWhenInterruptsDisabled();
 			} while (i != 0);
 			uint32_t now2 = SysTick->VAL;
 			asm volatile("":::"memory");
@@ -2172,6 +2220,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 				CanInterface::GetTimeStampCounters(startTimeStamp, startClocks);
 # else
 				AtomicCriticalSectionLocker lock;
+				startClocks = StepTimer::GetTimerTicksWhenInterruptsDisabled();
 				startTimeStamp = CanInterface::GetTimeStampCounter();
 				startClocks = StepTimer::GetTimerTicks();
 # endif
@@ -2182,6 +2231,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 				CanInterface::GetTimeStampCounters(endTimeStamp, endClocks);
 #else
 				AtomicCriticalSectionLocker lock;
+				endClocks = StepTimer::GetTimerTicksWhenInterruptsDisabled();
 				endTimeStamp = CanInterface::GetTimeStampCounter();
 				endClocks = StepTimer::GetTimerTicks();
 # endif
@@ -2392,8 +2442,13 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 			&& newMode != AuxMode::device
 		   )
 		{
-			gbp->Enable(val);						// enable I/O and set the CRC and checksum requirements, also sets Marlin or PanelDue compatibility
+			gbp->Enable(val);						// enable I/O and set the CRC and checksum requirements
+			if (auxModes[chan] == AuxMode::panelDue)
+			{
+				gbp->LatestMachineState().compatibility.Assign(Compatibility::RepRapFirmware);
+			}
 		}
+		reprap.InputsUpdated();
 	}
 #if HAS_AUX_DEVICES
 	else if (baudRate != 0)
@@ -2402,6 +2457,7 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 		{
 			auxDevices[chan - FirstAuxChannel].SetBaudRate(baudRate);
 			ResetChannel(chan);
+			reprap.InputsUpdated();
 		}
 	}
 #endif
@@ -3279,7 +3335,7 @@ void Platform::Message(MessageType type, OutputBuffer *buffer) noexcept
 
 		if ((type & (UsbMessage | BlockingUsbMessage)) != 0)
 		{
-			AppendUsbReply(buffer, (type & RawMessageFlag) != 0);
+			AppendUsbReply(buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
 		}
 
 #if HAS_SBC_INTERFACE
@@ -4417,7 +4473,7 @@ void Platform::Tick() noexcept
 			highestVin = currentVin;
 			reprap.BoardsUpdated();
 		}
-		if (currentVin < lowestVin)
+		if (currentVin < lowestVin || millis64() < 1000)			// don't record the lowest VIN voltage while we are still powering up
 		{
 			lowestVin = currentVin;
 			reprap.BoardsUpdated();
@@ -4431,7 +4487,7 @@ void Platform::Tick() noexcept
 			highestV12 = currentV12;
 			reprap.BoardsUpdated();
 		}
-		if (currentV12 < lowestV12)
+		if (currentV12 < lowestV12 || millis64() < 1000)			// don't record the lowest V12 voltage while we are still powering up
 		{
 			lowestV12 = currentV12;
 			reprap.BoardsUpdated();

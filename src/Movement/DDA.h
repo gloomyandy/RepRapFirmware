@@ -27,8 +27,8 @@ struct PrepParams
 {
 #if SUPPORT_S_CURVE
 	uint32_t accelStartClocks, accelConstantClocks, accelEndClocks, steadyClocks, decelStartClocks, decelConstantClocks, decelEndClocks;
-    float initialAcceleration, peakAcceleration, finalAcceleration;			// the accelerations, always positive
-    float initialDeceleration, peakDeceleration, finalDeceleration;			// the decelerations, always negative
+    float initialAcceleration, peakAcceleration;	// the accelerations, always positive
+    float initialDeceleration, peakDeceleration;	// the decelerations, always negative
     float accelInitialDistance, accelPeakDistance, accelEndDistance;
     float decelInitialDistance, decelPeakDistance, decelEndDistance;
     float steadyDistance;
@@ -93,13 +93,13 @@ public:
 	bool InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorMapping) noexcept SPEED_CRITICAL;	// Set up a new move, returning true if it represents real movement
 	bool InitLeadscrewMove(DDARing& ring, float feedrate, const float amounts[MaxDriversPerAxis]) noexcept;		// Set up a leadscrew motor move
 #if SUPPORT_ASYNC_MOVES
-	bool InitAsyncMove(DDARing& ring, const AsyncMove& nextMove) noexcept;			// Set up an async move
+	bool InitAsyncMove(DDARing& ring, const AsyncMove& nextMove) noexcept;							// Set up an async move
 #endif
 
 	void SetNext(DDA *n) noexcept { next = n; }
 	void SetPrevious(DDA *p) noexcept { prev = p; }
 	bool Free() noexcept;
-	void Prepare(DDARing& ring, SimulationMode simMode) noexcept SPEED_CRITICAL;					// Calculate all the values and freeze this DDA
+	void Prepare(DDARing& ring, uint32_t prepareAdvanceTime, SimulationMode simMode) noexcept SPEED_CRITICAL;	// Calculate all the values and freeze this DDA
 	bool CanPauseAfter() const noexcept;
 	bool IsPrintingMove() const noexcept { return flags.isPrintingMove; }							// Return true if this involves both XY movement and extrusion
 	bool UsingStandardFeedrate() const noexcept { return flags.usingStandardFeedrate; }
@@ -167,7 +167,6 @@ public:
 
 #if SUPPORT_LASER || SUPPORT_IOBITS
 	LaserPwmOrIoBits GetLaserPwmOrIoBits() const noexcept { return laserPwmOrIoBits; }
-	bool ControlLaser() const noexcept { return flags.controlLaser; }
 #endif
 
 #if SUPPORT_LASER
@@ -196,11 +195,16 @@ private:
 	static constexpr float MinimumAccelOrDecelClocks = 10.0;				// Minimum number of acceleration or deceleration clocks we try to ensure
 
 	void RecalculateMove(DDARing& ring) noexcept SPEED_CRITICAL;
+	static void DoLookahead(DDARing& ring, DDA *laDDA) noexcept SPEED_CRITICAL;	// Try to smooth out moves in the queue
+
 #if SUPPORT_S_CURVE
 	void RecalculateSCurveMove(DDARing& ring) noexcept SPEED_CRITICAL;
-	void CalculateInitialSCurveMove() noexcept SPEED_CRITICAL;
-	void CalculateEndingSCurveMove() noexcept SPEED_CRITICAL;
+	void CalculateIsolatedSCurveMove() noexcept SPEED_CRITICAL pre(endSpeed == 0.0; endDeceleration == 0.0);
+	int CalculateNewSCurveMove() noexcept SPEED_CRITICAL pre(endSpeed == 0.0; endDeceleration == 0.0);
+	static void DoSCurveLookahead(DDARing& ring, DDA *laDDA) noexcept SPEED_CRITICAL;	// Try to smooth out moves in the queue
+	bool ExtrusionSpeedMatchesPrevious() const noexcept;
 #endif
+
 	void MatchSpeeds() noexcept SPEED_CRITICAL;
 	bool IsDecelerationMove() const noexcept;								// return true if this move is or have been might have been intended to be a deceleration-only move
 	bool IsAccelerationMove() const noexcept;								// return true if this move is or have been might have been intended to be an acceleration-only move
@@ -210,10 +214,6 @@ private:
 	int32_t PrepareRemoteExtruder(size_t drive, float& extrusionPending, float speedChange) const noexcept;
 #endif
 
-	static void DoLookahead(DDARing& ring, DDA *laDDA) noexcept SPEED_CRITICAL;	// Try to smooth out moves in the queue
-#if SUPPORT_S_CURVE
-	static void DoSCurveLookahead(DDARing& ring, DDA *laDDA) noexcept SPEED_CRITICAL;	// Try to smooth out moves in the queue
-#endif
     static float Normalise(float v[], AxesBitmap unitLengthAxes) noexcept;  // Normalise a vector to unit length over the specified axes
     static float Normalise(float v[]) noexcept; 							// Normalise a vector to unit length over all axes
 	float NormaliseLinearMotion(AxesBitmap linearAxes) noexcept;			// Make the direction vector unit-normal in XYZ
@@ -247,7 +247,7 @@ private:
 					 isNonPrintingExtruderMove : 1,	// True if this move is an extruder-only move, or involves reverse extrusion (and possibly axis movement too)
 					 continuousRotationShortcut : 1, // True if continuous rotation axes take shortcuts
 					 checkEndstops : 1,				// True if this move monitors endstops or Z probe
-					 controlLaser : 1,				// True if this move controls the laser or iobits
+					 controlLaserOrIoBits : 1,				// True if this move controls the laser or iobits
 					 isolatedMove : 1,				// set if we disable input shaping for this move and wait for it to finish e.g. for a G1 H2 move
 					 doneIoBits : 1,				// set if we have written the IOBITS ports for this move
 					 doneFeedForward : 1,			// set if we have commanded feedforward for this move
@@ -256,7 +256,10 @@ private:
 					 , scanningProbeMove : 1 	 	// True if this is a scanning Z probe move
 #endif
 #if SUPPORT_S_CURVE
-					 , useScurve : 1				// set if this move uses S-curve acceleration
+					 , useScurve : 1,				// set if this move uses S-curve acceleration
+					 usingMaxAccceleration : 1,		// set if this move and all previous contiguous moves accelerate at the maximum rate, so there is no point asking them to accelerate faster
+					 haveReducedSpeed: 1,
+					 haveReducedAcceleration: 1
 #endif
 					 ;
 		};

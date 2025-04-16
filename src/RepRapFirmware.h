@@ -336,12 +336,10 @@ NamedEnum(Module, uint8_t,
 			SbcInterface,
 			CAN,					// uppercase to avoid eCv clash with type Can in Microchip driver file
 			Expansion,
-			Driver,
-			none					// make this one last so that it is the number of real modules, one greater than the last real module number
+			numModules				// this is one greater than the last real module number and also serves as 'none'
 		 );
 
 static_assert(Module::NumValues < 32);
-constexpr size_t NumRealModules = Module::NumValues - 1;
 
 // Warn of what's to come, so we can use pointers and references to classes without including the entire header files
 class Network;
@@ -663,17 +661,17 @@ constexpr float StepClocksToMillis = 1000.0/(float)StepClockRate;
 constexpr float StepClocksToSeconds = 1.0/(float)StepClockRate;
 
 // Convert milliseconds to step clocks
-static inline constexpr uint32_t MillisToStepClocks(uint32_t numMills) noexcept
+static inline constexpr uint32_t MillisToStepClocks(uint32_t numMillis) noexcept
 {
 	if constexpr (StepClockRate % 1000 == 0)
 	{
-		return numMills * (StepClockRate/1000);				// this works for Duet 3, step clock rate is 750kHz
+		return numMillis * (StepClockRate/1000);			// this works for Duet 3, step clock rate is 750kHz
 	}
 	if constexpr (StepClockRate % 500 == 0)
 	{
-		return (numMills * (StepClockRate/500))/2;			// this works for Duet 2, step clock rate is 937500Hz
+		return (numMillis * (StepClockRate/500))/2;			// this works for Duet 2, step clock rate is 937500Hz
 	}
-	return (numMills * (uint64_t)StepClockRate)/1000;		// catch-all in case of using other step clock rates
+	return (numMillis * (uint64_t)StepClockRate)/1000;		// catch-all in case of using other step clock rates
 }
 
 // Convert microseconds to step clocks, rounding up to the next step clock
