@@ -35,7 +35,7 @@ sd_mmc_err_t sd_mmc_check(uint8_t slot) noexcept;
 uint32_t sd_mmc_get_capacity(uint8_t slot) noexcept;
 card_type_t sd_mmc_get_type(uint8_t slot) noexcept;
 void sd_mmc_unmount(uint8_t slot) noexcept;
-uint32_t sd_mmc_get_interface_speed(uint8_t slot) noexcept;
+uint32_t sd_mmc_get_interface_speed(uint8_t slot, uint32_t *reqSpeed) noexcept;
 
 
 void sd_mmc_reinit_slot(uint8_t slot, Pin csPin, uint32_t spiFrequency) noexcept;

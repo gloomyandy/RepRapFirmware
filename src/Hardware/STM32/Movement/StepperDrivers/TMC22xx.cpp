@@ -1519,7 +1519,8 @@ void Tmc22xxDriver::Init(size_t numDrivers) noexcept
 	{
 		driversState = DriversState::ready;
 		return;
-	}		
+	}
+	debugPrintf("TMC22xx size %d\n", sizeof(Tmc22xxDriverState));
 	driverStates = (Tmc22xxDriverState *)	Tasks::AllocPermanent(sizeof(Tmc22xxDriverState)*numTmc22xxDrivers);
 	memset((void *)driverStates, 0, sizeof(Tmc22xxDriverState)*numTmc22xxDrivers);
 	

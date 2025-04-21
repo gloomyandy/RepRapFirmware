@@ -118,12 +118,14 @@ card_type_t sd_mmc_get_type(uint8_t slot) noexcept
     return CARD_TYPE_UNKNOWN;
 }
 
-uint32_t sd_mmc_get_interface_speed(uint8_t slot) noexcept
+uint32_t sd_mmc_get_interface_speed(uint8_t slot, uint32_t *reqSpeed) noexcept
 {
     if(slot < _DRIVES && _ffs[slot])
     {
+        if (reqSpeed != nullptr)
+            *reqSpeed = 0;
         // Get the speed of the SPI SD card interface for reporting purposes, in bytes/sec
-        return _ffs[slot]->interface_speed();
+        return _ffs[slot]->interface_speed(reqSpeed);
     }
     
     return 0;
