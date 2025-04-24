@@ -1019,6 +1019,12 @@ GCodeResult Move::ConfigureLocalDriver(GCodeBuffer& gb, const StringRef& reply, 
 	case 9:
 		{
 			bool seen = false;
+			uint32_t driveType;
+			if (gb.TryGetLimitedUIValue('T', driveType, seen, (uint32_t)DriverType::invalid))								// set rsense value
+			{
+				debugPrintf("Set driver type: drive %d type %d\n", drive, driveType);
+				SmartDrivers::SetDriverType(drive, (DriverType)driveType);
+			}
 			float fval;
 			if (gb.TryGetFValue('R', fval, seen))								// set rsense value
 			{

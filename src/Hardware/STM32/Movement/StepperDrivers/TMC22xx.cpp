@@ -82,7 +82,6 @@ static size_t numTmc22xxDrivers;
 enum class DriversState : uint8_t
 {
 	shutDown = 0,
-	noPower,				// no VIN power
 	powerWait,				// waiting for power
 	noDriver,				// no driver found or configured
 	notInitialised,			// have VIN power but not started initialising drivers
@@ -715,8 +714,9 @@ void Tmc22xxDriverState::Init(uint8_t p_driverNumber, Pin p_enablePin
 ) noexcept
 pre(!driversPowered)
 {
+	debugPrintf("tmc22xx init drive %d\n", p_driverNumber);
 	driverNumber = p_driverNumber;
-	state = DriversState::noPower;
+	state = DriversState::powerWait;
 	axisNumber = p_driverNumber;										// assume straight-through axis mapping initially
 	enablePin = p_enablePin;											// this is NoPin for the built-in drivers
 	IoPort::SetPinMode(p_enablePin, OUTPUT_HIGH);
@@ -725,7 +725,6 @@ pre(!driversPowered)
 	diagPin = p_diagPin;
 	IoPort::SetPinMode(p_diagPin, INPUT_PULLUP);
 #endif
-	state = DriversState::noPower;
 	enabled = false;
 	registersToUpdate = 0;
 	specialReadRegisterNumber = specialWriteRegisterNumber = 0xFF;
@@ -758,7 +757,7 @@ pre(!driversPowered)
 	ResetLoadRegisters();
 }
 // State structures for all drivers
-static Tmc22xxDriverState *driverStates;
+static Tmc22xxDriverState *driverStates = nullptr;
 
 #if HAS_STALL_DETECT
 
@@ -1231,7 +1230,7 @@ inline void Tmc22xxDriverState::TransferDone() noexcept
 		lastIfCount = currentIfCount;
 		regnumBeingUpdated = 0xFF;
 	}
-	else if (driversState != DriversState::noPower)		// we don't check the CRC, so only accept the result if power is still good
+	else if (driversState != DriversState::powerWait)		// we don't check the CRC, so only accept the result if power is still good
 	{
 		const uint8_t readRegNumber = (registerToRead >= NumReadRegisters) ? specialReadRegisterNumber
 												: ReadRegNumbers[registerToRead];
@@ -1450,6 +1449,7 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 		if (driversState <= DriversState::noDriver)
 		{
 			if (driversState != DriversState::noDriver) driversState = DriversState::powerWait;
+			debugPrintf("tmc22xx wait state %d\n", (int)driversState);
 			TaskBase::TakeIndexed(NotifyIndices::Tmc);
 		}
 		else
@@ -1515,17 +1515,28 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 void Tmc22xxDriver::Init(size_t numDrivers) noexcept
 {
 	numTmc22xxDrivers = min<size_t>(numDrivers, MaxSmartDrivers);
+	if (driverStates != nullptr)
+	{
+		delete (uint8_t *)driverStates;
+		driverStates = nullptr;
+	}
 	if (numTmc22xxDrivers == 0)
 	{
-		driversState = DriversState::ready;
+		driversState = DriversState::noDriver;
 		return;
 	}
 	debugPrintf("TMC22xx size %d\n", sizeof(Tmc22xxDriverState));
-	driverStates = (Tmc22xxDriverState *)	Tasks::AllocPermanent(sizeof(Tmc22xxDriverState)*numTmc22xxDrivers);
+	debugPrintf("Allocate space for %d drives size %d\n", numDrivers, (sizeof(Tmc22xxDriverState)*numTmc22xxDrivers));
+	driverStates = (Tmc22xxDriverState *)	new uint8_t[(sizeof(Tmc22xxDriverState)*numTmc22xxDrivers)];
 	memset((void *)driverStates, 0, sizeof(Tmc22xxDriverState)*numTmc22xxDrivers);
-	
-	driversState = DriversState::noPower;
-	tmc22Task.Create(Tmc22Loop, "TMC22xx", nullptr, TaskPriority::TmcPriority);
+
+	if (!tmc22Task.IsRunning())
+	{
+		debugPrintf("Start tmc22xx task\n");
+		tmc22Task.Create(Tmc22Loop, "TMC22xx", nullptr, TaskPriority::TmcPriority);
+	}
+	driversState = DriversState::powerWait;
+	debugPrintf("tmc22xx init state %d\n", driversState);
 }
 
 // Shut down the drivers and stop any related interrupts. Don't call Spin() again after calling this as it may re-enable them.
@@ -1536,7 +1547,7 @@ void Tmc22xxDriver::Exit() noexcept
 		TurnDriversOff();
 		tmc22Task.TerminateAndUnlink();
 	}
-	driversState = DriversState::noPower;
+	driversState = DriversState::powerWait;
 }
 
 
@@ -1545,7 +1556,7 @@ void Tmc22xxDriver::Exit() noexcept
 void Tmc22xxDriver::Spin(bool powered) noexcept
 {
 	if (numTmc22xxDrivers == 0) return;
-	TaskCriticalSectionLocker lock;
+	//TaskCriticalSectionLocker lock;
 
 	if (powered)
 	{
@@ -1553,6 +1564,9 @@ void Tmc22xxDriver::Spin(bool powered) noexcept
 		{
 			driversState = DriversState::notInitialised;
 			tmc22Task.Give(NotifyIndices::Tmc);									// wake up the TMC task because the drivers need to be initialised
+			// Wait for them to be ready
+			while (!IsReady())
+				delay(10);
 		}
 	}
 	else if (driversState > DriversState::powerWait)
@@ -1569,15 +1583,20 @@ bool Tmc22xxDriver::IsReady() noexcept
 // This is called from the tick ISR, possibly while Spin (with powered either true or false) is being executed
 void Tmc22xxDriver::TurnDriversOff() noexcept
 {
-	for (size_t i = 0; i < numTmc22xxDrivers; ++i)
+	if (numTmc22xxDrivers > 0 && driversState >= DriversState::noDriver)
 	{
-		digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], true);
+		for (size_t i = 0; i < numTmc22xxDrivers; ++i)
+		{
+			digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], true);
+		}
+		driversState = DriversState::powerWait;
+		debugPrintf("tmc22xx turn drivers off state %d\n", driversState);
 	}
-	driversState = (driversState == DriversState::noDriver ? DriversState::powerWait : DriversState::noPower);
 }
 
 TmcDriverState* Tmc22xxDriver::InitDrive(size_t slot, size_t driveNo) noexcept
 {
+	debugPrintf("TMC22xx init slot %d\n", slot);
 	new(&driverStates[slot]) Tmc22xxDriverState();
 	driverStates[slot].Init(driveNo
 #if TMC22xx_HAS_ENABLE_PINS

@@ -24,7 +24,7 @@ namespace SmartDrivers
 	void Spin(bool powered) noexcept;
 	void TurnDriversOff() noexcept;
 	bool IsReady() noexcept;
-
+	void SetDriverType(size_t drive, DriverType typ) noexcept;
 	void SetAxisNumber(size_t driver, uint32_t axisNumber) noexcept;
 	uint32_t GetAxisNumber(size_t drive) noexcept;
 	void SetCurrent(size_t driver, float current) noexcept;

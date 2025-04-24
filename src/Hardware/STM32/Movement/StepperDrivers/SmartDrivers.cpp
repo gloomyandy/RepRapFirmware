@@ -17,7 +17,7 @@ LocalDriversBitmap SmartDrivers::stallEndstopsEnabled;
 std::atomic<uint16_t> SmartDrivers::driverStallsToNotify(0);
 #endif
 
-static TmcDriverState **driverStates;
+static TmcDriverState **driverStates = nullptr;
 static size_t numDrivers;
 
 static bool IsDumbDriver(size_t driveNo) noexcept
@@ -40,18 +40,24 @@ static bool IsUARTDriver(size_t driveNo) noexcept
 // It is assumed that the drivers are not powered, so driversPowered(true) must be called after calling this before the motors can be moved.
 void SmartDrivers::Init(size_t numSmartDrivers) noexcept
 {
-	numDrivers = min<size_t>(numSmartDrivers, MaxSmartDrivers);
-	if (numDrivers == 0)
+	uint32_t numDrives = min<size_t>(numSmartDrivers, MaxSmartDrivers);
+	if (driverStates != nullptr)
+	{
+		debugPrintf("Delete existing drive array\n");
+		delete driverStates;
+	}
+	if (numDrives == 0)
 		driverStates = nullptr;
 	else
-		driverStates = (TmcDriverState **)	Tasks::AllocPermanent(sizeof(TmcDriverState *)*numDrivers);
+		driverStates = (TmcDriverState **)	new TmcDriverState*[numDrives];
+	debugPrintf("Allocate space for %d drives size %d\n", numDrives, numDrives*sizeof(TmcDriverState*));
 	// Work out how many spi and uart drives we have and create the interfaces for them
 	// We need to work out how to handle empty slots and StepDir only devices, we may need a new class for
 	// these but for now we treat them in the same way they have been handled for some time, leaving the
 	// 2209 driver to deal with them.
 	size_t SPICnt = 0;
 	size_t UARTCnt = 0;
-	for(size_t drive = 0; drive < numDrivers; drive++)
+	for(size_t drive = 0; drive < numDrives; drive++)
 	{
 		if (IsSPIDriver(drive))
 		{
@@ -70,7 +76,7 @@ void SmartDrivers::Init(size_t numSmartDrivers) noexcept
 	Tmc22xxDriver::Init(UARTCnt);
 	size_t UARTSlot = 0;
 #endif
-	for(size_t drive = 0; drive < numDrivers; drive++)
+	for(size_t drive = 0; drive < numDrives; drive++)
 	{
 #if SUPPORT_TMC51xx
 		if (IsSPIDriver(drive))
@@ -87,11 +93,23 @@ void SmartDrivers::Init(size_t numSmartDrivers) noexcept
 		}
 #endif
 	}
+	// Complete the intialisation if we possibly can.
+#if SUPPORT_TMC22xx
+	Tmc22xxDriver::Spin(true);
+#endif
+#if SUPPORT_TMC51xx
+	Tmc51xxDriver::Spin(true);
+#endif
+
+	// make num drivers visible
+	numDrivers = numDrives;
 }
 
 // Shut down the drivers and stop any related interrupts. Don't call Spin() again after calling this as it may re-enable them.
 void SmartDrivers::Exit() noexcept
 {
+	if (numDrivers == 0)
+		return;
 #if SUPPORT_TMC51xx
 	Tmc51xxDriver::Exit();
 #endif
@@ -102,11 +120,13 @@ void SmartDrivers::Exit() noexcept
 
 void SmartDrivers::Spin(bool powered) noexcept
 {
-#if SUPPORT_TMC51xx
-	Tmc51xxDriver::Spin(powered);
-#endif
+	if (numDrivers == 0)
+		return;
 #if SUPPORT_TMC22xx
 	Tmc22xxDriver::Spin(powered);
+#endif
+#if SUPPORT_TMC51xx
+	Tmc51xxDriver::Spin(powered);
 #endif
 }
 
@@ -134,6 +154,24 @@ void SmartDrivers::TurnDriversOff() noexcept
 	Tmc22xxDriver::TurnDriversOff();
 #endif
 
+}
+
+void SmartDrivers::SetDriverType(size_t drive, DriverType typ) noexcept
+{
+	if (drive < numDrivers)
+	{
+		uint32_t numDrives = numDrivers;
+		// make sure we don't call spin or perform any other requests
+		numDrivers = 0;
+		// stop eveything
+		TurnDriversOff();
+		// give them chance to shutdown
+		delay(10);
+		// set the new driver type
+		TMC_DRIVER_TYPE[drive] = typ;
+		// and re-init everything
+		Init(numDrives);
+	}
 }
 
 void SmartDrivers::SetAxisNumber(size_t drive, uint32_t axisNumber) noexcept

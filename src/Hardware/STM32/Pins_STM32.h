@@ -215,7 +215,8 @@ NamedEnum(DriverType, uint8_t,
     tmc2660,
 	tmcspiauto,
 	tmc5160,
-	tmc2240
+	tmc2240,
+    invalid
 );
 
 // HAS_SMART_DRIVERS is defined in Pins.h, we duplicate it for the board files to use
