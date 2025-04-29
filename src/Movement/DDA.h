@@ -12,6 +12,7 @@
 #include "DriveMovement.h"
 #include "StepTimer.h"
 #include "MoveSegment.h"
+#include "MovementError.h"
 #include <Platform/Tasks.h>
 #include "RawMove.h"
 #include <GCodes/SimulationMode.h>
@@ -90,7 +91,7 @@ public:
 	void operator delete(void* ptr) noexcept {}
 	void operator delete(void* ptr, std::align_val_t align) noexcept {}
 
-	bool InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorMapping) noexcept SPEED_CRITICAL;	// Set up a new move, returning true if it represents real movement
+	MovementError InitStandardMove(DDARing& ring, const RawMove &nextMove, bool doMotorMapping) noexcept SPEED_CRITICAL;	// Set up a new move, returning true if it represents real movement
 	bool InitLeadscrewMove(DDARing& ring, float feedrate, const float amounts[MaxDriversPerAxis]) noexcept;		// Set up a leadscrew motor move
 #if SUPPORT_ASYNC_MOVES
 	bool InitAsyncMove(DDARing& ring, const AsyncMove& nextMove) noexcept;							// Set up an async move
@@ -194,14 +195,14 @@ public:
 private:
 	static constexpr float MinimumAccelOrDecelClocks = 10.0;				// Minimum number of acceleration or deceleration clocks we try to ensure
 
-	void RecalculateMove(DDARing& ring) noexcept SPEED_CRITICAL;
+	MovementError RecalculateMove(DDARing& ring) noexcept SPEED_CRITICAL;
 	static void DoLookahead(DDARing& ring, DDA *laDDA) noexcept SPEED_CRITICAL;	// Try to smooth out moves in the queue
 
 #if SUPPORT_S_CURVE
 	void RecalculateSCurveMove(DDARing& ring) noexcept SPEED_CRITICAL;
-	void CalculateIsolatedSCurveMove() noexcept SPEED_CRITICAL pre(endSpeed == 0.0; endDeceleration == 0.0);
+	MovementError CalculateIsolatedSCurveMove() noexcept SPEED_CRITICAL pre(endSpeed == 0.0; endDeceleration == 0.0);
 	int CalculateNewSCurveMove() noexcept SPEED_CRITICAL pre(endSpeed == 0.0; endDeceleration == 0.0);
-	static void DoSCurveLookahead(DDARing& ring, DDA *laDDA) noexcept SPEED_CRITICAL;	// Try to smooth out moves in the queue
+	static MovementError DoSCurveLookahead(DDARing& ring, DDA *laDDA) noexcept SPEED_CRITICAL;	// Try to smooth out moves in the queue
 	bool ExtrusionSpeedMatchesPrevious() const noexcept;
 #endif
 
