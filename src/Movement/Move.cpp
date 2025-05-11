@@ -677,7 +677,8 @@ void Move::Exit() noexcept
 			{
 				// If there's a G Code move available, add it to the DDA ring for processing.
 				RawMove nextMove;
-				if (reprap.GetGCodes().ReadMove(0, nextMove))				// if we have a new move
+				GCodes& gcodes = reprap.GetGCodes();
+				if (gcodes.ReadMove(0, nextMove))							// if we have a new move
 				{
 					moveRead = true;
 					if (simulationMode < SimulationMode::partial)			// in simulation mode partial, we don't process incoming moves beyond this point
@@ -693,7 +694,8 @@ void Move::Exit() noexcept
 													);
 						}
 
-						if (rings[0].AddStandardMove(nextMove, !IsRawMotorMove(nextMove.moveType)))
+						const MovementError err = rings[0].AddStandardMove(nextMove, !IsRawMotorMove(nextMove.moveType));
+						if (err == MovementError::ok)
 						{
 							const uint32_t now = millis();
 							const uint32_t timeWaiting = now - whenLastMoveAdded[0];
@@ -703,6 +705,10 @@ void Move::Exit() noexcept
 							}
 							whenLastMoveAdded[0] = now;
 							moveState = MoveState::collecting;
+						}
+						else if (err != MovementError::noMovement)
+						{
+							gcodes.ReportMovementError(err);
 						}
 					}
 				}
@@ -741,7 +747,8 @@ void Move::Exit() noexcept
 			{
 				// If there's a G Code move available, add it to the DDA ring for processing.
 				RawMove nextMove;
-				if (reprap.GetGCodes().ReadMove(1, nextMove))				// if we have a new move
+				GCodes& gcodes = reprap.GetGCodes();
+				if (gcodes.ReadMove(1, nextMove))							// if we have a new move
 				{
 					moveRead = true;
 					if (simulationMode < SimulationMode::partial)			// in simulation mode partial, we don't process incoming moves beyond this point
@@ -751,7 +758,8 @@ void Move::Exit() noexcept
 							AxisAndBedTransform(nextMove.coords, nextMove.movementTool, true);
 						}
 
-						if (rings[1].AddStandardMove(nextMove, !IsRawMotorMove(nextMove.moveType)))
+						const MovementError err = rings[1].AddStandardMove(nextMove, !IsRawMotorMove(nextMove.moveType));
+						if (err == MovementError::ok)
 						{
 							const uint32_t now = millis();
 							const uint32_t timeWaiting = now - whenLastMoveAdded[1];
@@ -761,6 +769,10 @@ void Move::Exit() noexcept
 							}
 							whenLastMoveAdded[1] = now;
 							moveState = MoveState::collecting;
+						}
+						else if (err != MovementError::noMovement)
+						{
+							gcodes.ReportMovementError(err);
 						}
 					}
 				}
@@ -1030,9 +1042,16 @@ void Move::Diagnostics(unsigned int part, const StringRef& reply) noexcept
 }
 
 // Convert distance to steps for a particular drive
-int32_t Move::MotorMovementToSteps(size_t drive, float coord) const noexcept
+MovementError Move::MotorMovementToSteps(size_t drive, float coord, int32_t& whereToStore) const noexcept
 {
-	return lrintf(coord * driveStepsPerMm[drive]);
+	const float pos = coord * driveStepsPerMm[drive];
+	constexpr float limit = std::numeric_limits<int32_t>::max() - 10;
+	if (fabsf(pos) <= limit)
+	{
+		whereToStore = lrintf(pos);
+		return MovementError::ok;
+	}
+	return MovementError::microstep_position_too_large;
 }
 
 // Convert motor coordinates to machine coordinates. Used after homing and after individual motor moves.
@@ -1051,12 +1070,12 @@ void Move::MotorStepsToCartesian(const int32_t motorPos[], size_t numVisibleAxes
 // Used to perform movement and G92 commands.
 // This may be called from an ISR, e.g. via Kinematics::OnHomingSwitchTriggered, DDA::SetPositions and Move::EndPointToMachine
 // If isCoordinated is false then multi-mode kinematics such as SCARA are allowed to switch mode if necessary to make the specified machine position reachable
-bool Move::CartesianToMotorSteps(const float machinePos[MaxAxes], int32_t motorPos[MaxAxes], bool isCoordinated) const noexcept
+MovementError Move::CartesianToMotorSteps(const float machinePos[MaxAxes], int32_t motorPos[MaxAxes], bool isCoordinated) const noexcept
 {
-	const bool b = kinematics->CartesianToMotorSteps(machinePos, driveStepsPerMm, reprap.GetGCodes().GetVisibleAxes(), reprap.GetGCodes().GetTotalAxes(), motorPos, isCoordinated);
+	const MovementError rslt = kinematics->CartesianToMotorSteps(machinePos, driveStepsPerMm, reprap.GetGCodes().GetVisibleAxes(), reprap.GetGCodes().GetTotalAxes(), motorPos, isCoordinated);
 	if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PrintTransforms))
 	{
-		if (!b)
+		if (rslt != MovementError::ok)
 		{
 			debugPrintf("Unable to transform");
 			for (size_t i = 0; i < reprap.GetGCodes().GetVisibleAxes(); ++i)
@@ -1080,7 +1099,7 @@ bool Move::CartesianToMotorSteps(const float machinePos[MaxAxes], int32_t motorP
 			debugPrintf("\n");
 		}
 	}
-	return b;
+	return rslt;
 }
 
 float Move::MotorStepsToMovement(size_t drive, int32_t endpoint) const noexcept
@@ -3608,7 +3627,7 @@ GCodeResult Move::UpdateRemoteStepsPerMmAndMicrostepping(AxesBitmap axesAndExtru
 // The caller must not attempt to lock the aux buffer more than once, and must call ReleaseAuxMove to release the buffer.
 AsyncMove *Move::LockAuxMove() noexcept
 {
-	InterruptCriticalSectionLocker lock;
+	AtomicCriticalSectionLocker lock;
 	if (!auxMoveLocked && !auxMoveAvailable)
 	{
 		auxMoveLocked = true;
