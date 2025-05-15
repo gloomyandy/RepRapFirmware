@@ -31,6 +31,10 @@
 #endif
 
 #if SUPPORT_REMOTE_COMMANDS
+#if STM32
+#  include <CanMessageGenericTables.h>
+#  include <CanMessageGenericParser.h>
+#endif
 # include <Hardware/NonVolatileMemory.h>
 
 static uint8_t expectedSeq = 0xFF;
@@ -640,8 +644,26 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 
 			case CanMessageType::m655:
 				requestId = buf->msg.generic.requestId;
+#if STM32
+				// temporary until we have a custom can message for M569.9
+				{
+					CanMessageGenericParser parser(buf->msg.generic, M655Params);
+					int32_t drive, dtype;
+					if (parser.GetIntParam('R', drive) && parser.GetIntParam('S', dtype))
+					{
+						SmartDrivers::SetDriverType(drive, (DriverType)dtype);
+						rslt = GCodeResult::ok;
+					}
+					else
+					{
+						reply.copy("missing parameter");
+						rslt = GCodeResult::error;
+					}
+				}
+#else
 				reply.copy("not supported by this board");
 				rslt = GCodeResult::error;
+#endif
 				break;
 
 			case CanMessageType::diagnosticTest:

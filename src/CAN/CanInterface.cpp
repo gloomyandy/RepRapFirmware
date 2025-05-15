@@ -1252,6 +1252,18 @@ pre(driver.IsRemote())
 		}
 		return GCodeResult::errorNotSupported;
 #endif
+#if STM32
+	case 9:			// set driver type (needs expanding to allow max current and sense resistor settings)
+		{
+			// temporary until we have a custom can message for M569.9
+			gb.MustSee('T');
+			int32_t dtype = gb.GetLimitedIValue('T', (int)DriverType::unknown, (int)DriverType::invalid);
+			CanMessageGenericConstructor cons(M655Params);
+			cons.AddIParam('R', driver.localDriver);
+			cons.AddIParam('S', dtype);
+			return cons.SendAndGetResponse(CanMessageType::m655, driver.boardAddress, reply);
+		}
+#endif
 
 	default:
 		return GCodeResult::errorNotSupported;
