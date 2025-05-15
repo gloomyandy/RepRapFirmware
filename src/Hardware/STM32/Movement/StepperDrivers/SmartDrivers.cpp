@@ -20,20 +20,83 @@ std::atomic<uint16_t> SmartDrivers::driverStallsToNotify(0);
 static TmcDriverState **driverStates = nullptr;
 static size_t numDrivers;
 
-static bool IsDumbDriver(size_t driveNo) noexcept
+static bool IsDumbDriver(DriverType *dt, size_t driveNo) noexcept
 {
-	return TMC_DRIVER_TYPE[driveNo] >= DriverType::unknown && TMC_DRIVER_TYPE[driveNo] <= DriverType::stepdir;
+	return dt[driveNo] >= DriverType::unknown && dt[driveNo] <= DriverType::stepdir;
 }
 
-static bool IsSPIDriver(size_t driveNo) noexcept
+static bool IsSPIDriver(DriverType *dt, size_t driveNo) noexcept
 {
-	return TMC_DRIVER_TYPE[driveNo] >= DriverType::tmcspiauto && TMC_DRIVER_TYPE[driveNo] <= DriverType::tmc2240;
+	return (dt[driveNo] >= DriverType::tmcspiauto && dt[driveNo] <= DriverType::tmc2240) || (dt[driveNo] >= DriverType::tmcauto);
 }
 
-static bool IsUARTDriver(size_t driveNo) noexcept
+static bool IsUARTDriver(DriverType *dt, size_t driveNo) noexcept
 {
-	return TMC_DRIVER_TYPE[driveNo] >= DriverType::tmcuartauto && TMC_DRIVER_TYPE[driveNo] <= DriverType::tmc2660;
+	return (dt[driveNo] >= DriverType::tmcuartauto && dt[driveNo] <= DriverType::tmc2660) || (dt[driveNo] >= DriverType::tmcauto);
 }
+
+static bool IsAutoDriver(DriverType *dt, size_t driveNo) noexcept
+{
+	return dt[driveNo] >= DriverType::tmcauto;
+}
+
+#if SUPPORT_TMC51xx
+static void ConfigureSPIDrivers(size_t numDrives, DriverType *dt)
+{
+	size_t cnt = 0;
+	for(size_t drive = 0; drive < numDrives; drive++)
+	{
+		if (IsSPIDriver(dt, drive))
+		{
+			cnt++;
+		}
+	}
+	Tmc51xxDriver::Init(cnt);
+	size_t slot = 0;
+	for(size_t drive = 0; drive < numDrives; drive++)
+	{
+		if (IsSPIDriver(dt, drive))
+		{
+			driverStates[drive] = Tmc51xxDriver::InitDrive(slot, drive);
+			slot++;
+		}
+	}
+	// Run auto detect and complete install
+	Tmc51xxDriver::Spin(true);
+	Tmc51xxDriver::TurnDriversOff();
+	// Allow time for the drivers to be disabled fully
+	delay(10);
+}
+#endif
+
+#if SUPPORT_TMC22xx
+static void ConfigureUARTDrivers(size_t numDrives, DriverType *dt)
+{
+	size_t cnt = 0;
+	for(size_t drive = 0; drive < numDrives; drive++)
+	{
+		if (IsUARTDriver(dt, drive) || IsDumbDriver(dt, drive))
+		{
+			cnt++;
+		}
+	}
+	Tmc22xxDriver::Init(cnt);
+	size_t slot = 0;
+	for(size_t drive = 0; drive < numDrives; drive++)
+	{
+		if (IsUARTDriver(dt, drive) || IsDumbDriver(dt, drive))
+		{
+			driverStates[drive] = Tmc22xxDriver::InitDrive(slot, drive);
+			slot++;
+		}
+	}
+	// Run auto detect and complete install
+	Tmc22xxDriver::Spin(true);
+	Tmc22xxDriver::TurnDriversOff();
+	// Allow time for the drivers to be disabled fully
+	delay(10);
+}
+#endif
 
 //--------------------------- Public interface ---------------------------------
 // Initialise the driver interface and the drivers, leaving each drive disabled.
@@ -41,66 +104,43 @@ static bool IsUARTDriver(size_t driveNo) noexcept
 void SmartDrivers::Init(size_t numSmartDrivers) noexcept
 {
 	uint32_t numDrives = min<size_t>(numSmartDrivers, MaxSmartDrivers);
+	DriverType driverType[NumDirectDrivers];
+	memcpy((void *)driverType, (void *)TMC_DRIVER_TYPE, NumDirectDrivers*sizeof(DriverType));
 	if (driverStates != nullptr)
 	{
-		debugPrintf("Delete existing drive array\n");
 		delete driverStates;
 	}
 	if (numDrives == 0)
 		driverStates = nullptr;
 	else
 		driverStates = (TmcDriverState **)	new TmcDriverState*[numDrives];
-	debugPrintf("Allocate space for %d drives size %d\n", numDrives, numDrives*sizeof(TmcDriverState*));
-	// Work out how many spi and uart drives we have and create the interfaces for them
-	// We need to work out how to handle empty slots and StepDir only devices, we may need a new class for
-	// these but for now we treat them in the same way they have been handled for some time, leaving the
-	// 2209 driver to deal with them.
-	size_t SPICnt = 0;
-	size_t UARTCnt = 0;
+#if SUPPORT_TMC51xx
+	ConfigureSPIDrivers(numDrives, driverType);
+	// If we have any "full auto drivers" we need to check if they have been detected as SPI devices, if not
+	// we need to remove that device and try it again as a UART device.
+	bool reconfigure = false;
 	for(size_t drive = 0; drive < numDrives; drive++)
 	{
-		if (IsSPIDriver(drive))
+		if (IsAutoDriver(driverType, drive))
 		{
-			SPICnt++;
-		}
-		else if (IsUARTDriver(drive) || IsDumbDriver(drive))
-		{
-			UARTCnt++;
+			if (driverStates[drive]->GetStatus(false, false).notPresent)
+			{
+				// mark slot as a possible uart driver
+				driverType[drive] = DriverType::tmcuartauto;
+				reconfigure = true;
+			}
+			else
+				driverType[drive] = DriverType::tmcspiauto;
 		}
 	}
-#if SUPPORT_TMC51xx
-	Tmc51xxDriver::Init(SPICnt);
-	size_t SPISlot = 0;
-#endif
-#if SUPPORT_TMC22xx
-	Tmc22xxDriver::Init(UARTCnt);
-	size_t UARTSlot = 0;
-#endif
-	for(size_t drive = 0; drive < numDrives; drive++)
+	if (reconfigure)
 	{
-#if SUPPORT_TMC51xx
-		if (IsSPIDriver(drive))
-		{
-			driverStates[drive] = Tmc51xxDriver::InitDrive(SPISlot, drive);
-			SPISlot++;
-		}
-#endif
-#if SUPPORT_TMC22xx
-		if (IsUARTDriver(drive) || IsDumbDriver(drive))
-		{
-			driverStates[drive] = Tmc22xxDriver::InitDrive(UARTSlot, drive);
-			UARTSlot++;
-		}
-#endif
+		ConfigureSPIDrivers(numDrives, driverType);
 	}
-	// Complete the intialisation if we possibly can.
+#endif
 #if SUPPORT_TMC22xx
-	Tmc22xxDriver::Spin(true);
+	ConfigureUARTDrivers(numDrives, driverType);
 #endif
-#if SUPPORT_TMC51xx
-	Tmc51xxDriver::Spin(true);
-#endif
-
 	// make num drivers visible
 	numDrivers = numDrives;
 }

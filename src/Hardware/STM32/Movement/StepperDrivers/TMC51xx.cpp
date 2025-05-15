@@ -560,7 +560,6 @@ Tmc51xxDriverState::Tmc51xxDriverState() noexcept : TmcDriverState(), accumulate
 void Tmc51xxDriverState::Init(uint32_t p_driverNumber) noexcept
 pre(!driversPowered)
 {
-	debugPrintf("tmc51xx init drive %d\n", p_driverNumber);
 	driverNumber = p_driverNumber;
 	state = DriversState::powerWait;
 	axisNumber = p_driverNumber;										// axes are mapped straight through to drivers initially
@@ -1436,7 +1435,7 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 					typ = DriverType::tmc5160;
 				}
 				// did our discovery match the request driver type?
-				if (TMC_DRIVER_TYPE[driverNumber] != DriverType::tmcspiauto && typ != TMC_DRIVER_TYPE[driverNumber])
+				if (TMC_DRIVER_TYPE[driverNumber] != DriverType::tmcspiauto && TMC_DRIVER_TYPE[driverNumber] != DriverType::tmcauto && typ != TMC_DRIVER_TYPE[driverNumber])
 				{
 					debugPrintf("TMCSPI:: Warning driver %d type mismatch requested %s actual %s\n", driverNumber, TMC_DRIVER_TYPE[driverNumber].ToString(), typ.ToString());
 					typ = TMC_DRIVER_TYPE[driverNumber];
@@ -1459,7 +1458,6 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 	}
 	if (numReads >= NumReadRegisters + NumWriteRegisters + 3)
 	{
-debugPrintf("Setting ready status %x astatus %x\n", readRegisters[ReadDrvStat], accumulatedDriveStatus);
 		state = DriversState::ready;
 	}
 	return state;
@@ -1491,7 +1489,6 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 		if (driversState <= DriversState::noDriver)
 		{
 			if (driversState != DriversState::noDriver) driversState = DriversState::powerWait;
-			debugPrintf("tmc51xx wait state %d\n", (int)driversState);
 			TaskBase::TakeIndexed(NotifyIndices::Tmc);
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
 			lastWakeupTime = StepTimer::GetTimerTicks();
@@ -1724,8 +1721,6 @@ void Tmc51xxDriver::Init(size_t numDrivers) noexcept
 		driversState = DriversState::noDriver;
 		return;
 	}
-	debugPrintf("TMC51xx size %d\n", sizeof(Tmc51xxDriverState));
-	debugPrintf("Allocate space for %d drives size %d\n", numDrivers, (sizeof(Tmc51xxDriverState)*numTmc51xxDrivers));
 
 	driverStates = (Tmc51xxDriverState *)	new uint8_t[(sizeof(Tmc51xxDriverState )*numTmc51xxDrivers)];
 	memset((void *)driverStates, 0, sizeof(Tmc51xxDriverState)*numTmc51xxDrivers);
@@ -1738,7 +1733,6 @@ void Tmc51xxDriver::Init(size_t numDrivers) noexcept
 	}
 	if (!tmcTask.IsRunning())
 	{
-		debugPrintf("tmc51xx start task\n");
 		spiDevice = new SharedSpiClient(SharedSpiDevice::GetSharedSpiDevice(SmartDriversSpiChannel), DefaultDriversSpiClockFrequency, SPI_MODE_3, NoPin, false);
 		tmcTask.Create(TmcLoop, "TMC51xx", nullptr, TaskPriority::TmcPriority);
 	}
@@ -1811,7 +1805,6 @@ bool Tmc51xxDriver::IsReady() noexcept
 
 TmcDriverState* Tmc51xxDriver::InitDrive(size_t slot, size_t driveNo) noexcept
 {
-	debugPrintf("TMC51xx init slot %d\n", slot);
 	// init everything and return pointer to driver
 	new(&driverStates[slot]) Tmc51xxDriverState();
 	driverStates[slot].Init(driveNo);

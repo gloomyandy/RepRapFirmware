@@ -714,7 +714,6 @@ void Tmc22xxDriverState::Init(uint8_t p_driverNumber, Pin p_enablePin
 ) noexcept
 pre(!driversPowered)
 {
-	debugPrintf("tmc22xx init drive %d\n", p_driverNumber);
 	driverNumber = p_driverNumber;
 	state = DriversState::powerWait;
 	axisNumber = p_driverNumber;										// assume straight-through axis mapping initially
@@ -1416,7 +1415,7 @@ DriversState Tmc22xxDriverState::SetupDriver(bool reset) noexcept
 					typ = DriverType::tmc2209;
 				}
 				// did our discovery match the request driver type?
-				if (TMC_DRIVER_TYPE[driverNumber] != DriverType::tmcuartauto && typ != TMC_DRIVER_TYPE[driverNumber])
+				if (TMC_DRIVER_TYPE[driverNumber] != DriverType::tmcuartauto && TMC_DRIVER_TYPE[driverNumber] != DriverType::tmcauto && typ != TMC_DRIVER_TYPE[driverNumber])
 				{
 					debugPrintf("TMCUART:: Warning driver %d type mismatch requested %s actual %s\n", driverNumber, TMC_DRIVER_TYPE[driverNumber].ToString(), typ.ToString());
 					typ = TMC_DRIVER_TYPE[driverNumber];
@@ -1449,7 +1448,6 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 		if (driversState <= DriversState::noDriver)
 		{
 			if (driversState != DriversState::noDriver) driversState = DriversState::powerWait;
-			debugPrintf("tmc22xx wait state %d\n", (int)driversState);
 			TaskBase::TakeIndexed(NotifyIndices::Tmc);
 		}
 		else
@@ -1525,18 +1523,14 @@ void Tmc22xxDriver::Init(size_t numDrivers) noexcept
 		driversState = DriversState::noDriver;
 		return;
 	}
-	debugPrintf("TMC22xx size %d\n", sizeof(Tmc22xxDriverState));
-	debugPrintf("Allocate space for %d drives size %d\n", numDrivers, (sizeof(Tmc22xxDriverState)*numTmc22xxDrivers));
 	driverStates = (Tmc22xxDriverState *)	new uint8_t[(sizeof(Tmc22xxDriverState)*numTmc22xxDrivers)];
 	memset((void *)driverStates, 0, sizeof(Tmc22xxDriverState)*numTmc22xxDrivers);
 
 	if (!tmc22Task.IsRunning())
 	{
-		debugPrintf("Start tmc22xx task\n");
 		tmc22Task.Create(Tmc22Loop, "TMC22xx", nullptr, TaskPriority::TmcPriority);
 	}
 	driversState = DriversState::powerWait;
-	debugPrintf("tmc22xx init state %d\n", driversState);
 }
 
 // Shut down the drivers and stop any related interrupts. Don't call Spin() again after calling this as it may re-enable them.
@@ -1547,7 +1541,7 @@ void Tmc22xxDriver::Exit() noexcept
 		TurnDriversOff();
 		tmc22Task.TerminateAndUnlink();
 	}
-	driversState = DriversState::powerWait;
+	driversState = DriversState::shutDown;						// prevent Spin() calls from doing anything
 }
 
 
@@ -1590,13 +1584,11 @@ void Tmc22xxDriver::TurnDriversOff() noexcept
 			digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], true);
 		}
 		driversState = DriversState::powerWait;
-		debugPrintf("tmc22xx turn drivers off state %d\n", driversState);
 	}
 }
 
 TmcDriverState* Tmc22xxDriver::InitDrive(size_t slot, size_t driveNo) noexcept
 {
-	debugPrintf("TMC22xx init slot %d\n", slot);
 	new(&driverStates[slot]) Tmc22xxDriverState();
 	driverStates[slot].Init(driveNo
 #if TMC22xx_HAS_ENABLE_PINS
