@@ -1373,7 +1373,7 @@ void RepRap::Tick() noexcept
 					relevantStackPtr = const_cast<const uint32_t *_ecv_array>(pxTaskGetLastStackTop(relevantTask->GetFreeRTOSHandle()));
 					// All registers were saved on the stack, so to get useful return addresses we need to skip most of them.
 					// See the port.c files in FreeRTOS for the stack layouts
-#if SAME70 || SAM4E || SAME5x
+#if SAME70 || SAM4E || SAME5x || STM32
 					// ARM Cortex M7 with double precision floating point, or ARM Cortex M4F
 					if ((relevantStackPtr[8] & 0x10) == 0)						// test EXC_RETURN FP bit
 					{
