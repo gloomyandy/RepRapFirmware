@@ -1507,6 +1507,14 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 	}
 }
 
+static void DisableAllDrivers()
+{
+	for (size_t i = 0; i < numTmc22xxDrivers; ++i)
+	{
+		digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], true);
+	}
+}
+
 //--------------------------- Public interface ---------------------------------
 // Initialise the driver interface and the drivers, leaving each drive disabled.
 // It is assumed that the drivers are not powered, so driversPowered(true) must be called after calling this before the motors can be moved.
@@ -1538,7 +1546,7 @@ void Tmc22xxDriver::Exit() noexcept
 {
 	if (numTmc22xxDrivers > 0)
 	{
-		TurnDriversOff();
+		DisableAllDrivers();
 		tmc22Task.TerminateAndUnlink();
 	}
 	driversState = DriversState::shutDown;						// prevent Spin() calls from doing anything
@@ -1559,7 +1567,7 @@ void Tmc22xxDriver::Spin(bool powered) noexcept
 			driversState = DriversState::notInitialised;
 			tmc22Task.Give(NotifyIndices::Tmc);									// wake up the TMC task because the drivers need to be initialised
 			// Wait for them to be ready
-			while (!IsReady())
+			while (!IsReady() && driversState > DriversState::powerWait)
 				delay(10);
 		}
 	}
@@ -1579,10 +1587,7 @@ void Tmc22xxDriver::TurnDriversOff() noexcept
 {
 	if (numTmc22xxDrivers > 0 && driversState >= DriversState::noDriver)
 	{
-		for (size_t i = 0; i < numTmc22xxDrivers; ++i)
-		{
-			digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], true);
-		}
+		DisableAllDrivers();
 		driversState = DriversState::powerWait;
 	}
 }

@@ -1703,6 +1703,13 @@ bool Tmc51xxDriverState::EnablePhaseStepping(bool enable) noexcept
 }
 #endif
 
+static void DisableAllDrivers() noexcept
+{
+	for (size_t i = 0; i < numTmc51xxDrivers; ++i)
+	{
+		digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], true);
+	}
+}
 
 // Members of namespace SmartDrivers
 
@@ -1744,7 +1751,7 @@ void Tmc51xxDriver::Exit() noexcept
 {
 	if (numTmc51xxDrivers > 0 && driversState != DriversState::shutDown)
 	{
-		TurnDriversOff();
+		DisableAllDrivers();
 		// make sure that the task does not own the spi device when we kill it
 		if (spiDevice->Select(100))
 		{
@@ -1773,7 +1780,7 @@ void Tmc51xxDriver::Spin(bool powered) noexcept
 			driversState = DriversState::notInitialised;
 			tmcTask.Give(NotifyIndices::Tmc);									// wake up the TMC task because the drivers need to be initialised
 			// Wait for them to be ready
-			while (!IsReady())
+			while (!IsReady() && driversState > DriversState::powerWait)
 				delay(10);
 		}
 	}
@@ -1788,11 +1795,7 @@ void Tmc51xxDriver::TurnDriversOff() noexcept
 {
 	if (numTmc51xxDrivers > 0 && driversState >= DriversState::noDriver)
 	{
-		for (size_t i = 0; i < numTmc51xxDrivers; ++i)
-		{
-			digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], true);
-		}
-
+		DisableAllDrivers();
 		driversState = DriversState::powerWait;
 	}
 }
