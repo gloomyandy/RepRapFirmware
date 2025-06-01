@@ -1,5 +1,11 @@
+Version 3.6.0
+=============
+* Duet3d 3.6.0
+* Added support for Fly E3 Ultra and Fly C5
+* Added support for tmcauto driver mode to allow identification of spi/uart drivers
+
 Version 3.6.0-rc.2
-======================
+==================
 * Duet3d 3.6.0-rc.2
 * Added Fly M2 expansion board
 * Added support for RP2040 based expansion boards with multiple TMC22xx drivers
@@ -7,7 +13,7 @@ Version 3.6.0-rc.2
 * Report bootloader details in M122 output if it is ours
 
 Version 3.6.0-rc.1
-======================
+==================
 * Duet3d 3.6.0-rc.1
 * New Can capable bootloaders for H7 boards
 * Allow update of expansion mode boards over can without an SD card
