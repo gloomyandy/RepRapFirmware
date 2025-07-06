@@ -1151,8 +1151,8 @@ void Tmc51xxDriverState::SetStallDetectFilter(bool sgFilter) noexcept
 
 void Tmc51xxDriverState::SetStallMinimumStepsPerSecond(unsigned int stepsPerSecond) noexcept
 {
-	//TODO use hardware facility instead
-	maxStallStepInterval = StepClockRate/max<unsigned int>(stepsPerSecond, 1u);
+	if (stepsPerSecond == 0) { stepsPerSecond = 1; }					// avoid divide-by-zero errors
+	maxStallStepInterval = StepClockRate/stepsPerSecond;
 	UpdateRegister(WriteTcoolthrs, (GetHighestTmcClockSpeed() + (128 * stepsPerSecond))/(256 * stepsPerSecond));
 }
 
