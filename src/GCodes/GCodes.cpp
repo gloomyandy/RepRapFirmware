@@ -1268,6 +1268,7 @@ bool GCodes::DoEmergencyPause() noexcept
 		{
 			PrintPausedReason reason = platform.IsPowerOk() ? PrintPausedReason::stall : PrintPausedReason::lowVoltage;
 			reprap.GetSbcInterface().SetEmergencyPauseReason(ms.GetPauseRestorePoint().filePos, reason);
+			reprap.GetSbcInterface().EventOccurred(true);
 		}
 #endif
 
@@ -5619,12 +5620,12 @@ bool GCodes::SyncWith(GCodeBuffer& thisGb, const GCodeBuffer& otherGb) noexcept
 	return synced;
 }
 
-// Synchronise the other motion system with this one. Return true if done, false if we need to wait for it to catch up.
+// Empty both motion queues and synchronise the other motion system with this one. Return true if done, false if we need to wait for it to catch up.
 bool GCodes::DoSync(GCodeBuffer& gb) noexcept
 {
 	const bool rslt = (&gb == FileGCode()) ? SyncWith(gb, *File2GCode())
 			: (&gb == File2GCode()) ? SyncWith(gb, *FileGCode())
-				: true;
+				: LockAllMovementSystemsAndWaitForStandstill(gb);			// if we're not a file input then just wait for all motion systems to stop
 	return rslt;
 }
 
