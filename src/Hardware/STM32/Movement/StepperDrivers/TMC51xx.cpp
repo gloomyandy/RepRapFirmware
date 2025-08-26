@@ -86,7 +86,7 @@ constexpr uint32_t DefaultDriversSpiClockFrequency = 2000000;		// 2MHz SPI clock
 constexpr uint32_t PhaseStepDriversSpiClockFrequency = 4000000;		// 4MHz SPI clock, this is the maximum rate the TMC5160/2160 support using the internal clock
 constexpr uint32_t DefaultSpiSleepMicroseconds = 1000;				// Sleep time used for tmcTask when not phase stepping
 constexpr uint32_t PhaseStepSpiSleepMicroseconds = 125;				// Sleep time used for tmcTask when phase stepping
-																				// there is 1 write + 1 read/write per motor current setting.
+																	// there is 1 write + 1 read/write per motor current setting.
 constexpr uint32_t DefaultSpiSleepClocks = (StepClockRate * DefaultSpiSleepMicroseconds)/1000000;
 constexpr uint32_t PhaseStepSpiSleepClocks = (StepClockRate * PhaseStepSpiSleepMicroseconds)/1000000;
 
