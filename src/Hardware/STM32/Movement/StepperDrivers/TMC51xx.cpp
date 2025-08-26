@@ -1534,6 +1534,15 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 			}
 		}
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
+// Note
+// This is almost certainly not ideal for phase stepping. We probably need to 
+// arrange to set the phase currents for each driver as close as possible in time
+// as we can. We should probably consider setting up all drivers and then cycling through
+// each PS write in turn and only then trying to issue the following "normal" read/write
+// operation. This probably also means that we should investigate further what the problem
+// is with TMC2040 drivers. We should not need to issue the extra read that we are currently
+// using. It may be that we are sending new data on the bus before the 2240 has released it.
+// Perhaps we need to introduce a short delay after disabling chip select?
 		if (usePhaseStepping)
 		{
 			// Set the motor phase currents before we write them
