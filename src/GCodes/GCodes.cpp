@@ -850,7 +850,7 @@ void GCodes::EndSimulation(GCodeBuffer *null gb) noexcept
 	// Ending a simulation, so restore the position
 	MovementState::RestoreEndpointsAfterSimulating();					// restore the endpoints
 	Move& move = reprap.GetMove();
-	move.SetMotorPositions(MovementState::allLogicalDrives, MovementState::GetLastKnownEndpoints());
+	move.SetMotorPositions(MovementState::allLogicalDrives, MovementState::GetLastKnownEndpoints(), false);
 	for (MovementState& ms : moveStates)
 	{
 		const RestorePoint& rp = ms.GetSimulationRestorePoint();
@@ -1143,7 +1143,7 @@ bool GCodes::DoAsynchronousPause(GCodeBuffer& gb, PrintPausedReason reason, GCod
 // Check if a pause is pending, action it if so
 void GCodes::CheckForDeferredPause(GCodeBuffer& gb) noexcept
 {
-	if (gb.IsFileChannel() && !gb.IsDoingFileMacro() && deferredPauseCommandPending != nullptr)
+	if (gb.IsFileChannel() && !gb.IsDoingFileMacro(true) && deferredPauseCommandPending != nullptr && !doingToolChange)
 	{
 		gb.PutAndDecode(deferredPauseCommandPending);
 		deferredPauseCommandPending = nullptr;

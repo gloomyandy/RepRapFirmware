@@ -292,7 +292,7 @@ constexpr ObjectModelTableEntry RepRap::objectModelTable[] =
 	{ "macros",					OBJECT_MODEL_FUNC_NOSELF(Platform::GetMacroDir()),						ObjectModelEntryFlags::verbose },
 	{ "menu",					OBJECT_MODEL_FUNC_NOSELF(MENU_DIR),										ObjectModelEntryFlags::verbose },
 	{ "system",					OBJECT_MODEL_FUNC_NOSELF(ExpressionValue::SpecialType::sysDir, 0),		ObjectModelEntryFlags::none },
-	{ "web",					OBJECT_MODEL_FUNC_NOSELF(Platform::GetWebDir()),						ObjectModelEntryFlags::verbose },
+	{ "web",					OBJECT_MODEL_FUNC_NOSELF(ExpressionValue::SpecialType::webDir, 0),		ObjectModelEntryFlags::none },
 #endif
 
 	// 2. limits
@@ -1126,16 +1126,12 @@ void RepRap::EmergencyStop() noexcept
 	// Do not turn off ATX power here. If the nozzles are still hot, don't risk melting any surrounding parts by turning fans off.
 	//platform->SetAtxPower(false);
 
+	move->EmergencyDisableDrivers();				// disable all local drivers - need to do this to ensure that any motor brakes are re-engaged
+
 #if SUPPORT_REMOTE_COMMANDS
-	if (CanInterface::InExpansionMode())
-	{
-		move->EmergencyDisableDrivers();			// disable all local drivers - need to do this to ensure that any motor brakes are re-engaged
-	}
-	else
+	if (!CanInterface::InExpansionMode())
 #endif
 	{
-		move->DisableAllDrivers();					// disable all local and remote drivers - need to do this to ensure that any motor brakes are re-engaged
-
 		switch (gCodes->GetMachineType())
 		{
 		case MachineType::cnc:

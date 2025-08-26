@@ -725,12 +725,12 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #endif
 
 		GCodeResult result;
-		if (gb.GetCommandFraction() > 0 && code != 36 && code != 201 && code != 260 && code != 261
+		if (   gb.GetCommandFraction() > 0
+			&& code != 36 && code != 201 && code != 260 && code != 261 && code != 505
 #if SUPPORT_SCANNING_PROBES
 			&& code != 558
 #endif
-			&& code != 569 && code != 586 &&
-			code != 587 // these are the only M-codes we implement that can have fractional parts
+			&& code != 569 && code != 586 && code != 587		// these are the only M-codes we implement that can have fractional parts
 #if SUPPORT_PHASE_STEPPING
 			&& code != 970
 #endif
@@ -1287,10 +1287,12 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					if (deferredPauseCommandPending == nullptr)		// filament change pause takes priority
 					{
 						deferredPauseCommandPending = (gb.Seen('P') && gb.GetUIValue() == 0) ? "M226 P0" : "M226";
+						gb.SetState(GCodeState::doingDeferredPause);
+						result = GCodeResult::ok;
 					}
-					if (!gb.IsFileChannel())
+					else
 					{
-						return false;								// wait for the current macro to finish
+						reply.copy("Pausing is already pending");
 					}
 				}
 				else if (!DoAsynchronousPause(gb, PrintPausedReason::user, GCodeState::pausing1))
@@ -2083,7 +2085,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							type = UsbMessage;
 							break;
 						case 2:		// UART port
-							type = DirectAuxMessage;
+							type = AuxMessage;
 							break;
 						case 3:		// HTTP
 							type = HttpMessage;
@@ -3346,8 +3348,12 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 				}
 				break;
 
-			case 505:	// set sys folder
-				if (gb.Seen('P'))
+			case 505:	// set sys folder (M505), set web folder (M505.1)
+				if (gb.GetCommandFraction() > 1)
+				{
+					result = GCodeResult::errorNotSupported;
+				}
+				else if (gb.Seen('P'))
 				{
 					// Lock movement to try to prevent other threads opening system files while we change the system path
 					if (!LockAllMovementSystemsAndWaitForStandstill(gb))
@@ -3356,13 +3362,21 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					}
 					String<MaxFilenameLength> path;
 					gb.GetQuotedString(path.GetRef());
-					result = platform.SetSysDir(path.c_str(), reply);
+					result = (gb.GetCommandFraction() == 1) ? platform.SetWebDir(path.c_str(), reply) : platform.SetSysDir(path.c_str(), reply);
 				}
 				else
 				{
 					String<MaxFilenameLength> path;
-					platform.AppendSysDir(path.GetRef());
-					reply.printf("Sys file path is %s", path.c_str());
+					if (gb.GetCommandFraction() == 1)
+					{
+						platform.AppendWebDir(path.GetRef());
+						reply.printf("HTTP file path is %s", path.c_str());
+					}
+					else
+					{
+						platform.AppendSysDir(path.GetRef());
+						reply.printf("Sys file path is %s", path.c_str());
+					}
 				}
 				break;
 #endif
@@ -3580,7 +3594,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					String<MaxFilenameLength> defaultFolder;
 					if (code == 560)
 					{
-						defaultFolder.copy(Platform::GetWebDir());
+						platform.AppendWebDir(defaultFolder.GetRef());
 					}
 					else
 					{
