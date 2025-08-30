@@ -1,3 +1,9 @@
+Version 3.6.1
+=============
+* Duet3d 3.6.1
+* Added support for Fly D8 Pro
+
+
 Version 3.6.0
 =============
 * Duet3d 3.6.0

@@ -1167,7 +1167,7 @@ void Move::ReportM569Parameters(size_t drive, const StringRef& reply) noexcept
 #if HAS_SMART_DRIVERS
 	if (drive < GetNumSmartDrivers())
 	{
-# ifdef DUET3MINI
+# if defined(DUET3MINI) || STM32
 		// The 2-driver expansion board may or may not be present
 		const StandardDriverStatus status = SmartDrivers::GetStatus(drive, false, false);
 		if (status.notPresent)

@@ -771,6 +771,7 @@ void Tmc22xxDriverState::SetStallDetectThreshold(int sgThreshold) noexcept
 
 void Tmc22xxDriverState::SetStallMinimumStepsPerSecond(unsigned int stepsPerSecond) noexcept
 {
+	if (stepsPerSecond == 0) { stepsPerSecond = 1; }					// avoid divide-by-zero errors
 	UpdateRegister(WriteTcoolthrs, (12000000 + (128 * stepsPerSecond))/(256 * stepsPerSecond));
 }
 

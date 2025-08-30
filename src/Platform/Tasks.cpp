@@ -343,7 +343,7 @@ void Tasks::Diagnostics(const StringRef& reply) noexcept
 		{
 			size_t ccmStatic, ccmUsed, ccmFree;
 			CoreCCMRAMUsage(ccmStatic, ccmUsed, ccmFree);
-			reply.lcatf("CCMRam static ram: %d dynamic ram: %d free ram %d\n", ccmStatic, ccmUsed, ccmFree);
+			reply.lcatf("CCMRam: static: %d dynamic: %d free: %d\n", ccmStatic, ccmUsed, ccmFree);
 		}
 #endif
 	}	// end memory stats scope
