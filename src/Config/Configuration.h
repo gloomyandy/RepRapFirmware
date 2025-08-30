@@ -159,7 +159,7 @@ constexpr size_t MaxStringExpressionLength = StringLength256;
 
 // Increased GCODE_LENGTH because M587 and M589 commands on the Duet WiFi can get very long and GCode meta commands can get even longer
 // Also if HAS_SBC_INTERFACE is enabled then it needs to be large enough to hold SBC commands sent in binary mode, see GCodeBuffer.h
-constexpr size_t MaxGCodeLength = 256;					// maximum number of non-comment characters in a line of GCode including the null terminator
+constexpr size_t MaxGCodeStringLength = 256;			// maximum number of non-comment characters in a line of GCode including the null terminator
 
 // Define the maximum length of a GCode that we can queue to synchronise it to a move. Long enough for M150 R255 U255 B255 P255 S255 F1 encoded in binary mode (64 bytes).
 constexpr size_t ShortGCodeLength = 64;
@@ -257,8 +257,10 @@ constexpr size_t MaxI2cOrModbusValues = 34;						// max bytes in M260 or M261 co
 // File handling
 #if defined(DUET3) || defined(DUET3MINI) || STM32
 constexpr size_t MAX_FILES = 20;						// Must be large enough to handle the max number of concurrent web requests + file being printed + macros being executed + log file
+constexpr unsigned int NumLruBuffers = 4;				// Number of disk buffers to allocate if FF_LRU is enabled in ff_confg.h
 #else
 constexpr size_t MAX_FILES = 10;						// Must be large enough to handle the max number of concurrent web requests + file being printed + macros being executed + log file
+constexpr unsigned int NumLruBuffers = 2;				// Number of disk buffers to allocate if FF_LRU is enabled in ff_confg.h
 #endif
 
 constexpr size_t MaxLiteralArrayElements = 40;			// Maximum number of array elements we are allowed in a literal array
@@ -279,7 +281,7 @@ constexpr size_t MaxThumbnails = 4;						// Maximum number of thumbnail images r
 
 // Filesystem and upload defaults
 #define FS_PREFIX				"0:"
-#define WEB_DIR					"0:/www/"				// Place to find web files on the SD card
+#define DEFAULT_WEB_DIR			"0:/www/"				// Place to find web files on the SD card
 #define GCODE_DIR				"0:/gcodes/"			// Ditto - G-Codes
 #define DEFAULT_SYS_DIR			"0:/sys/"				// Ditto - System files (can be changed using M505)
 #define MACRO_DIR				"0:/macros/"			// Ditto - Macro files
@@ -293,7 +295,7 @@ constexpr size_t MaxThumbnails = 4;						// Maximum number of thumbnail images r
 // As at 2020-05-02 the longest filename requested by DWC is "/fonts/materialdesignicons-webfont.3e2c1c79.eot" which is 48 characters long
 // It must be small enough that a filename within this length doesn't cause an overflow in MassStorage::CombineName. This is checked by the static_assert below.
 constexpr size_t MaxExpectedWebDirFilenameLength = MaxFilenameLength - 20;
-static_assert(MaxExpectedWebDirFilenameLength + strlen(WEB_DIR) + strlen(".gz") <= MaxFilenameLength);
+static_assert(MaxExpectedWebDirFilenameLength + strlen(DEFAULT_WEB_DIR) + strlen(".gz") <= MaxFilenameLength);
 
 #define UPLOAD_EXTENSION ".part"					// Extension to a filename for a file being uploaded
 

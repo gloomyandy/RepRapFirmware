@@ -27,9 +27,11 @@ constexpr size_t SbcTransferBufferSize = 8192;	// maximum length of a data trans
 
 static_assert(SbcTransferBufferSize % sizeof(uint32_t) == 0, "SbcTransferBufferSize must be a whole number of dwords");
 
-constexpr size_t MaxCodeBufferSize = 256;			// maximum length of a G/M/T-code in binary encoding
+constexpr size_t MaxGCodeBinaryLength = 384;			// maximum length of a G/M/T-code in binary encoding
+static_assert(MaxGCodeBinaryLength % sizeof(uint32_t) == 0, "MaxGCodeBinaryLength must be a whole number of dwords");
+static_assert(MaxGCodeBinaryLength >= MaxGCodeStringLength, "MaxGCodeBinaryLength must be at least as big as MAxGCodeStringLength");
 
-static_assert(MaxCodeBufferSize % sizeof(uint32_t) == 0, "MaxCodeBufferSize must be a whole number of dwords");
+constexpr size_t MaxSbcExpressionLength = 256;		// maximum length for incoming expressions
 
 constexpr uint32_t SpiTransferDelay = 25;			// default time to wait after a transfer before another one is started (in ms)
 constexpr uint32_t SpiFileOpenDelay = 5;			// same as above but when a file is open

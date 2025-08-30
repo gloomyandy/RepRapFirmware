@@ -76,7 +76,7 @@ LogicalDrivesBitmap MovementState::allLogicalDrivesOwned;					// logical drives 
 	memseti32(lastKnownEndpoints, 0, ARRAY_SIZE(lastKnownEndpoints));
 	Move& move = reprap.GetMove();
 	move.CartesianToMotorSteps(initialPosition, lastKnownEndpoints, false);
-	move.SetMotorPositions(allLogicalDrives, lastKnownEndpoints);
+	move.SetMotorPositions(allLogicalDrives, lastKnownEndpoints, true);
 }
 
 float MovementState::GetProportionDone() const noexcept
@@ -340,7 +340,7 @@ void MovementState::UpdateOwnedDriveEndpointsFromMotors() noexcept
 	Move& move = reprap.GetMove();
 	logicalDrivesOwned.Iterate([&move](unsigned int drive, unsigned int count) noexcept
 								{
-									lastKnownEndpoints[drive] = move.GetLiveMotorPosition(drive);
+									lastKnownEndpoints[drive] = move.GetLiveMotorPosition(drive) - move.GetCurrentBacklashSteps(drive);
 								}
 							  );
 	move.SetLastEndpoints(msNumber, logicalDrivesOwned, lastKnownEndpoints);
@@ -412,22 +412,21 @@ void MovementState::ReleaseAllOwnedAxesAndExtruders() noexcept
 	ReleaseAxesAndExtruders(axesAndExtrudersOwned);
 }
 
-// Release some of the axe/extruders that we own. We must also clear the cache of owned axis letters.
+// Release some of the axes/extruders that we own. We must also clear the cache of owned axis letters.
 // Called when we release a tool and when we release all axes and extruders.
 void MovementState::ReleaseAxesAndExtruders(AxesBitmap axesToRelease) noexcept
 {
+	//debugPrintf("Release axes 0x%08" PRIx32, axesToRelease.GetRaw());
 	SaveOwnDriveCoordinates();										// save the positions of the drives we own before we release them, otherwise we will get the wrong positions when we allocate them again
-	Move& move = reprap.GetMove();
-	const LogicalDrivesBitmap axesAndExtrudersToRetain = axesAndExtrudersOwned & ~axesToRelease;
-	const LogicalDrivesBitmap drivesStillOwned = move.GetKinematics().GetAllDrivesUsed(axesAndExtrudersToRetain);
-	const LogicalDrivesBitmap drivesToRelease = logicalDrivesOwned & ~drivesStillOwned;
-	logicalDrivesOwned = drivesStillOwned;
-
-	// We must not release any axes that are affected by the logical drives that we still own
-	const AxesBitmap additionalAxesOwned = move.GetKinematics().GetAffectedAxes(drivesStillOwned, reprap.GetGCodes().GetVisibleAxes());
-	axesAndExtrudersOwned = axesAndExtrudersToRetain | additionalAxesOwned;	// clear the axes/extruders we have been released
+	LogicalDrivesBitmap axesAndExtrudersToRetain = axesAndExtrudersOwned & ~axesToRelease;
+	LogicalDrivesBitmap drivesToRetain;
+	FormClosure(axesAndExtrudersToRetain, drivesToRetain);
+	const LogicalDrivesBitmap drivesToRelease = logicalDrivesOwned & ~drivesToRetain;
+	axesAndExtrudersOwned = axesAndExtrudersToRetain;
+	logicalDrivesOwned = drivesToRetain;
 	allLogicalDrivesOwned.ClearBits(drivesToRelease);
 	ownedAxisLetters.Clear();										// clear the cache of owned axis letters
+	//debugPrintf(" still own 0x%08" PRIx32 " drives 0x%08" PRIx32 "\n", axesAndExtrudersOwned.GetRaw(), logicalDrivesOwned.GetRaw());
 }
 
 // Release all axes and extruders we own except those used by our current tool
@@ -445,16 +444,20 @@ void MovementState::ReleaseNonToolAxesAndExtruders() noexcept
 LogicalDrivesBitmap MovementState::AllocateAxes(AxesBitmap axes, ParameterLettersBitmap axisLetters) noexcept
 {
 	// Sometimes we ask to allocate axes that we already own, e.g. when doing firmware retraction. Optimise this case.
-	const AxesBitmap axesNeeded = axes & ~axesAndExtrudersOwned;
+	AxesBitmap axesNeeded = axes & ~axesAndExtrudersOwned;
 	if (axesNeeded.IsEmpty())
 	{
 		ownedAxisLetters |= axisLetters;
 		return axesNeeded;											// return empty bitmap
 	}
 
-	// We don't need to check whether the axes needed are free because if any are already owned, the corresponding logical drives will be owned too
-	Move& move = reprap.GetMove();
-	const LogicalDrivesBitmap drivesNeeded = move.GetKinematics().GetAllDrivesUsed(axesNeeded) & ~logicalDrivesOwned;
+	//debugPrintf("Allocate axes 0x%08" PRIx32, axes.GetRaw());
+	// We don't need to check whether the axes needed are free because if any are already owned by the other MS, the corresponding logical drives will be owned by that MS too
+	LogicalDrivesBitmap drivesNeeded;
+	FormClosure(axesNeeded, drivesNeeded);
+	//debugPrintf(" closure (0x%08" PRIx32 ", 0x%08" PRIx32, axesNeeded.GetRaw(), drivesNeeded.GetRaw());
+	drivesNeeded &= ~logicalDrivesOwned;
+
 	const LogicalDrivesBitmap unavailableDrives = drivesNeeded & allLogicalDrivesOwned;
 	if (unavailableDrives.IsEmpty())
 	{
@@ -462,15 +465,12 @@ LogicalDrivesBitmap MovementState::AllocateAxes(AxesBitmap axes, ParameterLetter
 		ownedAxisLetters |= axisLetters;
 
 		// Update the set of logical drives that we own
+		Move& move = reprap.GetMove();
 		move.GetLastEndpoints(msNumber, logicalDrivesOwned, lastKnownEndpoints);
 		allLogicalDrivesOwned |= drivesNeeded;
 		logicalDrivesOwned |= drivesNeeded;
-
-		// Update the set of axes and extruders that we own
-		const AxesBitmap axesMask = AxesBitmap::MakeLowestNBits(MaxAxesPlusExtruders - reprap.GetGCodes().GetNumExtruders());
-		const AxesBitmap extrudersMask = ~axesMask;
-		const AxesBitmap axesAffected = move.GetKinematics().GetAffectedAxes(drivesNeeded, reprap.GetGCodes().GetVisibleAxes());
-		axesAndExtrudersOwned |= axesAffected | (axesNeeded & extrudersMask);
+		axesAndExtrudersOwned |= axesNeeded;
+		//debugPrintf(" now own 0x%08" PRIx32 " drives 0x%08" PRIx32 "\n", axesAndExtrudersOwned.GetRaw(), logicalDrivesOwned.GetRaw());
 
 		// If we allocated any logical drives, get the last endpoints for those drives and update our Cartesian coordinates
 		if (!drivesNeeded.IsEmpty())
@@ -486,24 +486,41 @@ LogicalDrivesBitmap MovementState::AllocateAxes(AxesBitmap axes, ParameterLetter
 // Try to allocate logical drives directly, returning the bitmap of any logical drives we can't allocate
 LogicalDrivesBitmap MovementState::AllocateDrives(LogicalDrivesBitmap drivesNeeded) noexcept
 {
+	AxesBitmap affectedAxes;
+	FormClosure(affectedAxes, drivesNeeded);
+
 	drivesNeeded &= ~logicalDrivesOwned;
 	const LogicalDrivesBitmap unavailableDrives = drivesNeeded & allLogicalDrivesOwned;
-	if (!drivesNeeded.IsEmpty())
+	if (!drivesNeeded.IsEmpty() && unavailableDrives.IsEmpty())
 	{
-		if (unavailableDrives.IsEmpty())
-		{
-			Move& move = reprap.GetMove();
-			move.GetLastEndpoints(msNumber, logicalDrivesOwned, lastKnownEndpoints);
-			const AxesBitmap axesAffected = move.GetKinematics().GetAffectedAxes(drivesNeeded, reprap.GetGCodes().GetVisibleAxes());
-			allLogicalDrivesOwned |= drivesNeeded;
-			logicalDrivesOwned |= drivesNeeded;
-			axesAndExtrudersOwned |= axesAffected;
-			move.SetLastEndpoints(msNumber, drivesNeeded, lastKnownEndpoints);
-			move.MotorStepsToCartesian(lastKnownEndpoints, reprap.GetGCodes().GetVisibleAxes(), reprap.GetGCodes().GetTotalAxes(), coords);
-			move.InverseAxisAndBedTransform(coords, currentTool);
-		}
+		Move& move = reprap.GetMove();
+		move.GetLastEndpoints(msNumber, logicalDrivesOwned, lastKnownEndpoints);
+		allLogicalDrivesOwned |= drivesNeeded;
+		logicalDrivesOwned |= drivesNeeded;
+		axesAndExtrudersOwned |= affectedAxes;
+		move.SetLastEndpoints(msNumber, drivesNeeded, lastKnownEndpoints);
+		move.MotorStepsToCartesian(lastKnownEndpoints, reprap.GetGCodes().GetVisibleAxes(), reprap.GetGCodes().GetTotalAxes(), coords);
+		move.InverseAxisAndBedTransform(coords, currentTool);
 	}
 	return unavailableDrives;
+}
+
+// Given some axes/extruders and/or drives that we want to allocate, expand them to the closure of all connected axes and drives
+void MovementState::FormClosure(AxesBitmap &axes, LogicalDrivesBitmap &drives) noexcept
+{
+	const GCodes& gcodes = reprap.GetGCodes();
+	const Kinematics& kin = reprap.GetMove().GetKinematics();
+	const AxesBitmap axesMask = AxesBitmap::MakeLowestNBits(MaxAxesPlusExtruders - gcodes.GetNumExtruders());
+	const size_t numVisibleAxes = gcodes.GetVisibleAxes();
+	drives |= axes & ~axesMask;										// allocate drives for the requested extruders
+	while (true)
+	{
+		const AxesBitmap oldAxes = axes;
+		const LogicalDrivesBitmap oldDrives = drives;
+		drives |= kin.GetAllDrivesUsed(axes & axesMask);			// allocate the drives that control the requested axes
+		axes |= kin.GetAffectedAxes(drives, numVisibleAxes);		// allocate the axes that are affected by the driver we now want
+		if (axes == oldAxes && drives == oldDrives) { break; }
+	}
 }
 
 void MovementState::UpdateCoordinatesFromLastKnownEndpoints() noexcept
@@ -538,7 +555,7 @@ void MovementState::AdjustMotorPositions(const float adjustment[], size_t numMot
 	}
 	const LogicalDrivesBitmap drivesToAdjust = LogicalDrivesBitmap::MakeLowestNBits(numMotors);
 	move.SetLastEndpoints(GetNumber(), drivesToAdjust, lastKnownEndpoints);
-	move.SetMotorPositions(drivesToAdjust, lastKnownEndpoints);
+	move.SetMotorPositions(drivesToAdjust, lastKnownEndpoints, false);
 }
 
 /*static*/ void MovementState::SaveEndpointsBeforeSimulating() noexcept

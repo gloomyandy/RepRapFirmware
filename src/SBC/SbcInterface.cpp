@@ -554,7 +554,7 @@ void SbcInterface::ExchangeData() noexcept
 		// Evaluate an expression
 		case SbcRequest::EvaluateExpression:
 		{
-			String<MaxGCodeLength> expression;
+			String<MaxSbcExpressionLength> expression;
 			const GCodeChannel channel = transfer.ReadEvaluateExpression(packet->length, expression.GetRef());
 			if (channel.IsValid())
 			{
@@ -563,18 +563,6 @@ void SbcInterface::ExchangeData() noexcept
 				{
 					REPORT_INTERNAL_ERROR;
 					break;
-				}
-
-				// If there is a macro file waiting, the first instruction must be conditional. Don't block any longer...
-				if (gb->IsWaitingForMacro())
-				{
-					gb->ResolveMacroRequest(false, false);
-#ifdef TRACK_FILE_CODES
-					if (gb->IsFileChannel())
-					{
-						fileMacrosRunning++;
-					}
-#endif
 				}
 
 				try
@@ -756,7 +744,7 @@ void SbcInterface::ExchangeData() noexcept
 		{
 			bool createVariable;
 			String<MaxVariableNameLength> varName;
-			String<MaxGCodeLength> expression;
+			String<MaxGCodeStringLength> expression;
 			const GCodeChannel channel = transfer.ReadSetVariable(createVariable, varName.GetRef(), expression.GetRef());
 
 			// Make sure we can access the gb safely...
@@ -1914,7 +1902,7 @@ void SbcInterface::DefragmentBufferedCodes() noexcept
 	if (rxPointer != txPointer || txEnd != 0)
 	{
 		const uint16_t bufferSpace = (txEnd == 0) ? max<uint16_t>(rxPointer, SpiCodeBufferSize - txPointer) : rxPointer - txPointer;
-		if (bufferSpace > MaxCodeBufferSize)
+		if (bufferSpace > MaxGCodeBinaryLength)
 		{
 			// There is still enough space left for at least one more code, don't worry about fragmentation yet
 			return;
@@ -1930,7 +1918,7 @@ void SbcInterface::DefragmentBufferedCodes() noexcept
 			// Ring buffer overlapped (rxPointer..txEnd, 0..txPointer)
 			if (!DefragmentCodeBlock(rxPointer, txEnd) &&
 				!DefragmentCodeBlock(0, txPointer) &&
-				SpiCodeBufferSize - (size_t)txEnd > MaxCodeBufferSize)
+				SpiCodeBufferSize - (size_t)txEnd > MaxGCodeBinaryLength)
 			{
 				size_t endBufferSize = txEnd - rxPointer;
 				memmoveu32(reinterpret_cast<uint32_t*>(codeBuffer + SpiCodeBufferSize - endBufferSize), reinterpret_cast<uint32_t*>(codeBuffer + rxPointer), endBufferSize / sizeof(uint32_t));

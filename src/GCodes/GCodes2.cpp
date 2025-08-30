@@ -115,6 +115,14 @@ bool GCodes::ActOnCode(GCodeBuffer& gb, const StringRef& reply) noexcept
 
 	try
 	{
+#if HAS_SBC_INTERFACE
+		if (gb.IsBinary() && gb.HadOverflow())
+		{
+			// Too long G-codes in SBC mode are not stored to avoid access to invalid memory regions, so there are no details available here
+			throw GCodeException("GCode command too long");
+		}
+#endif
+
 		switch (gb.GetCommandLetter())
 		{
 		case 'G':
@@ -167,7 +175,7 @@ bool GCodes::HandleGcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 	}
 
 	const int code = gb.GetCommandNumber();
-	if (code != 1 && gb.LatestMachineState().waitingForAcknowledgement)		// when doing manual probing we have to allow G1 commands
+	if (code != 1 && code != 90 && code != 91 && gb.LatestMachineState().waitingForAcknowledgement)		// when doing manual probing we have to allow G91 and G1 commands. For consistency allow G90 too.
 	{
 		HandleResult(gb, GCodeResult::waitingForAckSoIgnored, reply, nullptr);
 		return true;
@@ -615,7 +623,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 		HandleResult(gb, GCodeResult::stopped, reply, nullptr);
 		return true;
 	}
-	if (gb.LatestMachineState().waitingForAcknowledgement && !IsStatusRequestMCode(code) && code != 292)
+	if (gb.LatestMachineState().waitingForAcknowledgement && !IsStatusRequestMCode(code) && code != 120 && code != 121 && code != 292)	// DWC sends M120 G91 G1 ... M121 to jog axes
 	{
 		HandleResult(gb, GCodeResult::waitingForAckSoIgnored, reply, nullptr);
 		return true;
@@ -725,12 +733,12 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #endif
 
 		GCodeResult result;
-		if (gb.GetCommandFraction() > 0 && code != 36 && code != 201 && code != 260 && code != 261
+		if (   gb.GetCommandFraction() > 0
+			&& code != 36 && code != 201 && code != 260 && code != 261 && code != 505
 #if SUPPORT_SCANNING_PROBES
 			&& code != 558
 #endif
-			&& code != 569 && code != 586 &&
-			code != 587 // these are the only M-codes we implement that can have fractional parts
+			&& code != 569 && code != 586 && code != 587		// these are the only M-codes we implement that can have fractional parts
 #if SUPPORT_PHASE_STEPPING
 			&& code != 970
 #endif
@@ -1287,10 +1295,12 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					if (deferredPauseCommandPending == nullptr)		// filament change pause takes priority
 					{
 						deferredPauseCommandPending = (gb.Seen('P') && gb.GetUIValue() == 0) ? "M226 P0" : "M226";
+						gb.SetState(GCodeState::doingDeferredPause);
+						result = GCodeResult::ok;
 					}
-					if (!gb.IsFileChannel())
+					else
 					{
-						return false;								// wait for the current macro to finish
+						reply.copy("Pausing is already pending");
 					}
 				}
 				else if (!DoAsynchronousPause(gb, PrintPausedReason::user, GCodeState::pausing1))
@@ -1378,51 +1388,56 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE || HAS_EMBEDDED_FILES
 			case 36:	// Return file information
-				switch (gb.GetCommandFraction())
 				{
-				case -1:
-				case 0:		// get regular file information
+					const int8_t frac = gb.GetCommandFraction();
+					switch (frac)
+					{
+					case -1:
+					case 0:		// get regular file information
 # if HAS_SBC_INTERFACE
-					if (reprap.UsingSbcInterface())
-					{
-						reprap.GetFileInfoResponse(nullptr, outBuf, true);
-					}
-					else
-# endif
-					{
-# if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
-						if (!LockFileSystem(gb))									// getting file info takes several calls and isn't reentrant
+						if (reprap.UsingSbcInterface())
 						{
-							return false;
+							reprap.GetFileInfoResponse(nullptr, outBuf, true);
 						}
-
-						String<MaxFilenameLength> filename;
-						gb.GetUnprecedentedString(filename.GetRef(), true);
-						result = reprap.GetFileInfoResponse((filename.IsEmpty()) ? nullptr : filename.c_str(), outBuf, false);
+						else
 # endif
-					}
-					break;
+						{
+# if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
+							if (!LockFileSystem(gb))									// getting file info takes several calls and isn't reentrant
+							{
+								return false;
+							}
+
+							String<MaxFilenameLength> filename;
+							gb.GetUnprecedentedString(filename.GetRef(), true);
+							result = reprap.GetFileInfoResponse((filename.IsEmpty()) ? nullptr : filename.c_str(), outBuf, false);
+# endif
+						}
+						break;
 
 #if HAS_MASS_STORAGE
-				case 1:		// get thumbnail
-					{
-						String<MaxFilenameLength> filename;
-						gb.MustSee('P');
-						gb.GetQuotedString(filename.GetRef(), false);
-						gb.MustSee('S');
-						const FilePosition offset = gb.GetUIValue();
-						outBuf = reprap.GetThumbnailResponse(filename.c_str(), offset, true);
-						if (outBuf == nullptr)
+					case 1:		// get thumbnail
+					case 2:		// get height map, or another file
 						{
-							return false;											// cannot allocate an output buffer, try again later
+							String<MaxFilenameLength> filename;
+							gb.MustSee('P');
+							gb.GetQuotedString(filename.GetRef(), false);
+							gb.MustSee('S');
+							const FilePosition offset = gb.GetUIValue();
+							outBuf = reprap.GetFileFragment(filename.c_str(), offset, true, frac == 1);
+							if (outBuf == nullptr)
+							{
+								return false;											// cannot allocate an output buffer, try again later
+							}
 						}
-					}
-					break;
+						break;
 #endif
-				default:
-					result = GCodeResult::errorNotSupported;
-					break;
+					default:
+						result = GCodeResult::errorNotSupported;
+						break;
+					}
 				}
+
 				break;
 #endif
 
@@ -2056,7 +2071,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 			case 118:	// Echo message on host
 				{
 					gb.MustSee('S');
-					String<MaxGCodeLength> message;
+					String<MaxGCodeStringLength> message;
 					gb.GetQuotedString(message.GetRef());
 
 					MessageType type = GenericMessage;
@@ -2078,7 +2093,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							type = UsbMessage;
 							break;
 						case 2:		// UART port
-							type = DirectAuxMessage;
+							type = AuxMessage;
 							break;
 						case 3:		// HTTP
 							type = HttpMessage;
@@ -2134,7 +2149,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #if SUPPORT_MQTT
 					if ((type & MqttMessage) && (result != GCodeResult::error))
 					{
-						String<MaxGCodeLength> topic;
+						String<MaxGCodeStringLength> topic;
 						gb.MustSee('T');
 						gb.GetQuotedString(topic.GetRef());
 
@@ -2450,25 +2465,8 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						}
 					}
 
-#if SUPPORT_S_CURVE
-					if (frac < 1 && gb.Seen('T'))
-					{
-						if (!LockAllMovementSystemsAndWaitForStandstill(gb))
-						{
-							return false;
-						}
-						move.SetAccelerationTime(gb.GetNonNegativeFValue());
-						seen = true;
-					}
-#endif
 					if (seen)
 					{
-#if SUPPORT_S_CURVE
-						if (frac < 1)
-						{
-							move.UpdateSCurveFlagAndJerk();
-						}
-#endif
 						reprap.MoveUpdated();
 					}
 					else
@@ -2485,21 +2483,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							reply.catf("%c%.1f", sep, (double)InverseConvertAcceleration(move.Acceleration(ExtruderToLogicalDrive(extruder), frac == 1)));
 							sep = ':';
 						}
-#if SUPPORT_S_CURVE
-						if (frac < 1)
-						{
-							reply.catf(", acceleration time %.2f sec", (double)(move.AccelerationTime() * (1.0/StepClockRate)));
-						}
-#endif
 					}
-
-#if SUPPORT_S_CURVE
-					if (frac < 1 && move.AccelerationTime() != 0.0 && !move.IsUsingSCurve())
-					{
-						reply.lcat("Acceleration time (S-curve acceleration) is disabled because phase stepping is not enabled");
-						result = GCodeResult::warning;
-					}
-#endif
 				}
 				break;
 
@@ -3088,7 +3072,6 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 				}
 				break;
 
-#if SUPPORT_OBJECT_MODEL
 			case 409: // Get object model values in JSON format
 				{
 					String<StringLength100> key;
@@ -3142,7 +3125,6 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					}
 				}
 				break;
-#endif
 
 			case 425: // Backlash compensation
 				result = reprap.GetMove().ConfigureBacklashCompensation(gb, reply);
@@ -3372,8 +3354,12 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 				}
 				break;
 
-			case 505:	// set sys folder
-				if (gb.Seen('P'))
+			case 505:	// set sys folder (M505), set web folder (M505.1)
+				if (gb.GetCommandFraction() > 1)
+				{
+					result = GCodeResult::errorNotSupported;
+				}
+				else if (gb.Seen('P'))
 				{
 					// Lock movement to try to prevent other threads opening system files while we change the system path
 					if (!LockAllMovementSystemsAndWaitForStandstill(gb))
@@ -3382,13 +3368,21 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					}
 					String<MaxFilenameLength> path;
 					gb.GetQuotedString(path.GetRef());
-					result = platform.SetSysDir(path.c_str(), reply);
+					result = (gb.GetCommandFraction() == 1) ? platform.SetWebDir(path.c_str(), reply) : platform.SetSysDir(path.c_str(), reply);
 				}
 				else
 				{
 					String<MaxFilenameLength> path;
-					platform.AppendSysDir(path.GetRef());
-					reply.printf("Sys file path is %s", path.c_str());
+					if (gb.GetCommandFraction() == 1)
+					{
+						platform.AppendWebDir(path.GetRef());
+						reply.printf("HTTP file path is %s", path.c_str());
+					}
+					else
+					{
+						platform.AppendSysDir(path.GetRef());
+						reply.printf("Sys file path is %s", path.c_str());
+					}
 				}
 				break;
 #endif
@@ -3606,7 +3600,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					String<MaxFilenameLength> defaultFolder;
 					if (code == 560)
 					{
-						defaultFolder.copy(Platform::GetWebDir());
+						platform.AppendWebDir(defaultFolder.GetRef());
 					}
 					else
 					{
@@ -4016,65 +4010,38 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					Move& move = reprap.GetMove();
 
 					// Try to get the requested kinematics from the K parameter
-					int32_t kn = -1;
+					uint32_t kn = (uint32_t)-1;
 					String<StringLength50> ks;
-					const char *_ecv_array _ecv_null kp = nullptr;
 					if (gb.Seen('K'))
 					{
-						const ExpressionValue ev = gb.GetExpression();
-						switch (ev.GetType())
+						bool ok = false;
+						if (gb.GetStringOrUIValue(kn, ks.GetRef()))				// if string value found
 						{
-						case TypeCode::Int32:
-							kn = ev.iVal;
-							break;
-
-						case TypeCode::CString:
-							kp = ev.sVal;
-							break;
-
-						case TypeCode::HeapString:
-							{
-								ReadLockedPointer<const char> p = ev.shVal.Get();
-								ks.copy(p.Ptr());
-								kp = ks.c_str();
-							}
-							break;
-
-						default:
-							break;
-						}
-
-						bool ok;
-						if (kp != nullptr)
-						{
-							kinematicsChanged = !ReducedStringEquals(kp,  move.GetKinematics().GetName());
 							ok = true;
+							kinematicsChanged = !ReducedStringEquals(ks.c_str(),  move.GetKinematics().GetName());
 						}
-						else if (kn >= 0 && kn < (int32_t)KinematicsType::unknown)
+						else 													// else unsigned value found
 						{
+							ok = true;
 							kinematicsChanged = (kn != (int32_t)move.GetKinematics().GetLegacyType().ToBaseType());
-							ok = true;
-						}
-						else
-						{
-							ok = false;
 						}
 
 						if (kinematicsChanged)
 						{
-							ok = move.SetKinematics(kp, kn);
+							ok = move.SetKinematics(ks.c_str(), kn);
 						}
 
 						if (!ok)
 						{
-							reply.copy("Unknown kinematics type ");
-							ev.AppendAsString(reply);
+							reply.copy("Unknown kinematics type");
 							result = GCodeResult::error;
 							break;
 						}
 
 						seen = true;
 					}
+
+					// Now try to configure the parameters of the selected kinematics
 					bool error = false;
 					if (move.GetKinematics().Configure(code, gb, reply, error))
 					{

@@ -16,8 +16,8 @@
 #include <GCodes/GCodes.h>
 
 #if SUPPORT_CAN_EXPANSION
-struct CanMessageFilamentMonitorsStatusNew2;
-struct FilamentMonitorDataNew2;
+struct CanMessageFilamentMonitorsStatusV2;
+struct FilamentMonitorDataV2;
 #endif
 
 #if SUPPORT_REMOTE_COMMANDS
@@ -55,16 +55,14 @@ public:
 	// Send diagnostics info
 	static void AllDiagnostics(const StringRef& reply) noexcept;
 
-#if SUPPORT_OBJECT_MODEL
 	// Get the number of monitors to report in the OM
 	static size_t GetNumMonitorsToReport() noexcept;
 
 	// Get access to a filament monitor when we already have a read lock
 	static FilamentMonitor *_ecv_from _ecv_null GetMonitorAlreadyLocked(size_t extruder) noexcept { return filamentSensors[extruder]; }
-#endif
 
 #if SUPPORT_CAN_EXPANSION
-	static void UpdateRemoteFilamentStatus(CanAddress src, CanMessageFilamentMonitorsStatusNew2& msg) noexcept;
+	static void UpdateRemoteFilamentStatus(CanAddress src, CanMessageFilamentMonitorsStatusV2& msg) noexcept;
 #endif
 
 #if SUPPORT_REMOTE_COMMANDS
@@ -131,12 +129,12 @@ protected:
 	virtual GCodeResult Configure(const CanMessageGenericParser& parser, const StringRef& reply) noexcept = 0;
 
 	// Store collected data in a CAN message slot returning true if there was data worth sending
-	virtual void GetLiveData(FilamentMonitorDataNew2& data) const noexcept = 0;
+	virtual void GetLiveData(FilamentMonitorDataV2& data) const noexcept = 0;
 #endif
 
 #if SUPPORT_CAN_EXPANSION
 	// Update live filament monitor data received from a remote filament monitor
-	virtual void UpdateLiveData(const FilamentMonitorDataNew2& data) noexcept = 0;
+	virtual void UpdateLiveData(const FilamentMonitorDataV2& data) noexcept = 0;
 #endif
 
 	GCodeResult CommonConfigure(GCodeBuffer& gb, const StringRef& reply, InterruptMode interruptMode, bool& seen) THROWS(GCodeException);

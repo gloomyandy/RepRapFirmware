@@ -15,8 +15,6 @@
 # include <CanMessageFormats.h>
 #endif
 
-#if SUPPORT_OBJECT_MODEL
-
 // Object model table and functions
 // Note: if using GCC version 7.3.1 20180622 and lambda functions are used in this table, you must compile this file with option -std=gnu++17.
 // Otherwise the table will be allocated in RAM instead of flash, which wastes too much RAM.
@@ -51,8 +49,6 @@ constexpr ObjectModelTableEntry FopDt::objectModelTable[] =
 constexpr uint8_t FopDt::objectModelTableDescriptor[] = { 2, 10, 5 };
 
 DEFINE_GET_OBJECT_MODEL_TABLE(FopDt)
-
-#endif
 
 // The heater model is disabled until the user declares the heater to be a bed, chamber or tool heater
 FopDt::FopDt() noexcept
@@ -94,7 +90,7 @@ bool FopDt::SetParameters(float phr, float pbcr, float pfcr, float pcrExponent, 
 #if SUPPORT_REMOTE_COMMANDS
 
 // Check the model parameters are sensible, if they are then save them and return true. If not then write an error message to reply and return false.
-bool FopDt::SetParameters(const CanMessageHeaterModelNewNew& msg, const StringRef& reply) noexcept
+bool FopDt::SetParameters(const CanMessageHeaterModelV2& msg, const StringRef& reply) noexcept
 {
 	// DC 2017-06-20: allow S down to 0.01 for one of our OEMs (use > 0.0099 because >= 0.01 doesn't work due to rounding error)
 	const char *_ecv_array _ecv_null const err =
@@ -357,7 +353,7 @@ float FopDt::EstimateMaxTemperatureRise() const noexcept
 
 #if SUPPORT_CAN_EXPANSION
 
-void FopDt::SetupCanMessage(unsigned int heater, CanMessageHeaterModelNewNew& msg) const noexcept
+void FopDt::SetupCanMessage(unsigned int heater, CanMessageHeaterModelV2& msg) const noexcept
 {
 	msg.heater = heater;
 	msg.heatingRate = heatingRate;
