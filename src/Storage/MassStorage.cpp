@@ -60,17 +60,18 @@ alignas(4) static __nocache uint8_t sectorBuffers[NumSdCards][FF_MAX_SS];
 #  endif
 
 alignas(4) static __nocache char writeBufferStorage[NumFileWriteBuffers][FileWriteBufLen];
-<<<<<<< HEAD
 # elif STM32H7
-alignas(4) static __nocache2 uint8_t sectorBuffers[NumSdCards][512];
+#  if FF_LRU
+alignas(4) static __nocache2 uint8_t sectorBuffers[NumLruBuffers][FF_MAX_SS];
+#  else
+alignas(4) static __nocache2 uint8_t sectorBuffers[NumSdCards][FF_MAX_SS];
+#  endif
 alignas(4) static __nocache2 char writeBufferStorage[NumFileWriteBuffers][FileWriteBufLen];
-=======
 
 # elif FF_LRU
 
 alignas(4) static uint8_t sectorBuffers[NumLruBuffers][FF_MAX_SS];
 
->>>>>>> upstream/3.7-dev
 # endif
 
 enum class CardDetectState : uint8_t
@@ -104,14 +105,8 @@ protected:
 void SdCardInfo::Clear(unsigned int card) noexcept
 {
 	memset(&fileSystem, 0, sizeof(fileSystem));
-<<<<<<< HEAD
-# if SAME70 || STM32H7
-	fileSystem.win = sectorBuffers[card];
-	memset(sectorBuffers[card], 0, sizeof(sectorBuffers[card]));
-=======
-# if SAME70 && !FF_LRU
+# if (SAME70 || STM32H7) && !FF_LRU
 	ff_set_win(&fileSystem, sectorBuffers[card]);
->>>>>>> upstream/3.7-dev
 # endif
 }
 
