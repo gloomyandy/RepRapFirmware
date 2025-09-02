@@ -195,7 +195,7 @@ typedef struct {
 #endif
 } FATFS;
 
-# if SAME70 && !FF_LRU
+# if (SAME70 || STM32H7) && !FF_LRU
 static inline void ff_set_win(FATFS *fs, BYTE *buf) noexcept { fs->win_act = buf; }
 # endif
 

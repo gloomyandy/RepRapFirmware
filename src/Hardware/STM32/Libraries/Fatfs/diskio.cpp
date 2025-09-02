@@ -96,7 +96,7 @@ DRESULT disk_read (BYTE pdrv, BYTE* buff, LBA_t sector, UINT count) noexcept
         highestSdRetriesDone = retryNumber;
     }
 
-        
+    sectorsRead += count;
     return RES_OK;
 }
 
@@ -146,6 +146,7 @@ DRESULT disk_write (BYTE pdrv, const BYTE* buff, LBA_t sector, UINT count) noexc
         highestSdRetriesDone = retryNumber;
     }
     
+    sectorsWritten += count;
     return RES_OK;
 }
 #endif /* _READONLY */
