@@ -83,6 +83,13 @@ constexpr float Vfs = 325.0;										// Full scale voltage from 5160 datasheet
 // - too low and we won't detect stalls quickly enough
 #if SUPPORT_PHASE_STEPPING
 constexpr uint32_t DefaultDriversSpiClockFrequency = 2000000;		// 2MHz SPI clock, this is speed used in older version of RRF
+// Note for reasons I don't currently understand running some 5160 driver modules on some
+// boards results in invalid data being read (drivers report multiple errors). For this
+// reason the spi clock frequency actually used is curently 3.75MHz (see CoreN2G variant.cpp
+// for details). This probably needs further investigation.
+// Also note that on H7 (and probably F4) mcus the setup time for hardware spi is such that a
+// spi transaction takes longer than the minimum datalen/freq by around 7us. This also needs
+// further investigation/optimisation
 constexpr uint32_t PhaseStepDriversSpiClockFrequency = 4000000;		// 4MHz SPI clock, this is the maximum rate the TMC5160/2160 support using the internal clock
 constexpr uint32_t DefaultSpiSleepMicroseconds = 1000;				// Sleep time used for tmcTask when not phase stepping
 constexpr uint32_t PhaseStepSpiSleepMicroseconds = 125;				// Sleep time used for tmcTask when phase stepping
@@ -94,6 +101,9 @@ static uint32_t DriversDirectSleepClocks = DefaultSpiSleepClocks;	// how long th
 																	// there is 1 write + 1 read/write per motor current setting.
 #else
 constexpr uint32_t DefaultDriversSpiClockFrequency = 2000000;		// 2MHz SPI clock
+constexpr uint32_t DefaultSpiSleepMicroseconds = 1000;				// Sleep time used for tmcTask when not phase stepping
+constexpr uint32_t DefaultSpiSleepClocks = (StepClockRate * DefaultSpiSleepMicroseconds)/1000000;
+constexpr uint32_t DriversDirectSleepClocks = DefaultSpiSleepClocks;
 #endif
 constexpr uint32_t TransferTimeout = 3;						// any transfer should complete within 2 ticks @ 1ms/tick. Need to allow one more in case a tick is about to happen.
 
@@ -325,6 +335,7 @@ constexpr uint8_t REGNUM_PWM_AUTO = 0x72;
 
 // Common data
 static size_t numTmc51xxDrivers = 0;
+static size_t numDriversToPoll = 0;
 
 static constexpr uint32_t MaxValidSgLoadRegister = 1023;
 static constexpr uint32_t InvalidSgLoadRegister = 1024;
@@ -374,12 +385,11 @@ public:
 	unsigned int GetMicrostepShift() const noexcept { return microstepShiftFactor; }
 	uint16_t GetMicrostepPosition() const noexcept { return readRegisters[ReadMsCnt] & 1023; }
 	bool SetXdirect(uint32_t regVal) noexcept;
-	uint32_t GetPhaseToSet() const noexcept { return phaseToSet; }
 	float GetCurrent() const noexcept { return (float)motorCurrent; }
 #endif	
 #if SUPPORT_PHASE_STEPPING
 	bool EnablePhaseStepping(bool enable) noexcept;
-	bool IsPhaseSteppingEnabled() const noexcept { return phaseStepEnabled; }
+	bool inline IsPhaseSteppingEnabled() const noexcept { return phaseStepEnabled; }
 #endif
 	bool SetDriverMode(unsigned int mode) noexcept;
 	DriverMode GetDriverMode() const noexcept;
@@ -420,16 +430,18 @@ public:
 
 
 	bool GetSpiCommand(uint8_t *sendDataBlock, bool forceRead = false) noexcept;
-	void TransferSucceeded(const uint8_t *rcvDataBlock) noexcept;
+	void TransferSucceeded(const uint8_t *rcvDataBlock, bool checkWrite = false) noexcept;
 	void TransferFailed() noexcept;
-	DriversState SetupDriver(bool reset) noexcept;
+	bool DoIo(bool forceRead = false, bool checkWrite = false) noexcept;
+	void ResetDriver() noexcept;
+	DriversState SetupDriver() noexcept;
 	bool inline IsActive() noexcept {return state >= DriversState::initialising;}
 	bool inline IsReady() noexcept {return state == DriversState::ready;}
 	uint8_t inline GetDriverNumber() const noexcept { return driverNumber; }
-	void inline EnableChipSelect() noexcept {fastDigitalWriteLow(TMC_PINS[driverNumber]);}
-	void inline DisableChipSelect() noexcept {fastDigitalWriteHigh(TMC_PINS[driverNumber]);}
+	void inline EnableChipSelect() noexcept {fastDigitalWriteLow(TMC_PINS[driverNumber]); SYNC_GPIO();}
+	void inline DisableChipSelect() noexcept {fastDigitalWriteHigh(TMC_PINS[driverNumber]); SYNC_GPIO();}
 #if SUPPORT_PHASE_STEPPING
-	bool inline NeedCoilCurrentSet() noexcept {bool ret = needToSetCoilCurrents; needToSetCoilCurrents = false; return ret;}
+	bool inline static NeedCoilCurrentSet() noexcept {bool ret = needToSetCoilCurrents; needToSetCoilCurrents = false; return ret;}
 #endif
 private:
 	DriversState state;
@@ -444,27 +456,28 @@ private:
 	void ResetLoadRegisters() noexcept { minSgLoadRegister = InvalidSgLoadRegister; }
 
 	// Write register numbers are in priority order, most urgent first, in same order as WriteRegNumbers
-	static constexpr unsigned int WriteGConf = 0;			// microstepping
-	static constexpr unsigned int WriteIholdIrun = 1;		// current setting
-	static constexpr unsigned int WriteTpwmthrs = 2;		// upper step rate limit for stealthchop
-	static constexpr unsigned int WriteTcoolthrs = 3;		// lower velocity for coolStep and stallGuard
-	static constexpr unsigned int WriteThigh = 4;			// upper velocity for coolStep and stealthChop
-	static constexpr unsigned int WriteChopConf = 5;		// chopper control
-	static constexpr unsigned int WriteCoolConf = 6;		// coolstep control
-	static constexpr unsigned int WritePwmConf = 7;			// stealthchop and freewheel control
-	static constexpr unsigned int WriteGstat = 8;			// global status register (writing it resets status bits)
+	static constexpr unsigned int WriteXDirect = 0;			// microstepping
+	static constexpr unsigned int WriteGConf = 1;			// microstepping
+	static constexpr unsigned int WriteIholdIrun = 2;		// current setting
+	static constexpr unsigned int WriteTpwmthrs = 3;		// upper step rate limit for stealthchop
+	static constexpr unsigned int WriteTcoolthrs = 4;		// lower velocity for coolStep and stallGuard
+	static constexpr unsigned int WriteThigh = 5;			// upper velocity for coolStep and stealthChop
+	static constexpr unsigned int WriteChopConf = 6;		// chopper control
+	static constexpr unsigned int WriteCoolConf = 7;		// coolstep control
+	static constexpr unsigned int WritePwmConf = 8;			// stealthchop and freewheel control
+	static constexpr unsigned int WriteGstat = 9;			// global status register (writing it resets status bits)
 #if TMC_TYPE == 5160
-	static constexpr unsigned int Write5160ShortConf = 9;	// short circuit detection configuration
-	static constexpr unsigned int Write5160DrvConf = 10;		// driver timing
-	static constexpr unsigned int Write5160GlobalScaler = 11; // motor current scaling
+	static constexpr unsigned int Write5160ShortConf = 10;	// short circuit detection configuration
+	static constexpr unsigned int Write5160DrvConf = 11;		// driver timing
+	static constexpr unsigned int Write5160GlobalScaler = 12; // motor current scaling
 
-	static constexpr unsigned int NumWriteRegisters = 12;	// the number of registers that we write to
+	static constexpr unsigned int NumWriteRegisters = 13;	// the number of registers that we write to
 #else
-	static constexpr unsigned int NumWriteRegisters = 9;	// the number of registers that we write to
+	static constexpr unsigned int NumWriteRegisters = 10;	// the number of registers that we write to
 #endif
 	static constexpr unsigned int WriteSpecial = NumWriteRegisters;
-	static constexpr unsigned int WriteAll5160 = (1u << NumWriteRegisters) - 1;
-	static constexpr unsigned int WriteAll2240 = ((1u << NumWriteRegisters) - 1) & ~(1 << Write5160ShortConf);
+	static constexpr unsigned int WriteAll5160 = ((1u << NumWriteRegisters) - 1) & ~(1 << WriteXDirect);
+	static constexpr unsigned int WriteAll2240 = ((1u << NumWriteRegisters) - 1) & ~((1 << Write5160ShortConf) | (1 << WriteXDirect));
 
 
 	static const uint8_t WriteRegNumbers[NumWriteRegisters];	// the register numbers that we write to
@@ -498,10 +511,6 @@ private:
 	uint32_t microstepShiftFactor;							// how much we need to shift 1 left by to get the current microstepping
 	uint32_t motorCurrent;									// the configured motor current in mA
 
-#if SUPPORT_CLOSED_LOOP || SUPPORT_PHASE_STEPPING
-	uint32_t phaseToSet;									// phase value to be written to the XDIRECT register, only read/written by the TMC task
-#endif
-
 	uint16_t numReads, numWrites;							// how many successful reads and writes we had
 	uint16_t numWriteErrors;								// how many write errors do we have
 
@@ -516,7 +525,7 @@ private:
 	DriverType typ;
 
 #if SUPPORT_PHASE_STEPPING
-	bool needToSetCoilCurrents = false;
+	inline static bool needToSetCoilCurrents = false;
 	bool phaseStepEnabled = false;
 	DriverMode currentMode;									// stepper driver mode if not using phase stepping
 #endif
@@ -527,6 +536,7 @@ private:
 
 const uint8_t Tmc51xxDriverState::WriteRegNumbers[NumWriteRegisters] =
 {
+	REGNUM_5160_X_DIRECT,
 	REGNUM_GCONF,
 	REGNUM_IHOLDIRUN,
 	REGNUM_TPWMTHRS,
@@ -1218,7 +1228,7 @@ bool Tmc51xxDriverState::GetSpiCommand(uint8_t *sendDataBlock, bool forceRead) n
 	}
 }
 
-void Tmc51xxDriverState::TransferSucceeded(const uint8_t *rcvDataBlock) noexcept
+void Tmc51xxDriverState::TransferSucceeded(const uint8_t *rcvDataBlock, bool checkWrite) noexcept
 {
 	// If we wrote a register, mark it up to date
 	if (regIndexBeingUpdated < NumWriteRegisters)
@@ -1274,7 +1284,7 @@ void Tmc51xxDriverState::TransferSucceeded(const uint8_t *rcvDataBlock) noexcept
 			}
 		}
 	}
-	else if (previousRegIndexRequested != NoRegIndex)
+	else if (checkWrite && previousRegIndexRequested != NoRegIndex)
 	{
 		// we have read the result from a previous write, validate it
 		uint32_t regVal = LoadBEU32(rcvDataBlock + 1);
@@ -1333,17 +1343,23 @@ static Tmc51xxDriverState *driverStates = nullptr;
 static TASKMEM Task<TmcTaskStackWords> tmcTask;
 
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
-static uint32_t lastWakeupTime = 0;
-static StepTimer tmcTimer;
 static bool usePhaseStepping = false;
 #endif
+
+static SharedSpiClient *spiDevice;
+static StepTimer tmcTimer;
+
+// Declare the DMA buffers with the __nocache attribute. Access to these must be aligned.
+__nocache uint8_t sendData[5];
+__nocache uint8_t rcvData[5];
+
 
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
 inline bool Tmc51xxDriverState::SetXdirect(uint32_t regVal) noexcept
 {
-	if (regVal != phaseToSet)
+	if (regVal != writeRegisters[WriteXDirect])
 	{
-		phaseToSet = regVal;
+		UpdateRegister(WriteXDirect, regVal);
 		needToSetCoilCurrents = true;
 		return true;
 	}
@@ -1351,6 +1367,21 @@ inline bool Tmc51xxDriverState::SetXdirect(uint32_t regVal) noexcept
 }
 
 #endif
+
+bool Tmc51xxDriverState::DoIo(bool forceRead, bool checkWrite) noexcept
+{
+	if (IsActive())
+	{
+		EnableChipSelect();
+		bool isWrite = GetSpiCommand(sendData, forceRead);
+		spiDevice->TransceivePacket(sendData, rcvData, 5);
+		DisableChipSelect();
+		TransferSucceeded(rcvData, checkWrite);
+		return isWrite;
+	}
+	return false;
+}
+
 
 int32_t Tmc51xxDriverState::IdentifyDriver() noexcept
 {
@@ -1376,28 +1407,32 @@ void Tmc51xxDriverState::ResetReadRegisters() noexcept
 		readRegisters[i] = 0;
 }
 
-
-DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
+void Tmc51xxDriverState::ResetDriver() noexcept
 {
-	if (reset)
+	// Start the identification/setup process
+	accumulatedDriveStatus = 0;
+	if (TMC_PINS[driverNumber] == NoPin || TMC_DRIVER_TYPE[driverNumber] <= DriverType::stepdir)
 	{
-		// Strt the identification/setup process
-		accumulatedDriveStatus = 0;
-		if (TMC_PINS[driverNumber] == NoPin || TMC_DRIVER_TYPE[driverNumber] <= DriverType::stepdir)
-		{
-			state = DriversState::noDriver;
-			typ = DriverType::none;
-		}
-		else
-		{
-			numReads = numWrites = numWriteErrors = 0;
-			ResetReadRegisters();
-			newRegistersToUpdate.store(0);
-			typ = DriverType::unknown;
-			// Ask for hardware version
-			IdentifyDriver();
-			state = DriversState::initialising;
-		}
+		state = DriversState::noDriver;
+		typ = DriverType::none;
+	}
+	else
+	{
+		numReads = numWrites = numWriteErrors = 0;
+		ResetReadRegisters();
+		newRegistersToUpdate.store(0);
+		typ = DriverType::unknown;
+		// Ask for hardware version
+		IdentifyDriver();
+		state = DriversState::initialising;
+	}
+}
+
+DriversState Tmc51xxDriverState::SetupDriver() noexcept
+{
+	if (state == DriversState::notInitialised)
+	{
+		debugPrintf("SetupDriver invalid state\n");
 		return state;
 	}
 	if (state == DriversState::noDriver)
@@ -1445,9 +1480,15 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 				WriteAll();
 			}
 		}
-		return state;
 	}		
 
+	if (DoIo(false, true))
+	{
+		// For some reason on the tmc2240, the value returned on the next operation after a write
+		// is corrupted if there is any spi bus activity between the write and the following operation
+		// to allow us to verify the write, we issue a read operation immeadiately following the write.
+		DoIo(true, true);
+	}
 
 	// check for errors
 	if (numWriteErrors > NumWriteRegisters)
@@ -1465,203 +1506,100 @@ DriversState Tmc51xxDriverState::SetupDriver(bool reset) noexcept
 	return state;
 }
 
-#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
 static void TmcTimerCallback(CallbackParameter) noexcept
 {
 	tmcTask.GiveFromISR(NotifyIndices::Tmc);
 }
-#endif
-
-static SharedSpiClient *spiDevice;
-
-// Declare the DMA buffers with the __nocache attribute. Access to these must be aligned.
-__nocache uint8_t sendData[5];
-__nocache uint8_t rcvData[5];
-#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
-__nocache uint8_t altRcvData[5];
-#endif
 
 extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 {
-#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
 	tmcTimer.SetCallback(TmcTimerCallback, (CallbackParameter)0);
-#endif
+	uint32_t lastWakeupTime;
+	size_t driverToPoll = 0;
 	for (;;)
 	{
-		if (driversState <= DriversState::noDriver)
+		lastWakeupTime = StepTimer::GetTimerTicks();
+		if (driversState == DriversState::ready)
+		{
+			spiDevice->Select(100);
+#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
+			if (usePhaseStepping)
+			{
+				// Set the motor phase currents before we write them
+				GetMoveInstance().PhaseStepControlLoop();
+				// If we have any steps to make do them.
+				if (Tmc51xxDriverState::NeedCoilCurrentSet())
+				{
+					for (size_t i = 0; i < numTmc51xxDrivers; ++i)
+					{
+						Tmc51xxDriverState& drv = driverStates[i];
+						if (drv.IsPhaseSteppingEnabled())
+							drv.DoIo();
+					}
+				}
+			}
+#endif
+			// Do normal I/O operations
+			for (size_t i = 0; i < numDriversToPoll; ++i)
+			{
+				Tmc51xxDriverState& drv = driverStates[driverToPoll];
+				drv.DoIo();
+				driverToPoll = (driverToPoll + 1) % numTmc51xxDrivers;
+			}
+			spiDevice->Deselect();
+		}
+		else if (driversState <= DriversState::noDriver)
 		{
 			if (driversState != DriversState::noDriver) driversState = DriversState::powerWait;
 			TaskBase::TakeIndexed(NotifyIndices::Tmc);
-#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
 			lastWakeupTime = StepTimer::GetTimerTicks();
-#endif
+			driverToPoll = 0;
 		}
 		else if (driversState == DriversState::notInitialised)
 		{
 			for (size_t i = 0; i < numTmc51xxDrivers; ++i)
 			{
-				driverStates[i].SetupDriver(true);
+				driverStates[i].ResetDriver();
 			}
 			driversState = DriversState::initialising;
 		}
-		else
+		else if (driversState == DriversState::initialising)
 		{
-			if (driversState == DriversState::initialising)
+			// If all drivers that share the global enable have been initialised, set the global enable
+			bool allInitialised = true;
+			spiDevice->Select(100);
+			for (size_t i = 0; i < numTmc51xxDrivers; ++i)
 			{
-				// If all drivers that share the global enable have been initialised, set the global enable
-				bool allInitialised = true;
+				if (driverStates[i].SetupDriver() == DriversState::initialising)
+				{
+					allInitialised = false;
+				}
+			}
+			spiDevice->Deselect();
+			delay(1);
+			if (allInitialised)
+			{
+				size_t readyCnt = 0;
 				for (size_t i = 0; i < numTmc51xxDrivers; ++i)
 				{
-					if (driverStates[i].SetupDriver(false) == DriversState::initialising)
+					if (driverStates[i].IsReady())
 					{
-						allInitialised = false;
+						digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], false);
+						readyCnt++;
 					}
 				}
-
-				if (allInitialised)
-				{
-					size_t readyCnt = 0;
-					for (size_t i = 0; i < numTmc51xxDrivers; ++i)
-					{
-						if (driverStates[i].IsReady())
-						{
-							digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], false);
-							readyCnt++;
-						}
-					}
-					driversState = (readyCnt ? DriversState::ready : DriversState::noDriver);
-				}
+				driversState = (readyCnt ? DriversState::ready : DriversState::noDriver);
 			}
 		}
-#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
-// Note
-// This is almost certainly not ideal for phase stepping. We probably need to 
-// arrange to set the phase currents for each driver as close as possible in time
-// as we can. We should probably consider setting up all drivers and then cycling through
-// each PS write in turn and only then trying to issue the following "normal" read/write
-// operation. This probably also means that we should investigate further what the problem
-// is with TMC2040 drivers. We should not need to issue the extra read that we are currently
-// using. It may be that we are sending new data on the bus before the 2240 has released it.
-// Perhaps we need to introduce a short delay after disabling chip select?
-		if (usePhaseStepping)
+		// Give other tasks a chance to run.
+		// We run the SPI bus at high speeds so that motor currents get updated as quickly as possible.
+		// If we wake up as soon as the transfer has completed then we will use too much of the available CPU time.
+		// So schedule a wakeup call instead. Try to make the wakeup interval regular.
+		lastWakeupTime += DriversDirectSleepClocks;
+		if (!tmcTimer.ScheduleCallback(lastWakeupTime))
 		{
-			// Set the motor phase currents before we write them
-			GetMoveInstance().PhaseStepControlLoop();
-			if (!spiDevice->Select(100))
-			{
-				debugPrintf("TMC51xx: Failed to select spi device\n");
-				continue;
-			}
-			for (size_t i = 0; i < numTmc51xxDrivers; ++i)
-			{
-				Tmc51xxDriverState& drv = driverStates[i];
-				if (drv.IsActive())
-				{
-					drv.EnableChipSelect();
-					SYNC_GPIO();
-					bool isWrite;
-					if (drv.NeedCoilCurrentSet())
-					{
-						sendData[0] = REGNUM_5160_X_DIRECT | 0x80;
-						StoreBEU32(const_cast<uint8_t*>(sendData + 1), driverStates[i].GetPhaseToSet());
-						spiDevice->TransceivePacket(sendData, rcvData, 5);
-						drv.DisableChipSelect();
-						SYNC_GPIO();
-						isWrite = drv.GetSpiCommand(sendData);
-						drv.EnableChipSelect();
-						SYNC_GPIO();
-						spiDevice->TransceivePacket(sendData, altRcvData, 5);
-					}
-					else
-					{
-						isWrite = drv.GetSpiCommand(sendData);
-						spiDevice->TransceivePacket(sendData, rcvData, 5);
-					}
-					drv.DisableChipSelect();
-					SYNC_GPIO();
-					drv.TransferSucceeded(rcvData);
-					// Write commands will return a copy of the write request on the next
-					// operation. However on TMC2240 devices this only seems to be the case
-					// if there is no other bus activity between requests. So for now we force
-					// a read request after a write to allow us to check it worked.
-					if (isWrite)
-					{
-						drv.EnableChipSelect();
-						SYNC_GPIO();
-						drv.GetSpiCommand(sendData, true);
-						spiDevice->TransceivePacket(sendData, rcvData, 5);
-						drv.DisableChipSelect();
-						SYNC_GPIO();
-						drv.TransferSucceeded(rcvData);
-					}
-				}
-			}
-			spiDevice->Deselect();
-			// Give other tasks a chance to run.
-			// We run the SPI bus at high speeds so that motor currents get updated as quickly as possible.
-			// If we wake up as soon as the transfer has completed then we will use too much of the available CPU time.
-			// So schedule a wakeup call instead. Try to make the wakeup interval regular.
-			lastWakeupTime += DriversDirectSleepClocks;
-			if (!tmcTimer.ScheduleCallback(lastWakeupTime))
-			{
-				TaskBase::TakeIndexed(NotifyIndices::Tmc);
-			}
+			TaskBase::TakeIndexed(NotifyIndices::Tmc);
 		}
-		else
-#endif
-		{
-			if (!spiDevice->Select(100))
-			{
-				debugPrintf("TMC51xx: Failed to select spi device\n");
-				continue;
-			}
-			for (size_t i = 0; i < numTmc51xxDrivers; ++i)
-			{
-				Tmc51xxDriverState& drv = driverStates[i];
-				if (drv.IsActive())
-				{
-					drv.EnableChipSelect();
-					SYNC_GPIO();
-					if (SmartDriversSpiCsDelay) 
-					{
-						delay(SmartDriversSpiCsDelay);
-					}
-					bool isWrite;
-
-					{
-						isWrite = drv.GetSpiCommand(sendData);
-						spiDevice->TransceivePacket(sendData, rcvData, 5);
-					}
-					drv.DisableChipSelect();
-					SYNC_GPIO();
-					drv.TransferSucceeded(rcvData);
-					// Write commands will return a copy of the write request on the next
-					// operation. However on TMC2240 devices this only seems to be the case
-					// if there is no other bus activity between requests. So for now we force
-					// a read request after a write to allow us to check it worked.
-					if (isWrite)
-					{
-						drv.EnableChipSelect();
-						SYNC_GPIO();
-						drv.GetSpiCommand(sendData, true);
-						if (SmartDriversSpiCsDelay) 
-						{
-							delay(SmartDriversSpiCsDelay);
-						}
-						spiDevice->TransceivePacket(sendData, rcvData, 5);
-						drv.DisableChipSelect();
-						SYNC_GPIO();
-						drv.TransferSucceeded(rcvData);
-					}
-				}
-			}
-			spiDevice->Deselect();
-
-			delay(1);
-		}
-#if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
-		lastWakeupTime = StepTimer::GetTimerTicks();
-#endif
 	}
 }
 
@@ -1708,6 +1646,7 @@ bool Tmc51xxDriverState::EnablePhaseStepping(bool enable) noexcept
 
 	usePhaseStepping = anyDriversUsingPhaseStepping;
 	DriversDirectSleepClocks = anyDriversUsingPhaseStepping ? PhaseStepSpiSleepClocks : DefaultSpiSleepClocks;
+	numDriversToPoll = anyDriversUsingPhaseStepping ? 1 : numTmc51xxDrivers;
 	spiDevice->SetClockFrequency(anyDriversUsingPhaseStepping ? PhaseStepDriversSpiClockFrequency : DefaultDriversSpiClockFrequency);
 	tmcTask.SetPriority(anyDriversUsingPhaseStepping ? TaskPriority::TmcPhaseStepPriority : TaskPriority::TmcPriority);
 	return ret;
@@ -1729,6 +1668,7 @@ static void DisableAllDrivers() noexcept
 void Tmc51xxDriver::Init(size_t numDrivers) noexcept
 {
 	numTmc51xxDrivers = min<size_t>(numDrivers, MaxSmartDrivers);
+	numDriversToPoll = numTmc51xxDrivers;
 	if (driverStates != nullptr)
 	{
 		delete (uint8_t *)driverStates;
