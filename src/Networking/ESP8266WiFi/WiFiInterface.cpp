@@ -1316,6 +1316,7 @@ GCodeResult WiFiInterface::HandleWiFiCode(int mcode, GCodeBuffer &gb, const Stri
 						gb.GetIPAddress(temp);
 						config.netmask = temp.GetV4LittleEndian();
 					}
+					config.channel = (gb.Seen('C')) ? gb.GetIValue() : 0;
 
 					if (config.eap.protocol != EAPProtocol::NONE)
 					{
