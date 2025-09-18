@@ -92,7 +92,12 @@ constexpr IRQn ESP_SPI_IRQn = WiFiSpiSercomIRQn;
 # define USE_DMAC           0		// use SAM4 general DMA controller
 # define USE_DMAC_MANAGER	0		// use SAMD/SAME DMA controller via DmacManager module
 # define USE_XDMAC          0		// use SAME7 XDMA controller
-
+// On STM32 boards we usually have a plugable WiFi module and so do not know what type it is
+// so we do not use WIFI_USES_ESP32 to control the configuration. We also do not use EspEnablePin
+// it is set to NoPin and make use of EspResetPin to reset/enable both ESP8266 and ESP32 devices
+# if WIFI_USES_ESP32
+#  error "WIFI_USES_ESP32 is not normally used on STM32 devices"
+# endif
 #else
 # error Unknown board
 #endif
@@ -1027,9 +1032,9 @@ void WiFiInterface::Diagnostics(const StringRef& reply) noexcept
 
 			if (currentMode == WiFiState::connected)
 			{
-				constexpr const char *_ecv_array ConnectionModes[4] =  { "none", "802.11b", "802.11g", "802.11n" };
+				constexpr const char *_ecv_array ConnectionModes[8] =  { "none", "802.11b", "802.11g", "802.11n", "802.11a", "802.11ac", "802.11ax", "unknown" };
 				reply.lcatf("Signal strength %ddBm, channel %u, mode %s, reconnections %u",
-											(int)r.rssi, r.channel, ConnectionModes[r.phyMode], reconnectCount);
+											(int)r.rssi, r.channel == 0 ? r.channel5G : r.channel, ConnectionModes[r.phyMode], reconnectCount);
 			}
 			else if (currentMode == WiFiState::runningAsAccessPoint)
 			{
@@ -2596,6 +2601,28 @@ void WiFiInterface::ResetWiFi() noexcept
 // 0		1		0		Firmware download from UART
 // 1		1		0		Normal boot from flash memory
 // 0		0		1		SD card boot (not used in on Duet)
+// Pin assignments GPIO0: EspDataReadyPin GPIO2: Pulled high GPIO15: SamCsPin 
+// For ESP32 chips the reset logic is
+// GPIO0	GPIO2
+// 0		0				Firmware download from UART
+// 1		Any				Normal boot from flash memory
+// Pin assignments GPIO0: EspDataReadyPin GPIO2: SamCsPin
+// For ESP32C5 chips the reset logic is
+// GPIO26	GPIO27	GPIO28
+// Any		Any		1		Normal boot from flash memory
+// Any		1		0		Boot from UART/USB/SPI
+// 0		0		0		Boot from UART/SDIO
+// Pin assignments GPIO26 pulled high GPIO27: SamTfrReadyPin GPIO28: EspDataReadyPin
+// For ESP32C3 chips the reset logic is
+// GPIO2	GPIO8	GPIO9
+// 1		Any		1		Normal boot from flash memory
+// 1		1		0		Boot from UART/USB
+// Pin assignments GPIO2: pulled high GPIO8: pulled high GPIO9: EspDataReadyPin
+// For ESP32S3 chips the reset logic is
+// GPIO0	GPIO46
+// 1		Any				Normal boot from flash memory
+// 0		0				Boot from UART/USB
+// Pin assignments GPIO0: EspDataReadyPin GPIO46: pulled low
 void WiFiInterface::ResetWiFiForUpload(bool external) noexcept
 {
 	if (serialRunning)
@@ -2605,24 +2632,25 @@ void WiFiInterface::ResetWiFiForUpload(bool external) noexcept
 	}
 
 #if !WIFI_USES_ESP32
-	// Make sure the ESP8266 is in the reset state
+	// Make sure the module is in the reset state
 	SetPinMode(EspResetPin, OUTPUT_LOW);
 #endif
 
-	// Power down the ESP8266
+	// Power down the module (not used on STM32)
 	SetPinMode(EspEnablePin, OUTPUT_LOW);
 
-	// Set up our transfer request pin (GPIO4) as an output and set it low
-	SetPinMode(SamTfrReadyPin, OUTPUT_LOW);
+	// For ESP32C5 we need to set the SamTfrReadyPin high to configure the bootloader
+	SetPinMode(SamTfrReadyPin, OUTPUT_HIGH);
 
-	// Set up our data ready pin (ESP GPIO0) as an output and set it low ready to boot the ESP from UART
+	// Set up our data ready pin as an output and set it low ready to boot the ESP from UART
 	SetPinMode(EspDataReadyPin, OUTPUT_LOW);
 
 	// GPIO2 also needs to be high to boot up. It's connected to MISO on the SAM, so set the pullup resistor on that pin
+	// NOTE: I'm not sure if this is actually true anymore on any WiFi modules, but it does not do any harm
 	SetPinMode(APIN_ESP_SPI_MISO, INPUT_PULLUP);
 
 #if !WIFI_USES_ESP32
-	// Set our CS input (ESP GPIO15) low ready for booting the ESP. This also clears the transfer ready latch.
+	// Set our CS input low ready for booting the ESP. This also clears the transfer ready latch.
 	SetPinMode(SamCsPin, OUTPUT_LOW);
 #endif
 
@@ -2647,11 +2675,11 @@ void WiFiInterface::ResetWiFiForUpload(bool external) noexcept
 	}
 
 #if !WIFI_USES_ESP32
-	// Release the reset on the ESP8266
+	// Release the reset
 	digitalWrite(EspResetPin, true);
 	delayMicroseconds(150);											// ESP8266 datasheet specifies minimum 100us from releasing reset to power up
 #endif
-	// Take the ESP8266 out of power down
+	// Take the module out of power down (not used on STM32)
 	digitalWrite(EspEnablePin, true);
 }
 
