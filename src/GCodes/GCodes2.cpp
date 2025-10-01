@@ -2702,7 +2702,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							}
 							else
 							{
-								differences[axis] = constrain<float>(fval, -1.0, 1.0);
+								differences[axis] = constrain<float>(fval, -MaxRelativeBabystepping, MaxRelativeBabystepping);
 							}
 						}
 						else

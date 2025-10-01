@@ -309,7 +309,7 @@ GCodeResult GCodes::SimulateFile(GCodeBuffer& gb, const StringRef &reply, const 
 			}
 
 			// Now that lastKnownEndpoints is up to date, save it
-			MovementState::RestoreEndpointsAfterSimulating();
+			MovementState::SaveEndpointsBeforeSimulating();
 
 			// Pretend that all axes have been homed
 			axesVirtuallyHomed = AxesBitmap::MakeLowestNBits(numVisibleAxes);
@@ -850,6 +850,11 @@ GCodeResult GCodes::ConfigureStepMode(GCodeBuffer& gb, const StringRef& reply) T
 	{
 		if (gb.Seen(axisLetters[axis]))
 		{
+			if (!seen && !LockAllMovementSystemsAndWaitForStandstill(gb))
+			{
+				return GCodeResult::notFinished;
+			}
+
 			seen = true;
 			switch (commandFraction)
 			{
@@ -877,6 +882,11 @@ GCodeResult GCodes::ConfigureStepMode(GCodeBuffer& gb, const StringRef& reply) T
 
 	if (gb.Seen(extrudeLetter))
 	{
+		if (!seen && !LockAllMovementSystemsAndWaitForStandstill(gb))
+		{
+			return GCodeResult::notFinished;
+		}
+
 		seen = true;
 		switch (commandFraction)
 		{
