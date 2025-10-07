@@ -67,7 +67,7 @@ Pin SPIPins[NumSPIDevices][NumSPIPins];                 //GPIO pins for hardware
 
 #if HAS_WIFI_NETWORKING
     NetworkModuleType NetworkModule;
-    const char* ModuleFiles[] = {"", "", "WiFiModule_esp8266.bin", "WiFiModule_esp32.bin", "WiFiModule_esp32eth.bin"};
+    const char* ModuleFiles[] = {"", "", "WiFiModule_esp8266.bin", "WiFiModule_esp32.bin", "WiFiModule_esp32eth.bin", "", "", "WiFiModule_esp32c5.bin"};
     Pin EspDataReadyPin;
     Pin SamTfrReadyPin;
     Pin EspResetPin;
