@@ -735,8 +735,11 @@ void WiFiInterface::Spin() noexcept
 						// Set the module type based on the status response
 						if (NetworkModule == NetworkModuleType::espauto)
 						{
-							// esp32 modules do not supply the voltage
-							NetworkModule = (status.Value().vcc == 0 ? NetworkModuleType::esp32 : NetworkModuleType::esp8266);
+							if (status.Value().moduleType != 0 && ((NetworkModuleType)(status.Value().moduleType + 1)).IsValid())
+								NetworkModule = (NetworkModuleType)(status.Value().moduleType + 1);
+							else
+								// esp32 modules do not supply the voltage
+								NetworkModule = (status.Value().vcc == 0 ? NetworkModuleType::esp32 : NetworkModuleType::esp8266);
 						}
 						// Set clock speed based on board.txt setting
 						if (WiFiClockReg != 0)
@@ -1020,6 +1023,9 @@ void WiFiInterface::Diagnostics(const StringRef& reply) noexcept
 			NetworkStatusResponse& r = status.Value();
 			r.versionText[ARRAY_UPB(r.versionText)] = 0;
 			reply.lcatf("Firmware version %s", r.versionText);
+#if STM32
+			reply.catf(" (%s)", NetworkModule.ToString());
+#endif
 			reply.lcatf("Module reset reason: %s, Vcc %.2f, flash size %" PRIu32 ", free heap %" PRIu32,
 								TranslateEspResetReason(r.resetReason), (double)((float)r.vcc/1024), r.flashSize, r.freeHeap);
 			reply.lcatf("MAC address %02x:%02x:%02x:%02x:%02x:%02x",
@@ -1032,7 +1038,8 @@ void WiFiInterface::Diagnostics(const StringRef& reply) noexcept
 
 			if (currentMode == WiFiState::connected)
 			{
-				constexpr const char *_ecv_array ConnectionModes[8] =  { "none", "802.11b", "802.11g", "802.11n", "802.11a", "802.11ac", "802.11ax", "unknown" };
+				constexpr const char *_ecv_array ConnectionModes[16] =  { "none", "802.11b", "802.11g", "802.11n", "802.11a", "802.11ac", "802.11ax", "",
+																			"", "eth10f", "eth10h", "eth100f", "eth100h", "", "", "" };
 				reply.lcatf("Signal strength %ddBm, channel %u, mode %s, reconnections %u",
 											(int)r.rssi, r.channel == 0 ? r.channel5G : r.channel, ConnectionModes[r.phyMode], reconnectCount);
 			}

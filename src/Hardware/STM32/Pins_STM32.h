@@ -343,12 +343,16 @@ extern Pin AuxSerialRxTxPins[NumberSerialPins];
 constexpr Pin UsbVBusPin = NoPin;
 
 #if HAS_WIFI_NETWORKING
+    // Note the order of these must match that used in MessageFormats.h for easy conversion
     NamedEnum(NetworkModuleType, uint8_t,
         espauto,
         none,
         esp8266,
         esp32,
-        esp32eth
+        esp32eth,
+        esp32s3,
+        esp32c3,
+        esp32c5
     );
     extern NetworkModuleType NetworkModule;
     extern const char* ModuleFiles[];
