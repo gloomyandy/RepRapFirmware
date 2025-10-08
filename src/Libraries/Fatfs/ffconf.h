@@ -230,7 +230,7 @@
 /  Instead of private sector buffer eliminated from the file object, common sector
 /  buffer in the filesystem object (FATFS) is used for the file data transfer. */
 
-#if 1		// DC
+#if !defined(FF_LRU)		// DC & GA
 // This option will use LRU buffers instead of a single buffer per volume. FF_FS_TINY must be set to 1 also.
 // If FF_LRU is set then then the client must initialise the buffers by allocating one or more instances
 // of DiskBuffer and the associated memory, and call ff_add_buffer_to_freelist for each of them.
