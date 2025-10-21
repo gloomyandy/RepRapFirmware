@@ -26,6 +26,7 @@
 #include "Movement/StepTimer.h"
 #include "Cache.h"
 #include "AppNotifyIndices.h"
+#include "DMA.h"
 
 #define SU_OVERSAMPLE 4
 
@@ -222,8 +223,7 @@ static void DmaInterrupt(DMA_HandleTypeDef *_hdma)
         // we get called at the end of writing
         SUTimer.pause();
         SetPinMode(SUPin, INPUT_PULLUP, false);
-        SUDma.Init.Direction = DMA_PERIPH_TO_MEMORY;
-        HAL_DMA_Start_IT(&SUDma, (uint32_t)SUPinReadPtr, (uint32_t)SUDmaBits, sizeof(SUDmaBits)/sizeof(uint32_t));
+        DMA_Start_IT(&SUDma, (uint32_t)SUPinReadPtr, (uint32_t)SUDmaBits, sizeof(SUDmaBits)/sizeof(uint32_t), DMA_NORMAL, DMA_PERIPH_TO_MEMORY, DMA_MINC_ENABLE);
     	SUTimer.setOverflow(SUPeriod, TICK_FORMAT);
         SUTimer.setCount(0, TICK_FORMAT);
         SUState = SUStates::reading;
@@ -271,10 +271,8 @@ static void DmaStart()
     for(uint32_t i = 0; i < SU_GAP_BITS; i++)
         SUDmaBits[SUBitCnt++] = SUSetBit;
     SetPinMode(SUPin, OUTPUT_HIGH, false);
-    SUDma.Init.Direction = DMA_MEMORY_TO_PERIPH;
-    SUDma.Init.Mode = DMA_NORMAL;
     HAL_DMA_RegisterCallback(&SUDma, HAL_DMA_XFER_HALFCPLT_CB_ID, nullptr);
-    HAL_DMA_Start_IT(&SUDma, (uint32_t)SUDmaBits, (uint32_t)SUPinSetClrPtr, SUBitCnt);
+    DMA_Start_IT(&SUDma, (uint32_t)SUDmaBits, (uint32_t)SUPinSetClrPtr, SUBitCnt, DMA_NORMAL, DMA_MEMORY_TO_PERIPH, DMA_MINC_ENABLE);
     SUTimer.setOverflow(SUPeriod*SU_OVERSAMPLE, TICK_FORMAT);
     SUTimer.setCount(0, TICK_FORMAT);
     SUState = SUStates::writing;
@@ -409,11 +407,9 @@ bool NeopixelDMAWrite(Pin pin, uint32_t freq, uint8_t *bits, uint32_t cnt, uint3
     //debugPrintf("SUBitCnt %d\n", SUBitCnt);
     if (NeoAddToBuffer(NEO_BYTES_PER_BUFF)) SUState = (SUStates)((int)SUState+1);    
     //debugPrintf("SUBitCnt %d total buffer size (words) %d state %d\n", SUBitCnt, NEO_BYTES_PER_BUFF*NEO_WORDS_PER_BYTE*2, SUState);
-    SUDma.Init.Direction = DMA_MEMORY_TO_PERIPH;
-    SUDma.Init.Mode = DMA_CIRCULAR;
     HAL_DMA_RegisterCallback(&SUDma, HAL_DMA_XFER_HALFCPLT_CB_ID, DmaInterrupt);
     SUWaitingTask = TaskBase::GetCallerTaskHandle();
-    HAL_DMA_Start_IT(&SUDma, (uint32_t)SUDmaBits, (uint32_t)SUPinSetClrPtr, NEO_BYTES_PER_BUFF*NEO_WORDS_PER_BYTE*2);
+    DMA_Start_IT(&SUDma, (uint32_t)SUDmaBits, (uint32_t)SUPinSetClrPtr, NEO_BYTES_PER_BUFF*NEO_WORDS_PER_BYTE*2, DMA_CIRCULAR, DMA_MEMORY_TO_PERIPH, DMA_MINC_ENABLE);
     SUTimer.setOverflow(period, TICK_FORMAT);
     SUTimer.setCount(0, TICK_FORMAT);
     SUTimer.resume();
