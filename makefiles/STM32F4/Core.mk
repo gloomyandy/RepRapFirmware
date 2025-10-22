@@ -6,7 +6,7 @@ CORE_SRC_DIRS  = src src/STM32 src/STM32/usb2 src/STM32/MCP2517FD src/STM32/DMA
 CORE_SRC_DIRS += src/STM32/system src/STM32/system/STM32F4xx
 CORE_SRC_DIRS += src/STM32/system/Drivers/CMSIS/Device/ST/STM32F4xx/Include src/STM32/system/Drivers/CMSIS/Device/ST/STM32F4xx/Source
 CORE_SRC_DIRS += src/STM32/system/Drivers/STM32F4xx_HAL_Driver/Inc src/STM32/system/Drivers/STM32F4xx_HAL_Driver/Src
-CORE_SRC_DIRS += src/STM32/system/CMSIS/CMSIS/Core/Include src/STM32/system/Drivers/CMSIS/Device/ST/STM32F4xx/Source/Templates/gcc
+CORE_SRC_DIRS += src/STM32/system/CMSIS/CMSIS/Core/Include
 CORE_SRC_DIRS += src/STM32/variants/STM32F407 src/STM32/ConfigurableUART src/STM32/SharedSPI src/STM32/PWM src/STM32/SDIO src/STM32/CRC32
 
 CORE_SRC = $(CORE_DIR) $(addprefix $(CORE_DIR)/, $(CORE_SRC_DIRS))
