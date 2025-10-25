@@ -3,7 +3,7 @@ CORE_DIR = $(CORESTM_DIR)
 
 #Core
 CORE_SRC_DIRS  = src src/STM32 src/STM32/DMA
-CORE_SRC_DIRS += src/STM32/system src/STM32/system/STM32H7xx 
+CORE_SRC_DIRS += src/STM32/system
 CORE_SRC_DIRS += src/STM32/system/Drivers/CMSIS/Device/ST/STM32H7xx/Include src/STM32/system/Drivers/CMSIS/Device/ST/STM32H7xx/Source
 CORE_SRC_DIRS += src/STM32/system/Drivers/STM32H7xx_HAL_Driver/Inc src/STM32/system/Drivers/STM32H7xx_HAL_Driver/Src
 CORE_SRC_DIRS += src/STM32/system/CMSIS/CMSIS/Core/Include
