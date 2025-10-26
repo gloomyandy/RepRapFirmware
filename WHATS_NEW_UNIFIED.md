@@ -1,3 +1,8 @@
+Version 3.6.1+2
+===============
+* Duet3d 3.6.1+2
+* Fixed sense resistor on PITB and StrideMax expansion boards
+
 Version 3.6.1
 =============
 * Duet3d 3.6.1
