@@ -529,7 +529,7 @@ static void MessageF(MessageType mtype, const char* fmt, ...) noexcept
 {
     va_list vargs;
     va_start(vargs, fmt);
-    reprap.GetPlatform().MessageV(mtype, fmt, vargs);
+    reprap.GetPlatform().MessageV(nullptr, mtype, fmt, vargs);
     va_end(vargs);
 }
 

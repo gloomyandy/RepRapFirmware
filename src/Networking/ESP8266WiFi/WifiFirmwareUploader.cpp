@@ -101,7 +101,7 @@ void WifiFirmwareUploader::MessageF(const char *_ecv_array fmt, ...) noexcept
 {
 	va_list vargs;
 	va_start(vargs, fmt);
-	reprap.GetPlatform().MessageV(FirmwareUpdateMessage, fmt, vargs);
+	reprap.GetPlatform().MessageV(nullptr, FirmwareUpdateMessage, fmt, vargs);
 	va_end(vargs);
 }
 

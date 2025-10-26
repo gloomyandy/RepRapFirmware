@@ -1345,7 +1345,7 @@ decrease(strlen(idString))	// recursion variant
 				{
 					return ExpressionValue(false);
 				}
-				throw context.ConstructParseException("array index out of bounds");
+				throw context.ConstructParseException(ArrayIndexOutOfRangeText);
 			}
 
 			const ExpressionValue arrayElement = entry->GetElement(this, context);
@@ -1378,7 +1378,7 @@ decrease(strlen(idString))	// recursion variant
 				{
 					return ExpressionValue(false);
 				}
-				throw context.ConstructParseException("array index out of bounds");
+				throw context.ConstructParseException(ArrayIndexOutOfRangeText);
 			}
 
 			ExpressionValue arrayElement;
@@ -1442,7 +1442,7 @@ decrease(strlen(idString))	// recursion variant
 
 				if (!inBounds)
 				{
-					throw context.ConstructParseException("array index out of bounds");
+					throw context.ConstructParseException(ArrayIndexOutOfRangeText);
 				}
 
 				return ExpressionValue((int32_t)(Bitmap<uint32_t>::MakeFromRaw(val.uVal).GetSetBitNumber(context.GetLastIndex())));
@@ -1488,7 +1488,7 @@ decrease(strlen(idString))	// recursion variant
 
 				if (!inBounds)
 				{
-					throw context.ConstructParseException("array index out of bounds");
+					throw context.ConstructParseException(ArrayIndexOutOfRangeText);
 				}
 
 				return ExpressionValue((int32_t)(Bitmap<uint64_t>::MakeFromRaw(val.Get56BitValue()).GetSetBitNumber(context.GetLastIndex())));
@@ -1544,7 +1544,7 @@ decrease(strlen(idString))	// recursion variant
 
 			if (!inBounds)
 			{
-				throw context.ConstructParseException("array index out of bounds");
+				throw context.ConstructParseException(ArrayIndexOutOfRangeText);
 			}
 
 			return ExpressionValue(p.Ptr()[context.GetLastIndex()]);
@@ -1572,7 +1572,7 @@ decrease(strlen(idString))	// recursion variant
 
 			if (!inBounds)
 			{
-				throw context.ConstructParseException("array index out of bounds");
+				throw context.ConstructParseException(ArrayIndexOutOfRangeText);
 			}
 
 			return ExpressionValue(val.sVal[context.GetLastIndex()]);
