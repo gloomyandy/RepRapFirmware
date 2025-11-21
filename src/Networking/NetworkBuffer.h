@@ -74,8 +74,12 @@ public:
 
 	// Count how many buffers there are in a chain
 	static unsigned int Count(NetworkBuffer *_ecv_null & ptr) noexcept;
-
+#if STM32F4
+	// Save some memory on the F4
+	static const size_t bufferSize = 1024;
+#else
 	static const size_t bufferSize = 2 * 1024;
+#endif
 
 private:
 	explicit NetworkBuffer(NetworkBuffer *_ecv_null n) noexcept;
