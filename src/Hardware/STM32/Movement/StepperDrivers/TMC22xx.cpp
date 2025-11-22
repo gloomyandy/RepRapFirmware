@@ -1482,7 +1482,7 @@ extern "C" [[noreturn]] void Tmc22Loop(void *) noexcept
 						{
 							if (driverStates[i].IsReady())
 							{
-								digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], false);
+								digitalWrite(DriverEnablePins[driverStates[i].GetDriverNumber()], false);
 								readyCnt++;
 							}
 						}
@@ -1512,7 +1512,7 @@ static void DisableAllDrivers()
 {
 	for (size_t i = 0; i < numTmc22xxDrivers; ++i)
 	{
-		digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], true);
+		digitalWrite(DriverEnablePins[driverStates[i].GetDriverNumber()], true);
 	}
 }
 
@@ -1598,7 +1598,7 @@ TmcDriverState* Tmc22xxDriver::InitDrive(size_t slot, size_t driveNo) noexcept
 	new(&driverStates[slot]) Tmc22xxDriverState();
 	driverStates[slot].Init(driveNo
 #if TMC22xx_HAS_ENABLE_PINS
-							, ENABLE_PINS[driveNo]
+							, DriverEnablePins[driveNo]
 #endif
 #if HAS_STALL_DETECT
 							, DriverDiagPins[driveNo]

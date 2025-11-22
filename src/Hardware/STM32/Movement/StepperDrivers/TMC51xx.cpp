@@ -1525,7 +1525,7 @@ extern "C" [[noreturn]] void TmcLoop(void *) noexcept
 					{
 						if (driverStates[i].IsReady())
 						{
-							digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], false);
+							digitalWrite(DriverEnablePins[driverStates[i].GetDriverNumber()], false);
 							readyCnt++;
 						}
 					}
@@ -1718,7 +1718,7 @@ static void DisableAllDrivers() noexcept
 {
 	for (size_t i = 0; i < numTmc51xxDrivers; ++i)
 	{
-		digitalWrite(ENABLE_PINS[driverStates[i].GetDriverNumber()], true);
+		digitalWrite(DriverEnablePins[driverStates[i].GetDriverNumber()], true);
 	}
 }
 
