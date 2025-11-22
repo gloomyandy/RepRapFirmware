@@ -2305,7 +2305,7 @@ void SmartDrivers::Init() noexcept
 #endif
 		driverStates[drive].Init(drive
 #if TMC22xx_HAS_ENABLE_PINS
-								, ENABLE_PINS[drive]
+								, DriverEnablePins[drive]
 #endif
 #if HAS_STALL_DETECT
 								, DriverDiagPins[drive]

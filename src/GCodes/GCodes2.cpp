@@ -82,7 +82,7 @@ bool GCodes::ActOnCode(GCodeBuffer& gb, const StringRef& reply) noexcept
 		if (&gb == FileGCode() && gb.ExecutingAll())
 		{
 			const FilePosition offsetToSkipTo = GetMovementState(gb).fileOffsetToSkipTo;
-			if (offsetToSkipTo != 0)
+			if (offsetToSkipTo != 0 && offsetToSkipTo != noFilePosition)
 			{
 				const FilePosition jobFilePos = gb.GetJobFilePosition();
 				if (jobFilePos < offsetToSkipTo)
@@ -90,6 +90,7 @@ bool GCodes::ActOnCode(GCodeBuffer& gb, const StringRef& reply) noexcept
 					// Skip any command except M596
 					if (!(gb.GetCommandLetter() == 'M' && gb.HasCommandNumber() && gb.GetCommandNumber() == 596))
 					{
+						HandleReply(gb, GCodeResult::ok, "");
 						return true;
 					}
 				}
@@ -101,6 +102,7 @@ bool GCodes::ActOnCode(GCodeBuffer& gb, const StringRef& reply) noexcept
 						&& ((commandNumber = gb.GetCommandNumber()) == 226 || commandNumber == 600 || commandNumber == 601 || commandNumber == 25)
 					   )
 					{
+						HandleReply(gb, GCodeResult::ok, "");
 						return true;
 					}
 				}
@@ -1417,7 +1419,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							gb.GetQuotedString(filename.GetRef(), false);
 							gb.MustSee('S');
 							const FilePosition offset = gb.GetUIValue();
-							outBuf = reprap.GetFileFragment(filename.c_str(), offset, true, frac == 1);
+							outBuf = reprap.GetFileFragment(&gb, filename.c_str(), offset, true, frac == 1);
 							if (outBuf == nullptr)
 							{
 								return false;											// cannot allocate an output buffer, try again later
@@ -2726,9 +2728,18 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							break;
 						}
 
+						MovementState& ms = GetMovementState(gb);
+#if SUPPORT_ASYNC_MOVES
+						// Allocate the axes that were mentioned
+						if (!ms.AllocateAxes(axesMentioned, gb.AllParameters() & allAxisLetters).IsEmpty())
+						{
+							reply.copy("cannot allocate axes to babystep");
+							result = GCodeResult::error;
+							break;
+						}
+#endif
 						// Perform babystepping synchronously with moves. Only move axes that have been flagged as homed.
 						bool haveResidual = false;
-						MovementState& ms = GetMovementState(gb);
 						for (size_t axis = 0; axis < numVisibleAxes; ++axis)
 						{
 							currentBabyStepOffsets[axis] += differences[axis];
@@ -4066,7 +4077,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 			case 673: // Align plane on rotary axis
 				if (numTotalAxes <= U_AXIS)
 				{
-					reply.copy("Insufficient axes configured");
+					reply.copy("insufficient axes configured");
 					result = GCodeResult::error;
 				}
 				else if (!LockAllMovementSystemsAndWaitForStandstill(gb))
@@ -4075,7 +4086,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 				}
 				else if (!AllAxesAreHomed())
 				{
-					reply.copy("Home the axes first");
+					reply.copy("home the axes first");
 					result = GCodeResult::error;
 				}
 				else
@@ -4083,7 +4094,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					Move& move = reprap.GetMove();
 					if (move.GetNumProbedProbePoints() < 2)
 					{
-						reply.copy("Insufficient probe points");
+						reply.copy("insufficient probe points");
 						result = GCodeResult::error;
 					}
 					else
@@ -4149,7 +4160,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						}
 						else
 						{
-							reply.copy("No rotary axis letter and/or not enough probe points for rotary axis alignment");
+							reply.copy("no rotary axis letter and/or not enough probe points for rotary axis alignment");
 							result = GCodeResult::error;
 							break;
 						}
@@ -4157,9 +4168,9 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						// Get the feedrate (if any) and kick off a new move
 						if (gb.Seen(feedrateLetter))
 						{
-							gb.LatestMachineState().feedRate = gb.GetSpeed();		// don't apply the speed factor
+							gb.LatestMachineState().feedRate = gb.GetFValue();
 						}
-						ms.feedRate = gb.LatestMachineState().feedRate;
+						ms.feedRate = gb.ConvertSpeed(gb.LatestMachineState().feedRate, ms.linearAxesMentioned);		// don't apply the speed factor
 						ms.usingStandardFeedrate = true;
 						NewSingleSegmentMoveAvailable(ms);
 

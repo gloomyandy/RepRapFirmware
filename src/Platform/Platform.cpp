@@ -2203,7 +2203,7 @@ bool Platform::WritePlatformParameters(FileStore *f, bool includingG31) const no
 
 // USB port functions
 
-void Platform::AppendUsbReply(OutputBuffer *buffer, bool rawMessage) noexcept
+void Platform::AppendUsbReply(const GCodeBuffer *_ecv_null gb, OutputBuffer *buffer, bool rawMessage) noexcept
 {
 	if (!SERIAL_MAIN_DEVICE.IsConnected())
 	{
@@ -2225,7 +2225,8 @@ void Platform::AppendUsbReply(OutputBuffer *buffer, bool rawMessage) noexcept
 			if (OutputBuffer::Allocate(buf))
 			{
 				usbMessageSeq++;
-				buf->printf("{\"seq\":%" PRIu32 ",\"resp\":", usbMessageSeq);
+				RepRap::StartJsonResponse(gb, buf);
+				buf->catf("\"seq\":%" PRIu32 ",\"resp\":", usbMessageSeq);
 				buf->EncodeReply(buffer);
 				buf->cat("}\n");
 				usbOutput.Push(buf);
@@ -2321,9 +2322,8 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 			gbp->Disable();				// disable I/O for this serial channel
 		}
 
-		commsParams[chan] = val;		// we limited the value of 'chan' when we fetched it, so no need for a range-check here
-
 #if HAS_AUX_DEVICES
+		commsParams[chan] = val;		// we limited the value of 'chan' when we fetched it, so no need for a range-check here
 		if (chan != 0)
 		{
 			AuxDevice& dev = auxDevices[chan - FirstAuxChannel];
@@ -2333,6 +2333,8 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 			}
 			dev.SetMode(newMode);
 		}
+#else
+		commsParams[0] = val;			// gcc thinks chan is 1 here so use 0 explicitly
 #endif
 
 		if (   gbp != nullptr
@@ -3163,6 +3165,7 @@ void Platform::RawMessage(const GCodeBuffer *_ecv_null gb, MessageType type, con
 		}
 		else
 		{
+			// We need to wrap the message in JSON before sending it to USB
 			OutputBuffer *buf;
 			if (OutputBuffer::Allocate(buf))
 			{
@@ -3176,10 +3179,15 @@ void Platform::RawMessage(const GCodeBuffer *_ecv_null gb, MessageType type, con
 	}
 }
 
+void Platform::Message(MessageType type, OutputBuffer *buffer) noexcept
+{
+	Message(nullptr, type, buffer);
+}
+
 // Note: this overload of Platform::Message does not process the special action flags in the MessageType.
 // Also it treats calls to send a blocking USB message the same as ordinary USB messages,
 // and calls to send an immediate LCD message the same as ordinary LCD messages
-void Platform::Message(MessageType type, OutputBuffer *buffer) noexcept
+void Platform::Message(const GCodeBuffer *_ecv_null gb, MessageType type, OutputBuffer *buffer) noexcept
 {
 #if HAS_MASS_STORAGE
 	// First deal with logging because it doesn't hang on to the buffer
@@ -3212,13 +3220,13 @@ void Platform::Message(MessageType type, OutputBuffer *buffer) noexcept
 
 		if ((type & (AuxMessage | ImmediateAuxMessage)) != 0)
 		{
-			AppendAuxReply(0, nullptr, buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
+			AppendAuxReply(0, gb, buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
 		}
 
 #ifdef SERIAL_AUX2_DEVICE
 		if ((type & Aux2Message) != 0)
 		{
-			AppendAuxReply(1, nullptr, buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
+			AppendAuxReply(1, gb, buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
 		}
 #endif
 
@@ -3234,7 +3242,7 @@ void Platform::Message(MessageType type, OutputBuffer *buffer) noexcept
 
 		if ((type & (UsbMessage | BlockingUsbMessage)) != 0)
 		{
-			AppendUsbReply(buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
+			AppendUsbReply(gb, buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
 		}
 
 #if HAS_SBC_INTERFACE
@@ -4181,16 +4189,20 @@ GCodeResult Platform::GetSetAncillaryPwm(GCodeBuffer& gb, const StringRef& reply
 	bool seen = gb.TryGetLimitedIValue('P', tempPort, seen, -1, MaxGpOutPorts - 1);
 	if (seen)
 	{
-		if (   tempPort >= 0
-			&& (   GetGpOutPort(tempPort).IsUnused()
-#if SUPPORT_CAN_EXPANSION
-				|| !GetGpOutPort(tempPort).IsLocal()
-#endif
-			   )
-		   )
+		if (tempPort >= 0)
 		{
-			reply.printf("GpOut port %" PRIu32 " is not valid", tempPort);
-			return GCodeResult::error;
+			if (GetGpOutPort(tempPort).IsUnused())
+			{
+				reply.printf("GpOut port %" PRIu32 " has not been created", tempPort);
+				return GCodeResult::error;
+			}
+#if SUPPORT_CAN_EXPANSION
+			if (!GetGpOutPort(tempPort).IsLocal())
+			{
+				reply.printf("Remote GpOut port %" PRIu32 " not allowed here", tempPort);
+				return GCodeResult::error;
+			}
+#endif
 		}
 
 		extrusionAncilliaryPwmGpOutNumber = tempPort;
