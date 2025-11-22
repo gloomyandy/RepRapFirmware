@@ -38,6 +38,7 @@
 
 #endif
 
+#if SUPPORT_OBJECT_MODEL
 // Object model table and functions
 // Note: if using GCC version 7.3.1 20180622 and lambda functions are used in this table, you must compile this file with option -std=gnu++17.
 // Otherwise the table will be allocate in RAM instead of flash, which wastes too much RAM.
@@ -59,7 +60,7 @@ constexpr ObjectModelTableEntry GCodeBuffer::objectModelTable[] =
 	{ "compatibility",		OBJECT_MODEL_FUNC(self->machineState->compatibility.ToString()),					ObjectModelEntryFlags::none },
 	{ "distanceUnit",		OBJECT_MODEL_FUNC(self->GetDistanceUnits()),										ObjectModelEntryFlags::none },
 	{ "drivesRelative",		OBJECT_MODEL_FUNC((bool)self->machineState->drivesRelative),						ObjectModelEntryFlags::none },
-	{ "feedRate",			OBJECT_MODEL_FUNC(InverseConvertSpeedToMmPerSec(self->machineState->feedRate), 1),	ObjectModelEntryFlags::liveNotPanelDue },
+	{ "feedRate",			OBJECT_MODEL_FUNC(self->machineState->feedRate, 1),									ObjectModelEntryFlags::liveNotPanelDue },
 	{ "inMacro",			OBJECT_MODEL_FUNC((bool)self->machineState->doingFileMacro),						ObjectModelEntryFlags::liveNotPanelDue },
 	{ "inverseTimeMode",	OBJECT_MODEL_FUNC((bool)self->machineState->inverseTimeMode),						ObjectModelEntryFlags::none },
 	{ "lineNumber",			OBJECT_MODEL_FUNC((int32_t)self->GetLineNumber()),									ObjectModelEntryFlags::liveNotPanelDue },
@@ -97,6 +98,8 @@ const char *_ecv_array GCodeBuffer::GetStateText() const noexcept
 	}
 }
 
+#endif
+
 // Create a default GCodeBuffer
 GCodeBuffer::GCodeBuffer(GCodeChannel::RawType channel, GCodeInput *_ecv_from normalIn, FileGCodeInput *_ecv_null fileIn, MessageType mt, Compatibility::RawType c) noexcept
 	:
@@ -112,7 +115,7 @@ GCodeBuffer::GCodeBuffer(GCodeChannel::RawType channel, GCodeInput *_ecv_from no
 	  stringParser(*this),
 	  machineState(new GCodeMachineState()), whenReportDueTimerStarted(millis()), lastStatusReportType(StatusReportType::none),
 	  codeChannel(channel), lastResult(GCodeResult::ok),
-	  disabled(false), timerRunning(false), motionCommanded(false), buffer(nullptr), bufferLength(0)
+	  disabled(false), timerRunning(false), motionCommanded(false), hadExplicitLineNumber(false), buffer(nullptr), bufferLength(0)
 
 #if HAS_SBC_INTERFACE
 	  , isWaitingForMacro(false), isBinaryBuffer(false), invalidated(false)
@@ -201,21 +204,6 @@ bool GCodeBuffer::IsReportDue() noexcept
 	return false;
 }
 
-// Return true if this GCode command had an explicit line number
-bool GCodeBuffer::HadExplicitLineNumber() const noexcept
-{
-	return NOT_BINARY_AND(stringParser.HadExplicitLineNumber());
-}
-
-// Get the explicit line number
-uint32_t GCodeBuffer::GetExplicitLineNumber() const noexcept
-{
-	IF_NOT_BINARY(return stringParser.GetExplicitLineNumber());
-#if HAS_SBC_INTERFACE
-	return 0;
-#endif
-}
-
 // Check if this GB is waiting for temperatures to be reached
 bool GCodeBuffer::IsWaitingForTemperatures() const noexcept
 {
@@ -239,7 +227,7 @@ void GCodeBuffer::Diagnostics(const StringRef& reply) noexcept
 	switch (bufferState)
 	{
 	case GCodeBufferState::parseNotStarted:
-		reply.cat((buffer != nullptr) ? "is idle" : "is unused");
+		reply.cat("is idle");
 		break;
 
 	case GCodeBufferState::ready:
@@ -539,12 +527,6 @@ float GCodeBuffer::GetDistance() THROWS(GCodeException)
 	return ConvertDistance(GetFValue());
 }
 
-// Get a speed in mm/min or inches/min and convert it to mm/step_clock
-float GCodeBuffer::GetSpeed() THROWS(GCodeException)
-{
-	return ConvertSpeed(GetFValue());
-}
-
 // Get a speed in mm/min mm/sec and convert it to mm/step_clock
 float GCodeBuffer::GetSpeedFromMm(bool useSeconds) THROWS(GCodeException)
 {
@@ -699,7 +681,7 @@ ExpressionValue GCodeBuffer::GetExpression() THROWS(GCodeException)
 	return PARSER_OPERATION(GetExpression());
 }
 
-// Get an unsigned integer or a string after a key letter
+// Get an unsigned integer or a string after a key letter returning true if a string was found, false if an unsigned integer was found
 bool GCodeBuffer::GetStringOrUIValue(uint32_t& ival, const StringRef& str) THROWS(GCodeException)
 {
 	return PARSER_OPERATION(GetStringOrUIValue(ival, str));
@@ -989,15 +971,9 @@ float GCodeBuffer::InverseConvertDistance(float distance) const noexcept
 }
 
 // Convert speed from mm/min or inches/min to mm per step clock
-float GCodeBuffer::ConvertSpeed(float speed) const noexcept
+float GCodeBuffer::ConvertSpeed(float speed, bool convertInches) const noexcept
 {
-	return speed * ((UsingInches()) ? InchToMm/(StepClockRate * iMinutesToSeconds) : 1.0/(StepClockRate * iMinutesToSeconds));
-}
-
-// Convert speed to mm/min or inches/min
-float GCodeBuffer::InverseConvertSpeed(float speed) const noexcept
-{
-	return speed * ((UsingInches()) ? (StepClockRate * iMinutesToSeconds)/InchToMm : (float)(StepClockRate * iMinutesToSeconds));
+	return speed * ((convertInches && UsingInches()) ? InchToMm/(StepClockRate * iMinutesToSeconds) : 1.0/(StepClockRate * iMinutesToSeconds));
 }
 
 const char *_ecv_array GCodeBuffer::GetDistanceUnits() const noexcept

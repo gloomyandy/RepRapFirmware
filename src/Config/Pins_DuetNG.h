@@ -64,6 +64,7 @@ constexpr uint32_t IAP_IMAGE_START = 0x20018000;	// IAP is loaded into the last 
 #define SUPPORT_DHT_SENSOR		1					// set nonzero to support DHT temperature/humidity sensors
 #define SUPPORT_12864_LCD		1					// set nonzero to support 12864 LCD and rotary encoder
 #define SUPPORT_ACCELEROMETERS	1
+#define SUPPORT_OBJECT_MODEL	1
 #define SUPPORT_LED_STRIPS		1
 
 #define VARIABLE_NUM_DRIVERS	SUPPORT_12864_LCD	// nonzero means that some pins may only support drivers if not used for other purposes e.g. LCD
@@ -144,7 +145,7 @@ constexpr Pin AdditionalIoExpansionStart = DueXnExpansionStart+16;		// Pin numbe
 
 // Drives
 constexpr Pin GlobalTmc2660EnablePin = PortCPin(6);	// The pin that drives ENN of all TMC2660 drivers on production boards (on pre-production boards they are grounded)
-constexpr Pin ENABLE_PINS[NumDirectDrivers] =
+constexpr Pin DriverEnablePins[NumDirectDrivers] =
 {
 	PortDPin(14), PortCPin(9), PortCPin(10), PortCPin(17), PortCPin(25),	// Duet
 	PortDPin(23), PortDPin(24), PortDPin(25), PortDPin(26), PortBPin(14),	// DueX5

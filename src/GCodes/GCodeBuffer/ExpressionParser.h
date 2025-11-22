@@ -46,6 +46,7 @@ class ExpressionParser
 {
 public:
 	ExpressionParser(const GCodeBuffer *_ecv_null p_gb, const char *_ecv_array text, const char *_ecv_array textLimit, int p_column = -1) noexcept;
+	ExpressionParser(const GCodeBuffer *_ecv_null p_gb, const char *_ecv_array text) noexcept;
 
 	ExpressionValue Parse(bool evaluate = true) THROWS(GCodeException);
 	bool ParseBoolean() THROWS(GCodeException);
@@ -82,7 +83,7 @@ private:
 
 	time_t __attribute__((noinline)) ParseDateTime(const char *_ecv_array s) const THROWS(GCodeException);
 
-	void __attribute__((noinline)) GetVariableValue(ExpressionValue& rslt, const VariableSet *vars, const char *_ecv_array name, ObjectExplorationContext& context, bool isParameter, bool applyLengthOperator, bool wantExists) THROWS(GCodeException);
+	void __attribute__((noinline)) GetVariableValue(ExpressionValue& rslt, const VariableSet *vars, const char *_ecv_array name, ObjectExplorationContext& context, bool isParameter) THROWS(GCodeException);
 
 	void ConvertToFloat(ExpressionValue& val, bool evaluate) const THROWS(GCodeException);
 	void ConvertToInteger(ExpressionValue& val, bool evaluate) const THROWS(GCodeException);

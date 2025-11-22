@@ -1254,7 +1254,7 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, const Expressio
 	switch (value.GetType())
 	{
 	case TypeCode::None:
-	case TypeCode::Bool:
+	case TypeCode::Bool_tc:
 	case TypeCode::DriverId_tc:
 	case TypeCode::Uint32:
 	case TypeCode::Float:
@@ -1271,7 +1271,7 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, const Expressio
 	case TypeCode::IPAddress_tc:
 	case TypeCode::MacAddress_tc:
 	case TypeCode::DateTime_tc:
-	case TypeCode::Port:
+	case TypeCode::Port_tc:
 	case TypeCode::UniqueId_tc:
 #if SUPPORT_CAN_EXPANSION
 	case TypeCode::CanExpansionBoardDetails:
@@ -1312,8 +1312,8 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, const Expressio
 		header->dataType = DataType::Null;
 		header->intValue = 0;
 		break;
-	case TypeCode::Bool:
-		header->dataType = DataType::Bool;
+	case TypeCode::Bool_tc:
+		header->dataType = DataType::Boolean;
 		header->intValue = value.bVal ? 1 : 0;
 		break;
 	case TypeCode::Char:
@@ -1358,7 +1358,7 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, const Expressio
 	case TypeCode::DateTime_tc:
 	case TypeCode::MacAddress_tc:
 	case TypeCode::IPAddress_tc:
-	case TypeCode::Port:
+	case TypeCode::Port_tc:
 	case TypeCode::UniqueId_tc:
 	default:
 		// We have already converted the value to a string in 'rslt'
@@ -1489,7 +1489,7 @@ bool DataTransfer::WriteSetVariableResult(const char *varName, const ExpressionV
 	String<StringLength50> rslt;
 	switch (value.GetType())
 	{
-	case TypeCode::Bool:
+	case TypeCode::Bool_tc:
 	case TypeCode::DriverId_tc:
 	case TypeCode::Uint32:
 	case TypeCode::Float:
@@ -1536,8 +1536,8 @@ bool DataTransfer::WriteSetVariableResult(const char *varName, const ExpressionV
 	// Write data type and expression value
 	switch (value.GetType())
 	{
-	case TypeCode::Bool:
-		header->dataType = DataType::Bool;
+	case TypeCode::Bool_tc:
+		header->dataType = DataType::Boolean;
 		header->intValue = value.bVal ? 1 : 0;
 		break;
 	case TypeCode::Char:

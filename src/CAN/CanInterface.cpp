@@ -1160,7 +1160,7 @@ pre(driver.IsRemote())
 	case 3:			// read driver encoder via secondary CAN
 		{
 			Kinematics& kin = reprap.GetMove().GetKinematics();
-			if (kin.GetLegacyType() == KinematicsType::hangprinter)
+			if (kin.GetKinematicsType() == KinematicsType::hangprinter)
 			{
 				return ((HangprinterKinematics&)kin).ReadODrive3Encoder(driver, gb, reply);
 			}
@@ -1184,7 +1184,7 @@ pre(driver.IsRemote())
 #if DUAL_CAN
 		{
 			Kinematics& kin = reprap.GetMove().GetKinematics();
-			if (kin.GetLegacyType() == KinematicsType::hangprinter)
+			if (kin.GetKinematicsType() == KinematicsType::hangprinter)
 			{
 				gb.MustSee('T');
 				const float torque = gb.GetFValue();
@@ -1245,7 +1245,7 @@ pre(driver.IsRemote())
 	case 8:			// read axis force via secondary CAN
 		{
 			Kinematics& kin = reprap.GetMove().GetKinematics();
-			if (kin.GetLegacyType() == KinematicsType::hangprinter)
+			if (kin.GetKinematicsType() == KinematicsType::hangprinter)
 			{
 				return ((HangprinterKinematics&)kin).ReadODrive3AxisForce(driver, reply);
 			}
@@ -1589,9 +1589,9 @@ GCodeResult CanInterface::ReadRemoteHandles(CanAddress boardAddress, RemoteInput
 	msg->mask = mask;
 	msg->pattern = pattern;
 	const GCodeResult rslt = SendRequestAndGetCustomReply(buf, rid, reply, nullptr, CanMessageType::readInputsReplyV0,
-															[callback, param](const CanMessageBuffer *buf)
+															[callback, param](const CanMessageBuffer *bufp)
 																{
-																	auto response = buf->msg.readInputsReplyV0;
+																	auto response = bufp->msg.readInputsReplyV0;
 																	for (unsigned int i = 0; i < response.numReported; ++i)
 																	{
 																		callback(param, response.results[i].handle, LoadLEU32(&response.results[i].reading));

@@ -81,6 +81,9 @@ public:
 
 	bool HasError() const noexcept { return state != DMState::idle && state < DMState::firstMotionState; }
 
+	static void DiagnosticHeader(const StringRef& reply) noexcept;
+	void Diagnostics(const StringRef& reply) noexcept;
+
 	static int32_t GetAndClearMaxStepsLate() noexcept;
 	static int32_t GetAndClearMinStepInterval() noexcept;
 
@@ -92,11 +95,16 @@ private:
 	MoveSegment *_ecv_null NewSegment(uint32_t now) noexcept SPEED_CRITICAL;
 	bool ScheduleFirstSegment() noexcept;
 
-	void ReleaseSegments() noexcept;					// release the list of segments and set it to nullptr
+	void RetireSegment(MoveSegment *oldSegment) noexcept;							// retire the current segment but keep it available temporarily for debugging
 	bool LogStepError(uint8_t type, float info, const MoveSegment *seg) noexcept;	// record a step error
 
 #if SUPPORT_PHASE_STEPPING
 	motioncalc_t GetPhaseStepsTakenThisSegment() const noexcept;
+#endif
+#if SUPPORT_S_CURVE
+	void UpdateSpeedAndAccelerationChange(motioncalc_t newSpeed, motioncalc_t speedChange, motioncalc_t newAcc, motioncalc_t accChange) noexcept;
+	void MovementStopped() noexcept;
+	void PrintRetiredSegment() const noexcept;
 #endif
 
 #if CHECK_SEGMENTS
@@ -108,8 +116,9 @@ private:
 
 	// Parameters common to Cartesian, delta and extruder moves
 
-	DriveMovement *_ecv_null nextDM ;					// link to next DM that needs a step
-	MoveSegment *volatile _ecv_null segments;			// pointer to the segment list for this driver
+	DriveMovement *_ecv_null nextDM ;							// link to next DM that needs a step
+	MoveSegment *volatile _ecv_null segments = nullptr;			// pointer to the segment list for this driver
+	MoveSegment *volatile _ecv_null retiredSegment = nullptr;	// the most recent segment we retired
 
 	ExtruderShaper extruderShaper;						// pressure advance control
 
@@ -127,7 +136,7 @@ private:
 	int32_t reverseStartStep;							// the step number for which we need to reverse direction due to pressure advance or delta movement
 	motioncalc_t q, t0, p;								// the movement parameters of the current segment. Only set when not phase stepping
 #if SUPPORT_PHASE_STEPPING
-	motioncalc_t u;										// the initial speed of this segment. Only set when in phase stepping
+	motioncalc_t u;										// the initial speed of the current segment. Only set when phase stepping, or when 3rd order motion is supported.
 	motioncalc_t phaseStepsTakenSinceMoveStart;			// how many steps we took in previous segments of the current isolated move
 #endif
 	MovementFlags segmentFlags;							// whether this segment checks endstops etc.
@@ -151,6 +160,11 @@ private:
 
 	std::atomic<int32_t> movementAccumulator;			// the accumulated movement in microsteps since GetAccumulatedMovement was last called. Only used for extruders.
 	uint32_t extruderPrintingSince;						// the millis ticks when this extruder started doing printing moves
+
+#if SUPPORT_S_CURVE
+	motioncalc_t finalSpeed, finalAcc;					// the final speed and acceleration of the current segment
+	motioncalc_t peakDeltaV, peakDeltaA;				// For debugging: the maximum instantaneous speed change and acceleration change recorded
+#endif
 
 	bool extruderPrinting;								// true if this is an extruder and the most recent segment started was a printing move
 
@@ -194,7 +208,7 @@ inline int32_t DriveMovement::GetNetStepsTakenThisSegment() const noexcept
 #if SUPPORT_PHASE_STEPPING
 	if (phaseStepControl.IsEnabled())
 	{
-		return lrintf(GetPhaseStepsTakenThisSegment());
+		return std::lrint(GetPhaseStepsTakenThisSegment());
 	}
 #endif
 	return currentMotorPosition - positionAtSegmentStart;
@@ -288,7 +302,7 @@ inline bool DriveMovement::GetCurrentMotion(uint32_t when, float multiplier, Mot
 					if (seg->GetNext() == nullptr && !seg->GetFlags().isExtruder)
 					{
 						// This is an axis and there are no further segments, so we may need to round the current position to the nearest microstep
-						if (fabsm(provisionalDistanceCarriedForwards) < 0.05)
+						if (std::fabs(provisionalDistanceCarriedForwards) < (motioncalc_t)0.05)
 						{
 							provisionalDistanceCarriedForwards = (motioncalc_t)0.0;						// just remove the rounding error
 						}
@@ -307,7 +321,7 @@ inline bool DriveMovement::GetCurrentMotion(uint32_t when, float multiplier, Mot
 
 					MoveSegment *oldSeg = seg;
 					segments = oldSeg->GetNext();
-					MoveSegment::Release(oldSeg);
+					RetireSegment(oldSeg);
 					seg = NewSegment(when);
 					hasMotion = true;
 					continue;
@@ -315,11 +329,22 @@ inline bool DriveMovement::GetCurrentMotion(uint32_t when, float multiplier, Mot
 				timeSinceStart = seg->GetDuration();
 			}
 
-			const float rawPosition = (float)((u + seg->GetA() * timeSinceStart * 0.5) * timeSinceStart + (motioncalc_t)positionAtSegmentStart + distanceCarriedForwards);
+#if SUPPORT_S_CURVE
+			const float rawPosition = (float)((u + ((motioncalc_t)0.5 * seg->GetA() + OneSixth * seg->GetJ() * timeSinceStart) * timeSinceStart) * timeSinceStart
+										+ (motioncalc_t)positionAtSegmentStart + distanceCarriedForwards);
+#else
+			const float rawPosition = (float)((u + (motioncalc_t)0.5 * seg->GetA() * timeSinceStart) * timeSinceStart
+										+ (motioncalc_t)positionAtSegmentStart + distanceCarriedForwards);
+#endif
 			currentMotorPosition = (int32_t)rawPosition;												// store the approximate position for OM updates
 			mParams.position = rawPosition * multiplier;
+#if SUPPORT_S_CURVE
+			mParams.speed = (float)(u + (seg->GetA() + (motioncalc_t)0.5 * seg->GetJ() * timeSinceStart) * timeSinceStart) * multiplier;
+			mParams.acceleration = (float)(seg->GetA() + seg->GetJ() * timeSinceStart) * multiplier;
+#else
 			mParams.speed = (float)(u + seg->GetA() * timeSinceStart) * multiplier;
 			mParams.acceleration = (float)seg->GetA() * multiplier;
+#endif
 			return true;
 		}
 	}

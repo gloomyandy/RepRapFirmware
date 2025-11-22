@@ -82,7 +82,7 @@ bool GCodes::ActOnCode(GCodeBuffer& gb, const StringRef& reply) noexcept
 		if (&gb == FileGCode() && gb.ExecutingAll())
 		{
 			const FilePosition offsetToSkipTo = GetMovementState(gb).fileOffsetToSkipTo;
-			if (offsetToSkipTo != 0)
+			if (offsetToSkipTo != 0 && offsetToSkipTo != noFilePosition)
 			{
 				const FilePosition jobFilePos = gb.GetJobFilePosition();
 				if (jobFilePos < offsetToSkipTo)
@@ -90,6 +90,7 @@ bool GCodes::ActOnCode(GCodeBuffer& gb, const StringRef& reply) noexcept
 					// Skip any command except M596
 					if (!(gb.GetCommandLetter() == 'M' && gb.HasCommandNumber() && gb.GetCommandNumber() == 596))
 					{
+						HandleReply(gb, GCodeResult::ok, "");
 						return true;
 					}
 				}
@@ -101,6 +102,7 @@ bool GCodes::ActOnCode(GCodeBuffer& gb, const StringRef& reply) noexcept
 						&& ((commandNumber = gb.GetCommandNumber()) == 226 || commandNumber == 600 || commandNumber == 601 || commandNumber == 25)
 					   )
 					{
+						HandleReply(gb, GCodeResult::ok, "");
 						return true;
 					}
 				}
@@ -122,7 +124,6 @@ bool GCodes::ActOnCode(GCodeBuffer& gb, const StringRef& reply) noexcept
 			throw GCodeException("GCode command too long");
 		}
 #endif
-
 		switch (gb.GetCommandLetter())
 		{
 		case 'G':
@@ -739,7 +740,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #if SUPPORT_SCANNING_PROBES
 			&& code != 558
 #endif
-			&& code != 569 && code != 586 && code != 587		// these are the only M-codes we implement that can have fractional parts
+			&& code != 569 && code != 581 && code != 586 && code != 587		// these are the only M-codes we implement that can have fractional parts
 #if SUPPORT_PHASE_STEPPING
 			&& code != 970
 #endif
@@ -1425,7 +1426,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							gb.GetQuotedString(filename.GetRef(), false);
 							gb.MustSee('S');
 							const FilePosition offset = gb.GetUIValue();
-							outBuf = reprap.GetFileFragment(filename.c_str(), offset, true, frac == 1);
+							outBuf = reprap.GetFileFragment(&gb, filename.c_str(), offset, true, frac == 1);
 							if (outBuf == nullptr)
 							{
 								return false;											// cannot allocate an output buffer, try again later
@@ -1830,8 +1831,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						UnlockMovement(gb);							// allow babystepping and pausing while heating
 					}
 				}
-
-				// no break
+				[[fallthrough]];
 			case 104:
 				// New behaviour from 1.20beta12:
 				// M109 Snnn
@@ -2471,8 +2471,25 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						}
 					}
 
+#if SUPPORT_S_CURVE
+					if (frac < 1 && gb.Seen('T'))
+					{
+						if (!LockAllMovementSystemsAndWaitForStandstill(gb))
+						{
+							return false;
+						}
+						move.SetAccelerationTime(gb.GetNonNegativeFValue());
+						seen = true;
+					}
+#endif
 					if (seen)
 					{
+#if SUPPORT_S_CURVE
+						if (frac < 1)
+						{
+							move.UpdateSCurveFlagAndJerk();
+						}
+#endif
 						reprap.MoveUpdated();
 					}
 					else
@@ -2489,7 +2506,21 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							reply.catf("%c%.1f", sep, (double)InverseConvertAcceleration(move.Acceleration(ExtruderToLogicalDrive(extruder), frac == 1)));
 							sep = ':';
 						}
+#if SUPPORT_S_CURVE
+						if (frac < 1)
+						{
+							reply.catf(", acceleration time %.2f sec", (double)(move.AccelerationTime() * (1.0/StepClockRate)));
+						}
+#endif
 					}
+
+#if SUPPORT_S_CURVE
+					if (frac < 1 && move.AccelerationTime() != 0.0 && !move.IsUsingSCurve())
+					{
+						reply.lcat("Acceleration time (S-curve acceleration) is disabled because phase stepping is not enabled");
+						result = GCodeResult::warning;
+					}
+#endif
 				}
 				break;
 
@@ -2734,9 +2765,18 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							break;
 						}
 
+						MovementState& ms = GetMovementState(gb);
+#if SUPPORT_ASYNC_MOVES
+						// Allocate the axes that were mentioned
+						if (!ms.AllocateAxes(axesMentioned, gb.AllParameters() & allAxisLetters).IsEmpty())
+						{
+							reply.copy("cannot allocate axes to babystep");
+							result = GCodeResult::error;
+							break;
+						}
+#endif
 						// Perform babystepping synchronously with moves. Only move axes that have been flagged as homed.
 						bool haveResidual = false;
-						MovementState& ms = GetMovementState(gb);
 						for (size_t axis = 0; axis < numVisibleAxes; ++axis)
 						{
 							currentBabyStepOffsets[axis] += differences[axis];
@@ -3037,13 +3077,12 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 				break;
 
 			case 404: // Filament width. See also M200.
-				// TODO support per-extruder values
 				if (gb.Seen('N'))
 				{
 					platform.SetFilamentWidth(gb.GetPositiveFValue());
 					break;
 				}
-				// no break
+				[[fallthrough]];
 			case 407:
 				reply.printf("Filament width %.2fmm", (double)platform.GetFilamentWidth());
 				break;
@@ -3078,6 +3117,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 				}
 				break;
 
+#if SUPPORT_OBJECT_MODEL
 			case 409: // Get object model values in JSON format
 				{
 					String<StringLength100> key;
@@ -3131,6 +3171,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					}
 				}
 				break;
+#endif
 
 			case 425: // Backlash compensation
 				result = reprap.GetMove().ConfigureBacklashCompensation(gb, reply);
@@ -3962,11 +4003,11 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					Move& move = reprap.GetMove();
 
 					bool changedMode = false;
-					if ((gb.Seen('L') || gb.Seen('D')) && move.GetKinematics().GetLegacyType() != KinematicsType::linearDelta)
+					if ((gb.Seen('L') || gb.Seen('D')) && move.GetKinematics().GetKinematicsType() != KinematicsType::linearDelta)
 					{
 						// Not in delta mode, so switch to it
 						changedMode = true;
-						move.SetKinematics(nullptr, (int)KinematicsType::linearDelta);
+						move.SetKinematics(KinematicsType::linearDelta);
 					}
 					bool error = false;
 					const bool changed = move.GetKinematics().Configure(code, gb, reply, error);
@@ -4011,43 +4052,21 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					return false;
 				}
 				{
-					bool seen = false;
-					bool kinematicsChanged = false;
 					Move& move = reprap.GetMove();
+					const KinematicsType oldK = move.GetKinematics().GetKinematicsType();		// get the current kinematics type so we can tell whether it changed
 
-					// Try to get the requested kinematics from the K parameter
-					uint32_t kn = (uint32_t)-1;
-					String<StringLength50> ks;
+					bool seen = false;
 					if (gb.Seen('K'))
 					{
-						bool ok = false;
-						if (gb.GetStringOrUIValue(kn, ks.GetRef()))				// if string value found
+						const unsigned int nk = gb.GetUIValue();
+						if (nk >= (unsigned int)KinematicsType::unknown || !move.SetKinematics(static_cast<KinematicsType>(nk)))
 						{
-							ok = true;
-							kinematicsChanged = !ReducedStringEquals(ks.c_str(),  move.GetKinematics().GetName());
-						}
-						else 													// else unsigned value found
-						{
-							ok = true;
-							kinematicsChanged = (kn != (int32_t)move.GetKinematics().GetLegacyType().ToBaseType());
-						}
-
-						if (kinematicsChanged)
-						{
-							ok = move.SetKinematics(ks.c_str(), kn);
-						}
-
-						if (!ok)
-						{
-							reply.copy("Unknown kinematics type");
+							reply.printf("Unknown kinematics type %d", nk);
 							result = GCodeResult::error;
 							break;
 						}
-
 						seen = true;
 					}
-
-					// Now try to configure the parameters of the selected kinematics
 					bool error = false;
 					if (move.GetKinematics().Configure(code, gb, reply, error))
 					{
@@ -4059,7 +4078,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					{
 						// We changed something significant, so reset the positions and set all axes not homed
 						SetAllAxesNotHomed();
-						if (kinematicsChanged)
+						if (move.GetKinematics().GetKinematicsType() != oldK)
 						{
 							SetInitialAxisAndDrivePositions();
 						}
@@ -4094,7 +4113,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 			case 673: // Align plane on rotary axis
 				if (numTotalAxes <= U_AXIS)
 				{
-					reply.copy("Insufficient axes configured");
+					reply.copy("insufficient axes configured");
 					result = GCodeResult::error;
 				}
 				else if (!LockAllMovementSystemsAndWaitForStandstill(gb))
@@ -4103,7 +4122,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 				}
 				else if (!AllAxesAreHomed())
 				{
-					reply.copy("Home the axes first");
+					reply.copy("home the axes first");
 					result = GCodeResult::error;
 				}
 				else
@@ -4111,7 +4130,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					Move& move = reprap.GetMove();
 					if (move.GetNumProbedProbePoints() < 2)
 					{
-						reply.copy("Insufficient probe points");
+						reply.copy("insufficient probe points");
 						result = GCodeResult::error;
 					}
 					else
@@ -4177,7 +4196,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						}
 						else
 						{
-							reply.copy("No rotary axis letter and/or not enough probe points for rotary axis alignment");
+							reply.copy("no rotary axis letter and/or not enough probe points for rotary axis alignment");
 							result = GCodeResult::error;
 							break;
 						}
@@ -4185,9 +4204,9 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						// Get the feedrate (if any) and kick off a new move
 						if (gb.Seen(feedrateLetter))
 						{
-							gb.LatestMachineState().feedRate = gb.GetSpeed();		// don't apply the speed factor
+							gb.LatestMachineState().feedRate = gb.GetFValue();
 						}
-						ms.feedRate = gb.LatestMachineState().feedRate;
+						ms.feedRate = gb.ConvertSpeed(gb.LatestMachineState().feedRate, ms.linearAxesMentioned);		// don't apply the speed factor
 						ms.usingStandardFeedrate = true;
 						NewSingleSegmentMoveAvailable(ms);
 

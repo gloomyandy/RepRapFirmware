@@ -19,6 +19,8 @@
 
 const float RotaryDeltaKinematics::NormalTowerAngles[DELTA_AXES] = { -150.0, -30.0, 90.0 };
 
+#if SUPPORT_OBJECT_MODEL
+
 // Object model table and functions
 // Note: if using GCC version 7.3.1 20180622 and lambda functions are used in this table, you must compile this file with option -std=gnu++17.
 // Otherwise the table will be allocated in RAM instead of flash, which wastes too much RAM.
@@ -30,23 +32,14 @@ constexpr ObjectModelTableEntry RotaryDeltaKinematics::objectModelTable[] =
 {
 	// Within each group, these entries must be in alphabetical order
 	// 0. kinematics members
-	{ "dummy",	OBJECT_MODEL_FUNC_NOSELF(false), 	ObjectModelEntryFlags::none },			// placeholder
+	{ "name",	OBJECT_MODEL_FUNC(self->GetName(true)), 	ObjectModelEntryFlags::none },
 };
 
 constexpr uint8_t RotaryDeltaKinematics::objectModelTableDescriptor[] = { 1, 1 };
 
 DEFINE_GET_OBJECT_MODEL_TABLE_WITH_PARENT(RotaryDeltaKinematics, RoundBedKinematics)
 
-Kinematics::KinematicsTypeDescriptor rotaryDeltaKinematicsDescriptor(RotaryDeltaKinematics::Create);
-
-/*static*/ Kinematics *_ecv_from _ecv_null RotaryDeltaKinematics::Create(const char *_ecv_array _ecv_null name, int legacyNumber) noexcept
-{
-	if (MatchesLegacyType(name, legacyNumber, KinematicsType::rotaryDelta))
-	{
-		return new RotaryDeltaKinematics();
-	}
-	return nullptr;
-}
+#endif
 
 // Constructor
 RotaryDeltaKinematics::RotaryDeltaKinematics() noexcept : RoundBedKinematics(KinematicsType::rotaryDelta, SegmentationType(true, true, true))
@@ -88,6 +81,14 @@ void RotaryDeltaKinematics::Recalc() noexcept
 		rodSquared[axis] = fsquare(rodLengths[axis]);
 		rodSquaredMinusArmSquared[axis] = rodSquared[axis] - fsquare(armLengths[axis]);
 	}
+}
+
+// Return the name of the current kinematics.
+// If 'forStatusReport' is true then the string must be the one for that kinematics expected by DuetWebControl and PanelDue.
+// Otherwise it should be in a format suitable for printing.
+const char *RotaryDeltaKinematics::GetName(bool forStatusReport) const noexcept
+{
+	return "Rotary delta";
 }
 
 // Set or report the parameters from a M665, M666 or M669 command
@@ -324,7 +325,7 @@ bool RotaryDeltaKinematics::DoAutoCalibration(MovementState& ms, size_t numFacto
 			initialSum += zp;
 			initialSumOfSquares += fcsquare(zp);
 		}
-		initialDeviation.Set(initialSumOfSquares, initialSum, numPoints);
+		initialDeviation.Set((float)initialSumOfSquares, (float)initialSum, numPoints);
 	}
 
 	// Do 1 or more Newton-Raphson iterations
@@ -340,7 +341,7 @@ bool RotaryDeltaKinematics::DoAutoCalibration(MovementState& ms, size_t numFacto
 			{
 				const size_t adjustedJ = (numFactors == 8 && j >= 6) ? j + 1 : j;		// skip diagonal rod length if doing 8-factor calibration
 				const floatc_t d =
-					ComputeDerivative(adjustedJ, probeMotorPositions(i, DELTA_A_AXIS), probeMotorPositions(i, DELTA_B_AXIS), probeMotorPositions(i, DELTA_C_AXIS));
+					ComputeDerivative(adjustedJ, (float)probeMotorPositions(i, DELTA_A_AXIS), (float)probeMotorPositions(i, DELTA_B_AXIS), (float)probeMotorPositions(i, DELTA_C_AXIS));
 				if (std::isnan(d))			// a couple of users have reported getting Nans in the derivative, probably due to points being unreachable
 				{
 					reply.printf("Auto calibration failed because probe point P%u was unreachable using the current delta parameters. Try a smaller probing radius.", i);
@@ -421,7 +422,7 @@ bool RotaryDeltaKinematics::DoAutoCalibration(MovementState& ms, size_t numFacto
 			float heightAdjust[DELTA_AXES];
 			for (size_t drive = 0; drive < DELTA_AXES; ++drive)
 			{
-				heightAdjust[drive] = solution[drive];
+				heightAdjust[drive] = (float)solution[drive];
 			}
 			ms.AdjustMotorPositions(heightAdjust, DELTA_AXES);
 		}
@@ -437,14 +438,14 @@ bool RotaryDeltaKinematics::DoAutoCalibration(MovementState& ms, size_t numFacto
 					probeMotorPositions(i, axis) += solution[axis];
 				}
 				float newPosition[XYZ_AXES];
-				ForwardTransform(probeMotorPositions(i, DELTA_A_AXIS), probeMotorPositions(i, DELTA_B_AXIS), probeMotorPositions(i, DELTA_C_AXIS), newPosition);
+				ForwardTransform((float)probeMotorPositions(i, DELTA_A_AXIS), (float)probeMotorPositions(i, DELTA_B_AXIS), (float)probeMotorPositions(i, DELTA_C_AXIS), newPosition);
 				corrections[i] = newPosition[Z_AXIS];
 				expectedResiduals[i] = probePoints.GetZHeight(i) + newPosition[Z_AXIS];
 				finalSum += expectedResiduals[i];
 				finalSumOfSquares += fcsquare(expectedResiduals[i]);
 			}
 
-			finalDeviation.Set(finalSumOfSquares, finalSum, numPoints);
+			finalDeviation.Set((float)finalSumOfSquares, (float)finalSum, numPoints);
 
 			if (reprap.Debug(Module::Kinematics))
 			{

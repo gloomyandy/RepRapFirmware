@@ -42,8 +42,6 @@ public:
 	int8_t GetCommandFraction() const noexcept { return commandFraction; }
 	bool IsLastCommand() const noexcept;
 	bool ContainsExpression() const noexcept { return seenExpression; }
-	bool HadExplicitLineNumber() const noexcept { return hadLineNumber; }
-	uint32_t GetExplicitLineNumber() const noexcept { return receivedLineNumber; }
 
 	bool Seen(char c) noexcept SPEED_CRITICAL;													// Is a character present?
 	ParameterLettersBitmap AllParameters() const noexcept { return parametersPresent; }			// Return the bitmap of all parameters seen
@@ -65,7 +63,7 @@ public:
 	ExpressionValue GetExpression() THROWS(GCodeException);										// Get an expression after a key letter
 	bool GetStringOrUIValue(uint32_t& uival, const StringRef& str) THROWS(GCodeException);		// Get an unsigned integer or nonempty string after a key letter
 
-	void ResetIndentationAfterPop() noexcept;								// Reset the indentation level to the last one
+	void ResetIndentationAfterPop() noexcept;										// Reset the indentation level to the last one
 	void SetFinished() noexcept;											// Set the G Code finished
 	void SetCommsProperties(uint32_t arg) noexcept { checksumRequired = (arg & 1); crcRequired = (arg & 4); }
 

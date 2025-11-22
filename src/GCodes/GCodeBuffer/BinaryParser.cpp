@@ -99,6 +99,14 @@ void BinaryParser::DecodeCommand() noexcept
 			}
 		}
 
+		if (bufferLength != 0 && (header->flags & CodeFlags::HasExplicitLineNumber) != 0)
+		{
+			gb.SetExplicitLineNumber(header->lineNumber);
+		}
+		else
+		{
+			gb.ClearExplicitLineNumber();
+		}
 		gb.bufferState = GCodeBufferState::executing;
 	}
 }
@@ -220,7 +228,7 @@ int32_t BinaryParser::GetIValue() THROWS(GCodeException)
 	switch (seenParameter->type)
 	{
 	case DataType::Float:
-		value = seenParameter->floatValue;
+		value = (int32_t)seenParameter->floatValue;
 		break;
 	case DataType::Int:
 		value = seenParameter->intValue;
@@ -254,9 +262,17 @@ uint32_t BinaryParser::GetUIValue() THROWS(GCodeException)
 	switch (seenParameter->type)
 	{
 	case DataType::Float:
+		if (seenParameter->floatValue < 0.0)
+		{
+			throw ConstructParseException("expected non-negative integer after '%c'", seenParameter->letter);
+		}
 		value = (uint32_t)seenParameter->floatValue;
 		break;
 	case DataType::Int:
+		if (seenParameter->intValue < 0)
+		{
+			throw ConstructParseException("expected non-negative integer after '%c'", seenParameter->letter);
+		}
 		value = (uint32_t)seenParameter->intValue;
 		break;
 	case DataType::UInt:
@@ -270,7 +286,7 @@ uint32_t BinaryParser::GetUIValue() THROWS(GCodeException)
 		}
 		break;
 	default:
-		throw ConstructParseException("expected number after '%c'", seenParameter->letter);
+		throw ConstructParseException("expected non-negative integer after '%c'", seenParameter->letter);
 	}
 	seenParameter = nullptr;
 	seenParameterValue = nullptr;
@@ -649,7 +665,7 @@ bool BinaryParser::GetStringOrUIValue(uint32_t& uival, const StringRef& str) THR
 
 			case TypeCode::HeapString:
 				{
-					ReadLockedPointer<const char> p = e.shVal.Get();				str.copy(p.Ptr());
+					ReadLockedPointer<const char> p = e.shVal.Get();
 					str.copy(p.Ptr());
 				}
 				return true;
@@ -673,7 +689,7 @@ bool BinaryParser::GetStringOrUIValue(uint32_t& uival, const StringRef& str) THR
 	default:
 		break;
 	}
-	throw ConstructParseException("expected a string or unsigned integer");
+	throw ConstructParseException("expected a string or unsigned integer after '%c'", seenParameter->letter);
 }
 
 void BinaryParser::SetFinished() noexcept
@@ -703,7 +719,7 @@ void BinaryParser::SetFilePosition(FilePosition fpos) noexcept
 	}
 }
 
-const char* BinaryParser::DataStart() const noexcept
+const char *_ecv_array _ecv_null BinaryParser::DataStart() const noexcept
 {
 	return (bufferLength != 0) ? gb.buffer : nullptr;
 }
@@ -916,7 +932,7 @@ void BinaryParser::WriteParameters(const StringRef& s, bool quoteStrings) const 
 					val += sizeof(uint32_t);
 				}
 				break;
-			case DataType::Bool:
+			case DataType::Boolean:
 				s.catf("%c%c", param->letter, (param->intValue != 0) ? '1' : '0');
 				break;
 			case DataType::BoolArray:

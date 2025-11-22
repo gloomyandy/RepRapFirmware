@@ -34,7 +34,7 @@ constexpr ObjectModelArrayTableEntry AxisShaper::objectModelArrayTable[] =
 	{
 		nullptr,					// no lock needed
 		OBJECT_MODEL_ARRAY_COUNT(self->numImpulses),
-		OBJECT_MODEL_ARRAY_VALUE(self->coefficients[context.GetLastIndex()], 3)
+		OBJECT_MODEL_ARRAY_VALUE((float)self->coefficients[context.GetLastIndex()], 3)
 	},
 	// 1. Durations
 	{
@@ -65,7 +65,7 @@ AxisShaper::AxisShaper() noexcept
 	: type(InputShaperType::none),
 	  frequency(DefaultFrequency),
 	  zeta(DefaultDamping),
-	  numImpulses(1), longestSegment(0)
+	  numImpulses(1), prepareAdvanceTime(MoveTiming::UsualMinimumPreparedTime), inputShapingDelay(0)
 {
 	coefficients[0] = 1.0;
 	delays[0] = 0;
@@ -258,7 +258,7 @@ GCodeResult AxisShaper::Configure(GCodeBuffer& gb, const StringRef& reply) THROW
 		// The sum of the coefficients must total 1, use this to fill in the last coefficient
 		// Also calculate the longest interval between adjacent impulses
 		motioncalc_t sum = 0.0;
-		longestSegment = 0;
+		uint32_t longestSegment = 0;
 		for (size_t i = 0; i + 1 < numImpulses; ++i)
 		{
 			sum += coefficients[i];
@@ -269,22 +269,13 @@ GCodeResult AxisShaper::Configure(GCodeBuffer& gb, const StringRef& reply) THROW
 			}
 		}
 		coefficients[numImpulses - 1] = (motioncalc_t)1.0 - sum;
+		prepareAdvanceTime = max<uint32_t>(longestSegment + MoveTiming::AbsoluteMinimumPreparedTime, MoveTiming::UsualMinimumPreparedTime);
+		inputShapingDelay = delays[numImpulses - 1];
 
 		reprap.MoveUpdated();
 
 #if SUPPORT_CAN_EXPANSION
-# if USE_DOUBLE_MOTIONCALC
-		{
-			float fCoefficients[MaxImpulses];
-			for (size_t i = 0; i < numImpulses; ++i)
-			{
-				fCoefficients[i] = (float)coefficients[i];
-			}
-			return reprap.GetMove().UpdateRemoteInputShaping(numImpulses, fCoefficients, delays, reply);
-		}
-# else
 		return UpdateRemoteInputShaping(reply);
-# endif
 #else
 		// Fall through to return GCodeResult::ok
 #endif
@@ -335,7 +326,7 @@ GCodeResult AxisShaper::UpdateRemoteInputShaping(const StringRef& reply) const n
 					msg->numImpulses = numImpulses;
 					for (unsigned int i = 0; i < numImpulses; ++i)
 					{
-						msg->impulses[i].coefficient = coefficients[i];
+						msg->impulses[i].coefficient = (float)coefficients[i];
 						msg->impulses[i].delay = delays[i];
 					}
 					buf->dataLength = msg->GetActualDataLength();

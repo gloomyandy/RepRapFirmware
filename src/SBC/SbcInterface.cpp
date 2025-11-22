@@ -571,7 +571,7 @@ void SbcInterface::ExchangeData() noexcept
 					MutexLocker lock(gb->mutex, SbcYieldTimeout);
 					if (lock.IsAcquired())
 					{
-						ExpressionParser parser(gb, expression.c_str(), expression.c_str() + expression.strlen());
+						ExpressionParser parser(gb, expression.c_str());
 						const ExpressionValue val = parser.Parse();
 						parser.CheckForExtraCharacters();
 						if (val.GetType() == TypeCode::HeapArray)
@@ -854,7 +854,7 @@ void SbcInterface::ExchangeData() noexcept
 			// Evaluate the expression and assign it
 			try
 			{
-				ExpressionParser parser(gb, expression.c_str(), expression.c_str() + expression.strlen());
+				ExpressionParser parser(gb, expression.c_str());
 				ExpressionValue ev = parser.Parse();
 				if (v == nullptr)
 				{
@@ -1193,11 +1193,15 @@ void SbcInterface::ExchangeData() noexcept
 			continue;
 		}
 
-		// Invalidate buffered codes if required
+		// Invalidate buffered codes if required. It may take multiple transfers before a
+		// print is actually paused, so make sure no more job codes are accepted until then
 		if (gb->IsInvalidated())
 		{
-			InvalidateBufferedCodes(gb->GetChannel());
-			gb->Invalidate(false);
+			InvalidateBufferedCodes(channel);
+			if (!reportPause || (channel != GCodeChannel::File && channel != GCodeChannel::File2))
+			{
+				gb->Invalidate(false);
+			}
 		}
 
 		// Deal with macro files being closed
@@ -1294,9 +1298,20 @@ void SbcInterface::ExchangeData() noexcept
 				}
 
 				// Send pending firmware codes
-				if (gb->IsSendRequested() && transfer.WriteDoCode(channel, gb->DataStart(), gb->DataLength()))
+				if (gb->IsSendRequested())
 				{
-					gb->SetFinished(true);
+					if (gb->HadExplicitLineNumber())
+					{
+						// Unfortunately, the explicit line number is stripped from the G-code data when we get here.
+						// That means we need to prepend it again before the full code is sent over to the SBC
+						String<MaxGCodeStringLength> code;
+						code.printf("N%" PRIu32 " %s", gb->GetExplicitLineNumber(), gb->DataStart());
+						gb->SetFinished(transfer.WriteDoCode(channel, code.c_str(), code.strlen()));
+					}
+					else
+					{
+						gb->SetFinished(transfer.WriteDoCode(channel, gb->DataStart(), gb->DataLength()));
+					}
 				}
 			}
 		}

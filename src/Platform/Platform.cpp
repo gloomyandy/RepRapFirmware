@@ -1966,33 +1966,196 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 									(double)((float)(tim3 * (1'000'000/iterations))/SystemCoreClock), (ok3) ? "ok" : "ERROR");
 			}
 
-		}
-
-		// We now also time sine and cosine in the same test
-		{
-			uint32_t tim1 = 0;
-			constexpr uint32_t iterations = 100;				// use a value that divides into one million
-			for (unsigned int i = 0; i < iterations; ++i)
+#if SUPPORT_S_CURVE
+			// Time and check floating point cube root
 			{
-				const float angle = 0.01 * i;
+				unsigned int numBad = 0, numBetter = 0, numWorse = 0, numEqual = 0, numSameError = 0;
+				uint32_t tim1 = 0, tim2 = 0;
+				for (unsigned int i = 0; i < iterations; ++i)
+				{
+					float val = 0.5 + (float)i * 3.5 / 1000.0;
+					if (i == 0) { val = 0.0; }
+					else if (i & 1) { val = -val; }
 
-				IrqDisable();
-				asm volatile("":::"memory");
-				uint32_t now1 = SysTick->VAL;
-				(void)RepRap::SinfCosf(angle);
-				uint32_t now2 = SysTick->VAL;
-				asm volatile("":::"memory");
-				IrqEnable();
-				now1 &= 0x00FFFFFF;
-				now2 &= 0x00FFFFFF;
-				tim1 += ((now1 > now2) ? now1 : now1 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now2;
+					IrqDisable();
+					asm volatile("":::"memory");
+					uint32_t now1 = SysTick->VAL;
+					const float nval1 = fastCubeRootf(val);
+					uint32_t now2 = SysTick->VAL;
+					asm volatile("":::"memory");
+					IrqEnable();
+
+					now1 &= 0x00FFFFFF;
+					now2 &= 0x00FFFFFF;
+					tim1 += ((now1 > now2) ? now1 : now1 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now2;
+
+					IrqDisable();
+					asm volatile("":::"memory");
+					uint32_t now3 = SysTick->VAL;
+					const volatile float nval2 = cbrtf(val);
+					uint32_t now4 = SysTick->VAL;
+					asm volatile("":::"memory");
+					IrqEnable();
+
+					now3 &= 0x00FFFFFF;
+					now4 &= 0x00FFFFFF;
+					tim2 += ((now3 > now4) ? now3 : now3 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now4;
+
+					bool thisOneOk = true;
+					if (val == 0.0)
+					{
+						thisOneOk = (nval1 == 0.0);
+					}
+					else if (val > 0.0)
+					{
+						thisOneOk = fcube(std::nextafter(nval1, nval1 * 2)) >= val && fcube(std::nextafter(nval1, 0.0)) <= val;
+					}
+					else
+					{
+						thisOneOk = fcube(std::nextafter(nval1, nval1 * 2)) <= val && fcube(std::nextafter(nval1, 0.0)) >= val;
+					}
+
+					if (!thisOneOk)
+					{
+						++numBad;
+					}
+					else if (nval1 == nval2)
+					{
+						++numEqual;
+					}
+					else
+					{
+						const float err1 = fcube(nval1) - val;
+						const float err2 = fcube(nval2) - val;
+						if (fabsf(err1) < fabsf(err2)) { ++numBetter; }
+						else if (fabsf(err1) > fabsf(err2)) { ++numWorse; }
+						else { ++numSameError; }
+						if (reprap.Debug(Module::Platform))
+						{
+							debugPrintf("val=% .7e fcr=% .7e cbrt=% .7e fcre=% .7e cbrte=% .7e\n", (double)val, (double)nval1, (double)nval2, (double)err1, (double)err1);
+						}
+					}
+				}
+
+				reply.lcatf("Cube roots: fcbrt %.2fus cbrt %.2fus, bad %u, equal %u, better %u, worse %u, sameError %u",
+							(double)((float)(tim1 * (1'000'000/iterations))/SystemCoreClock), (double)((float)(tim2 * (1'000'000/iterations))/SystemCoreClock),
+							numBad, numEqual, numBetter, numWorse, numSameError
+							);
 			}
 
-			// We no longer calculate sin and cos for doubles because it pulls in those library functions, which we don't otherwise need
-			reply.lcatf("Float sine + cosine: %.2fus", (double)((float)(tim1 * (1'000'000/iterations))/SystemCoreClock));
-		}
+#endif
+			// We now also time sine and cosine in the same test
+			{
+				uint32_t tim1 = 0;
+				for (unsigned int i = 0; i < iterations; ++i)
+				{
+					const float angle = 0.01 * i;
 
+					IrqDisable();
+					asm volatile("":::"memory");
+					uint32_t now1 = SysTick->VAL;
+					(void)RepRap::SinfCosf(angle);
+					uint32_t now2 = SysTick->VAL;
+					asm volatile("":::"memory");
+					IrqEnable();
+					now1 &= 0x00FFFFFF;
+					now2 &= 0x00FFFFFF;
+					tim1 += ((now1 > now2) ? now1 : now1 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now2;
+				}
+
+				// We no longer calculate sin and cos for doubles because it pulls in those library functions, which we don't otherwise need
+				reply.lcatf("Float sine + cosine: %.2fus", (double)((float)(tim1 * (1'000'000/iterations))/SystemCoreClock));
+			}
+		}
 		break;
+
+#if SUPPORT_S_CURVE
+	case (unsigned int)DiagnosticTestType::TimeCubicSolver:		// Show the cubic solver calculation time. Caution: may disable interrupt for several tens of microseconds.
+		{
+			constexpr uint32_t iterations = 100;				// use a value that divides into one million
+			constexpr double coeffs[][4] =
+			{
+				{ (double)1.0, (double)-6.0, (double)11.0, (double)-6.0 },		// roots are 1 2 3
+				{ (double)1.0, (double)-1.0, (double)1.0, (double)-1.0 },		// roots are 1
+				{ (double)2.0, (double)-6.0, (double)-18.5, (double)-7.5 },		// roots are -1.5 -0.5 5
+				{ (double)1.0, (double)-4.0, (double)5.0, (double)-2.0 },		// roots are 1 2
+				{ (double)1.0, (double)-6.0, (double)12.0, (double)-8.0 },		// roots are 2
+			};
+			for (size_t i = 0; i < ARRAY_SIZE(coeffs); ++i)
+			{
+				uint32_t tim1 = 0;
+				size_t numRoots;
+				double rslt[3] = { std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN() };
+				for (unsigned int j = 0; j < iterations; ++j)
+				{
+					IrqDisable();
+					asm volatile("":::"memory");
+					uint32_t now1 = SysTick->VAL;
+					numRoots = SolveCubic(coeffs[i][0], coeffs[i][1], coeffs[i][2], coeffs[i][3], rslt);
+					uint32_t now2 = SysTick->VAL;
+					asm volatile("":::"memory");
+					IrqEnable();
+
+					now1 &= 0x00FFFFFF;
+					now2 &= 0x00FFFFFF;
+					tim1 += ((now1 > now2) ? now1 : now1 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now2;
+				}
+
+				reply.lcatf("Cubic coeffs %.1f %.1f %.1f %.1f, %.2fus, %u roots:",
+							coeffs[i][0], coeffs[i][1], coeffs[i][2], coeffs[i][3],
+							(double)((float)(tim1 * (1'000'000/iterations))/SystemCoreClock), numRoots);
+				for (size_t j = 0; j < numRoots; ++j)
+				{
+					reply.catf(" %.6f", rslt[j]);
+				}
+			}
+		}
+		break;
+
+	case (unsigned int)DiagnosticTestType::TimeQuarticSolver:	// Show the quartic solver calculation time. Caution: may disable interrupt for several tens of microseconds.
+		{
+			constexpr uint32_t iterations = 1;				// use a value that divides into one million
+			constexpr double coeffs[][5] =
+			{
+				{ (double)1.0, (double)-10.0, (double)35.0, (double)-50.0, (double)24.0 },		// roots are 1 2 3 4
+				{ (double)-3.0, (double)12.0, (double)-6.0, (double)-3.0, (double)-18.0 },		// roots are 2 3 plus two complex roots
+				{ (double)1.0, (double)-3.0, (double)1.0, (double)3.0, (double)-2.0 },			// roots are -1 1 2
+				{ (double)1.0, (double)-2.0, (double)0.0, (double)2.0, (double)-1.0 },			// roots are -1 1
+				{ (double)1.0, (double)-3.0, (double)3.0, (double)-3.0, (double)2.0 },			// roots are 1 2
+				{ (double)1.0, (double)0.0, (double)17.0, (double)0.0, (double)16.0 },			// bicubic, no real roots
+				{ (double)1.0, (double)0.0, (double)-17.0, (double)0.0, (double)16.0 },			// bicubic, roots -4 -1 1 4
+			};
+			for (size_t i = 0; i < ARRAY_SIZE(coeffs); ++i)
+			{
+				uint32_t tim1 = 0;
+				size_t numRoots;
+				double rslt[4] = { std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN() };
+				for (unsigned int j = 0; j < iterations; ++j)
+				{
+					IrqDisable();
+					asm volatile("":::"memory");
+					uint32_t now1 = SysTick->VAL;
+					numRoots = SolveQuartic(coeffs[i][0],coeffs[i][1], coeffs[i][2], coeffs[i][3], coeffs[i][4], rslt);
+					uint32_t now2 = SysTick->VAL;
+					asm volatile("":::"memory");
+					IrqEnable();
+
+					now1 &= 0x00FFFFFF;
+					now2 &= 0x00FFFFFF;
+					tim1 += ((now1 > now2) ? now1 : now1 + (SysTick->LOAD & 0x00FFFFFF) + 1) - now2;
+				}
+
+				reply.lcatf("Quartic coeffs %.1f %.1f %.1f %.1f %.1f, %.2fus, %u roots:",
+							coeffs[i][0],coeffs[i][1], coeffs[i][2], coeffs[i][3], coeffs[i][4],
+							(double)((float)(tim1 * (1'000'000/iterations))/SystemCoreClock), numRoots);
+				for (size_t j = 0; j < numRoots; ++j)
+				{
+					reply.catf(" %.6f", rslt[j]);
+				}
+			}
+		}
+		break;
+#endif
 
 	case (unsigned int)DiagnosticTestType::TimeSDWrite:
 #if HAS_MASS_STORAGE
@@ -2203,7 +2366,7 @@ bool Platform::WritePlatformParameters(FileStore *f, bool includingG31) const no
 
 // USB port functions
 
-void Platform::AppendUsbReply(OutputBuffer *buffer, bool rawMessage) noexcept
+void Platform::AppendUsbReply(const GCodeBuffer *_ecv_null gb, OutputBuffer *buffer, bool rawMessage) noexcept
 {
 	if (!SERIAL_MAIN_DEVICE.IsConnected())
 	{
@@ -2225,7 +2388,8 @@ void Platform::AppendUsbReply(OutputBuffer *buffer, bool rawMessage) noexcept
 			if (OutputBuffer::Allocate(buf))
 			{
 				usbMessageSeq++;
-				buf->printf("{\"seq\":%" PRIu32 ",\"resp\":", usbMessageSeq);
+				RepRap::StartJsonResponse(gb, buf);
+				buf->catf("\"seq\":%" PRIu32 ",\"resp\":", usbMessageSeq);
 				buf->EncodeReply(buffer);
 				buf->cat("}\n");
 				usbOutput.Push(buf);
@@ -2321,9 +2485,8 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 			gbp->Disable();				// disable I/O for this serial channel
 		}
 
-		commsParams[chan] = val;		// we limited the value of 'chan' when we fetched it, so no need for a range-check here
-
 #if HAS_AUX_DEVICES
+		commsParams[chan] = val;		// we limited the value of 'chan' when we fetched it, so no need for a range-check here
 		if (chan != 0)
 		{
 			AuxDevice& dev = auxDevices[chan - FirstAuxChannel];
@@ -2333,6 +2496,8 @@ GCodeResult Platform::HandleM575(GCodeBuffer& gb, const StringRef& reply) THROWS
 			}
 			dev.SetMode(newMode);
 		}
+#else
+		commsParams[0] = val;			// gcc thinks chan is 1 here so use 0 explicitly
 #endif
 
 		if (   gbp != nullptr
@@ -3163,6 +3328,7 @@ void Platform::RawMessage(const GCodeBuffer *_ecv_null gb, MessageType type, con
 		}
 		else
 		{
+			// We need to wrap the message in JSON before sending it to USB
 			OutputBuffer *buf;
 			if (OutputBuffer::Allocate(buf))
 			{
@@ -3176,10 +3342,15 @@ void Platform::RawMessage(const GCodeBuffer *_ecv_null gb, MessageType type, con
 	}
 }
 
+void Platform::Message(MessageType type, OutputBuffer *buffer) noexcept
+{
+	Message(nullptr, type, buffer);
+}
+
 // Note: this overload of Platform::Message does not process the special action flags in the MessageType.
 // Also it treats calls to send a blocking USB message the same as ordinary USB messages,
 // and calls to send an immediate LCD message the same as ordinary LCD messages
-void Platform::Message(MessageType type, OutputBuffer *buffer) noexcept
+void Platform::Message(const GCodeBuffer *_ecv_null gb, MessageType type, OutputBuffer *buffer) noexcept
 {
 #if HAS_MASS_STORAGE
 	// First deal with logging because it doesn't hang on to the buffer
@@ -3212,13 +3383,13 @@ void Platform::Message(MessageType type, OutputBuffer *buffer) noexcept
 
 		if ((type & (AuxMessage | ImmediateAuxMessage)) != 0)
 		{
-			AppendAuxReply(0, nullptr, buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
+			AppendAuxReply(0, gb, buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
 		}
 
 #ifdef SERIAL_AUX2_DEVICE
 		if ((type & Aux2Message) != 0)
 		{
-			AppendAuxReply(1, nullptr, buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
+			AppendAuxReply(1, gb, buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
 		}
 #endif
 
@@ -3234,7 +3405,7 @@ void Platform::Message(MessageType type, OutputBuffer *buffer) noexcept
 
 		if ((type & (UsbMessage | BlockingUsbMessage)) != 0)
 		{
-			AppendUsbReply(buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
+			AppendUsbReply(gb, buffer, ((*buffer)[0] == '{') || (type & RawMessageFlag) != 0);
 		}
 
 #if HAS_SBC_INTERFACE

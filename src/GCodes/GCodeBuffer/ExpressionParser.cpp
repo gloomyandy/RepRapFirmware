@@ -82,6 +82,11 @@ ExpressionParser::ExpressionParser(const GCodeBuffer *_ecv_null p_gb, const char
 {
 }
 
+ExpressionParser::ExpressionParser(const GCodeBuffer *_ecv_null p_gb, const char *_ecv_array text) noexcept
+	: ExpressionParser(p_gb, text, text + strlen(text), -1)
+{
+}
+
 // Evaluate a bracketed expression
 void ExpressionParser::ParseExpectKet(ExpressionValue& rslt, bool evaluate, char closingBracket) THROWS(GCodeException)
 {
@@ -538,7 +543,7 @@ void ExpressionParser::ParseInternal(ExpressionValue& val, bool evaluate, uint8_
 							bResult = val.Get56BitValue() > val2.Get56BitValue();
 							break;
 
-						case TypeCode::Bool:
+						case TypeCode::Bool_tc:
 							bResult = (val.bVal && !val2.bVal);
 							break;
 
@@ -572,7 +577,7 @@ void ExpressionParser::ParseInternal(ExpressionValue& val, bool evaluate, uint8_
 							bResult = val.Get56BitValue() < val2.Get56BitValue();
 							break;
 
-						case TypeCode::Bool:
+						case TypeCode::Bool_tc:
 							bResult = (!val.bVal && val2.bVal);
 							break;
 
@@ -624,7 +629,7 @@ void ExpressionParser::ParseInternal(ExpressionValue& val, bool evaluate, uint8_
 								bResult = val.Get56BitValue() == val2.Get56BitValue();
 								break;
 
-							case TypeCode::Bool:
+							case TypeCode::Bool_tc:
 								bResult = (val.bVal == val2.bVal);
 								break;
 
@@ -1112,11 +1117,11 @@ void ExpressionParser::BalanceTypes(ExpressionValue& val1, ExpressionValue& val2
 	}
 
 	// Convert any port or unique ID values to string
-	if (val1.GetType() == TypeCode::Port || val1.GetType() == TypeCode::UniqueId_tc)
+	if (val1.GetType() == TypeCode::Port_tc || val1.GetType() == TypeCode::UniqueId_tc)
 	{
 		ConvertToString(val1, evaluate);
 	}
-	if (val2.GetType() == TypeCode::Port || val2.GetType() == TypeCode::UniqueId_tc)
+	if (val2.GetType() == TypeCode::Port_tc || val2.GetType() == TypeCode::UniqueId_tc)
 	{
 		ConvertToString(val2, evaluate);
 	}
@@ -1226,7 +1231,7 @@ void ExpressionParser::ConvertToUnsigned(ExpressionValue& val, bool evaluate) co
 			val.SetUnsigned((uint32_t)val.iVal);
 			break;
 		}
-		// no break
+		[[fallthrough]];
 	default:
 		if (evaluate)
 		{
@@ -1238,7 +1243,7 @@ void ExpressionParser::ConvertToUnsigned(ExpressionValue& val, bool evaluate) co
 
 void ExpressionParser::ConvertToBool(ExpressionValue& val, bool evaluate) const THROWS(GCodeException)
 {
-	if (val.GetType() != TypeCode::Bool)
+	if (val.GetType() != TypeCode::Bool_tc)
 	{
 		if (evaluate)
 		{
@@ -1592,8 +1597,10 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 		AdvancePointer();
 		if (func == Function::exists)
 		{
+			const bool applyLength = (SkipWhiteSpace() == '#');
+			if (applyLength) { AdvancePointer(); }
 			CheckStack(StackUsage::ParseIdentifierExpression);
-			ParseIdentifierExpression(rslt, evaluate, false, true);
+			ParseIdentifierExpression(rslt, evaluate, applyLength, true);
 		}
 		else
 		{
@@ -1721,7 +1728,7 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 					BalanceNumericTypes(rslt, nextOperand, evaluate);
 					if (rslt.GetType() == TypeCode::Float)
 					{
-						rslt.fVal = fmod(rslt.fVal, nextOperand.fVal);
+						rslt.fVal = fmodf(rslt.fVal, nextOperand.fVal);
 					}
 					else if (nextOperand.iVal == 0)
 					{
@@ -1963,18 +1970,18 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 					case TypeCode::ObjectModelArray:
 						{
 							const ObjectModelArrayTableEntry *const entry = _ecv_not_null(rslt.omVal->FindObjectModelArrayEntry(rslt.param & 0xFF));
-							ObjectExplorationContext context;
+							ObjectExplorationContext localContext;
 							ReadLocker locker(entry->lockPointer);
-							const size_t len = min<size_t>(entry->GetNumElements(rslt.omVal, context), nextOperand.uVal);
+							const size_t len = min<size_t>(entry->GetNumElements(rslt.omVal, localContext), nextOperand.uVal);
 							ArrayHandle ah;
 							WriteLocker lock(Heap::heapLock);
 							ah.Allocate(len);
 							for (size_t i = 0; i < len; ++i)
 							{
-								context.AddIndex(i);
-								ExpressionValue elem(entry->GetElement(rslt.omVal, context));
+								localContext.AddIndex(i);
+								ExpressionValue elem(entry->GetElement(rslt.omVal, localContext));
 								ah.AssignElement(i, elem);
-								context.RemoveIndex();
+								localContext.RemoveIndex();
 							}
 							rslt.SetArrayHandle(ah);
 						}
@@ -2033,9 +2040,9 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 					case TypeCode::ObjectModelArray:
 						{
 							const ObjectModelArrayTableEntry *const entry = _ecv_not_null(rslt.omVal->FindObjectModelArrayEntry(rslt.param & 0xFF));
-							ObjectExplorationContext context;
+							ObjectExplorationContext context1;
 							ReadLocker locker(entry->lockPointer);
-							const size_t numOriginalElements = entry->GetNumElements(rslt.omVal, context);
+							const size_t numOriginalElements = entry->GetNumElements(rslt.omVal, context1);
 							const size_t offset = min<size_t>(numOriginalElements, nextOperand.uVal);
 							const size_t len = numOriginalElements - offset;
 							ArrayHandle ah;
@@ -2043,13 +2050,13 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 							{
 								WriteLocker lock(Heap::heapLock);
 								ah.Allocate(len);
-								ObjectExplorationContext context;
+								ObjectExplorationContext context2;
 								for (size_t i = 0; i < len; ++i)
 								{
-									context.AddIndex(i + offset);
-									ExpressionValue elem(entry->GetElement(rslt.omVal, context));
+									context2.AddIndex(i + offset);
+									ExpressionValue elem(entry->GetElement(rslt.omVal, context2));
 									ah.AssignElement(i, elem);
-									context.RemoveIndex();
+									context2.RemoveIndex();
 								}
 							}
 							rslt.SetArrayHandle(ah);
@@ -2159,7 +2166,7 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 			}
 			else
 			{
-				GetVariableValue(rslt, &gb->GetVariables(), id.c_str() + strlen("param."), context, true, applyLengthOperator, applyExists);
+				GetVariableValue(rslt, &gb->GetVariables(), id.c_str() + strlen("param."), context, true);
 			}
 			return;
 		}
@@ -2167,7 +2174,7 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 		if (StringStartsWith(id.c_str(), "global."))
 		{
 			auto vars = reprap.GetGlobalVariablesForReading();
-			GetVariableValue(rslt, vars.Ptr(), id.c_str() + strlen("global."), context, false, applyLengthOperator, applyExists);
+			GetVariableValue(rslt, vars.Ptr(), id.c_str() + strlen("global."), context, false);
 			return;
 		}
 
@@ -2179,7 +2186,7 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 			}
 			else
 			{
-				GetVariableValue(rslt, &gb->GetVariables(), id.c_str() + strlen("var."), context, false, applyLengthOperator, applyExists);
+				GetVariableValue(rslt, &gb->GetVariables(), id.c_str() + strlen("var."), context, false);
 			}
 			return;
 		}
@@ -2187,7 +2194,7 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 		if (StringStartsWith(id.c_str(), "job.file.customInfo."))
 		{
 			auto vars = reprap.GetPrintMonitor().GetCustomInfoForReading();
-			GetVariableValue(rslt, vars.Ptr(), id.c_str() + strlen("job.file.customInfo."), context, false, applyLengthOperator, applyExists);
+			GetVariableValue(rslt, vars.Ptr(), id.c_str() + strlen("job.file.customInfo."), context, false);
 			return;
 		}
 
@@ -2223,7 +2230,7 @@ time_t ExpressionParser::ParseDateTime(const char *_ecv_array s) const THROWS(GC
 }
 
 // Get the value of a variable or part of a variable. We have already checked that 'evaluate' is true before calling this.
-void ExpressionParser::GetVariableValue(ExpressionValue& rslt, const VariableSet *vars, const char *_ecv_array name, ObjectExplorationContext& context, bool isParameter, bool applyLengthOperator, bool wantExists) THROWS(GCodeException)
+void ExpressionParser::GetVariableValue(ExpressionValue& rslt, const VariableSet *vars, const char *_ecv_array name, ObjectExplorationContext& context, bool isParameter) THROWS(GCodeException)
 {
 	const char *_ecv_array _ecv_null pos = strchr(name, '^');
 	if (pos != nullptr)
@@ -2255,14 +2262,14 @@ void ExpressionParser::GetVariableValue(ExpressionValue& rslt, const VariableSet
 				if (*pos == 0)
 				{
 					// End of the expression
-					if (wantExists)
+					if (context.WantExists())
 					{
 						rslt.SetBool(true);
 					}
 					else
 					{
 						rslt = elem;
-						if (applyLengthOperator)
+						if (context.WantArrayLength())
 						{
 							ApplyLengthOperator(rslt, true);
 						}
@@ -2281,9 +2288,16 @@ void ExpressionParser::GetVariableValue(ExpressionValue& rslt, const VariableSet
 				}
 				ThrowParseException("Error indexing into nested arrays");
 			}
+
+			// If we get here then we are trying to index into a variable of non-array type
+			if (context.WantExists())
+			{
+				rslt.SetBool(var != nullptr);
+				return;
+			}
 			ThrowParseException("Cannot index into variable or parameter '%s' of non-array type", name);
 		}
-		else if (wantExists)
+		else if (context.WantExists())
 		{
 			rslt.SetBool(false);
 			return;
@@ -2293,7 +2307,7 @@ void ExpressionParser::GetVariableValue(ExpressionValue& rslt, const VariableSet
 	else
 	{
 		const Variable *_ecv_null const var = vars->Lookup(name, strlen(name), isParameter);
-		if (wantExists)
+		if (context.WantExists())
 		{
 			rslt.SetBool(var != nullptr);
 			return;
@@ -2302,7 +2316,7 @@ void ExpressionParser::GetVariableValue(ExpressionValue& rslt, const VariableSet
 		if (var != nullptr)
 		{
 			rslt = var->GetValue();
-			if (applyLengthOperator)
+			if (context.WantArrayLength())
 			{
 				ApplyLengthOperator(rslt, true);
 			}

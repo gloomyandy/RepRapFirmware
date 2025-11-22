@@ -56,6 +56,7 @@ constexpr uint32_t IAP_IMAGE_START = 0x20010000;
 
 #define SUPPORT_IOBITS			0					// set to support P parameter in G0/G1 commands
 #define SUPPORT_DHT_SENSOR		0					// set nonzero to support DHT temperature/humidity sensors (requires RTOS)
+#define SUPPORT_OBJECT_MODEL	1
 #define SUPPORT_12864_LCD		0					// set nonzero to support 12864 LCD and rotary encoder
 #define SUPPORT_LED_STRIPS		1					// set nonzero to support DotStar LED strips
 #define SUPPORT_DMA_DOTSTAR		1
@@ -135,13 +136,13 @@ constexpr Pin UsbVBusPin = PortCPin(11);			// Pin used to monitor VBUS on USB po
 // Drivers
 
 #if defined(PCCB_10)
-constexpr Pin ENABLE_PINS[NumDirectDrivers] =		{ PortAPin(9),  PortAPin(10), PortBPin(14), PortCPin(25), PortCPin( 5), PortCPin(19), PortAPin( 0), PortCPin(28) };
+constexpr Pin DriverEnablePins[NumDirectDrivers] =	{ PortAPin(9),  PortAPin(10), PortBPin(14), PortCPin(25), PortCPin( 5), PortCPin(19), PortAPin( 0), PortCPin(28) };
 constexpr Pin STEP_PINS[NumDirectDrivers] =			{ PortCPin(4),  PortCPin(7),  PortCPin(24), PortCPin( 2), PortCPin(22), PortCPin(20), PortCPin(10), PortCPin(14) };
 constexpr Pin DIRECTION_PINS[NumDirectDrivers] =	{ PortAPin(8),  PortAPin(11), PortAPin(17), PortCPin(21), PortCPin(18), PortBPin(13), PortAPin( 1), PortCPin(17) };
 #endif
 
 #if defined(PCCB_08_X5)
-constexpr Pin ENABLE_PINS[NumDirectDrivers] =		{ PortBPin(14), PortCPin(25), PortCPin( 5), PortCPin(19), PortAPin( 0), PortCPin(28) };
+constexpr Pin DriverEnablePins[NumDirectDrivers] =	{ PortBPin(14), PortCPin(25), PortCPin( 5), PortCPin(19), PortAPin( 0), PortCPin(28) };
 constexpr Pin STEP_PINS[NumDirectDrivers] =			{ PortCPin(24), PortCPin( 2), PortCPin(22), PortCPin(20), PortCPin(10), PortCPin(14) };
 constexpr Pin DIRECTION_PINS[NumDirectDrivers] =	{ PortAPin(17), PortCPin(21), PortCPin(18), PortBPin(13), PortAPin( 1), PortCPin(17) };
 #endif
@@ -164,7 +165,7 @@ constexpr uint32_t DefaultStandstillCurrentPercent = 100;					// it's not adjust
 
 #elif defined(PCCB_08)
 
-constexpr Pin ENABLE_PINS[NumDirectDrivers] =		{ NoPin,		NoPin,		  PortBPin(14), PortCPin(25), PortCPin( 5), PortCPin(19), PortAPin( 0), PortCPin(28) };
+constexpr Pin DriverEnablePins[NumDirectDrivers] =	{ NoPin,		NoPin,		  PortBPin(14), PortCPin(25), PortCPin( 5), PortCPin(19), PortAPin( 0), PortCPin(28) };
 constexpr Pin STEP_PINS[NumDirectDrivers] =			{ PortCPin( 4), PortCPin( 7), PortCPin(24), PortCPin( 2), PortCPin(22), PortCPin(20), PortCPin(10), PortCPin(14) };
 constexpr Pin DIRECTION_PINS[NumDirectDrivers] =	{ PortAPin( 8), PortAPin(11), PortAPin(17), PortCPin(21), PortCPin(18), PortCPin(13), PortAPin( 1), PortCPin(17) };
 

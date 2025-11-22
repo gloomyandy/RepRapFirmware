@@ -27,6 +27,7 @@ constexpr size_t SbcTransferBufferSize = 8192;	// maximum length of a data trans
 
 static_assert(SbcTransferBufferSize % sizeof(uint32_t) == 0, "SbcTransferBufferSize must be a whole number of dwords");
 
+
 constexpr size_t MaxGCodeBinaryLength = 384;			// maximum length of a G/M/T-code in binary encoding
 static_assert(MaxGCodeBinaryLength % sizeof(uint32_t) == 0, "MaxGCodeBinaryLength must be a whole number of dwords");
 static_assert(MaxGCodeBinaryLength >= MaxGCodeStringLength, "MaxGCodeBinaryLength must be at least as big as MAxGCodeStringLength");
@@ -57,7 +58,7 @@ enum class DataType : uint8_t
     Expression = 7,			// char[] but containing '{'...'}'
 	DriverId_dt = 8,		// two sequential uint16_t representing board and port of a driver
 	DriverIdArray = 9,		// array of driver ids
-	Bool = 10,				// bool (int32_t)
+	Boolean = 10,			// bool (int32_t)
 	BoolArray = 11,			// bool[] (uint8_t[])
 	ULong = 12,				// uint64_t
 	DateTime = 13,			// datetime string in ISO-conform formatting
@@ -290,7 +291,8 @@ enum CodeFlags : uint8_t
 	HasMajorCommandNumber = 1,
 	HasMinorCommandNumber = 2,
 	HasFilePosition = 4,
-	EnforceAbsolutePosition = 8
+	EnforceAbsolutePosition = 8,
+	HasExplicitLineNumber = 16
 };
 
 // Not used during data transfers

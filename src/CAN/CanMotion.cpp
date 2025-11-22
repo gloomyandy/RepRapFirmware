@@ -135,7 +135,7 @@ CanMessageBuffer *_ecv_null CanMotion::GetBuffer(const PrepParams& params, Drive
 		{
 			// This is the first CAN-connected board for this movement
 			move->accelerationClocks = params.TotalAccelClocks();
-			move->steadyClocks = params.steadyClocks;
+			move->steadyClocks = params.SteadyClocks();
 			move->decelClocks = params.TotalDecelClocks();
 			currentMoveClocks = params.TotalClocks();
 		}
@@ -147,8 +147,26 @@ CanMessageBuffer *_ecv_null CanMotion::GetBuffer(const PrepParams& params, Drive
 			move->decelClocks = buf->next->msg.moveLinearShaped.decelClocks;
 		}
 
-		move->acceleration = params.acceleration/params.totalDistance;					// scale the acceleration to correspond to unit distance
-		move->deceleration = -params.deceleration/params.totalDistance;					// scale the deceleration to correspond to unit distance
+#if SUPPORT_S_CURVE
+		if (params.jerk != (motioncalc_t)0.0)
+		{
+			// We don't support 3rd order motion on expansion boards yet, so the best we can do is compute an average acceleration and scale it to unit distance
+			move->acceleration = (params.TotalAccelClocks() <= 0)
+								? 0.0
+									: (float)((params.peakAcceleration * params.TotalAccelClocks() - (motioncalc_t)0.5 * params.jerk * (msquare(params.phaseClocks[0]) + msquare(params.phaseClocks[2])))/(params.TotalAccelClocks() * params.totalDistance));
+			move->deceleration = (params.TotalDecelClocks() <= 0)
+								? 0.0
+									: (float)((-params.peakDeceleration * params.TotalDecelClocks() - (motioncalc_t)0.5 * params.jerk * (msquare(params.phaseClocks[4]) + msquare(params.phaseClocks[6])))/(params.TotalDecelClocks() * params.totalDistance));
+		}
+		else
+		{
+			move->acceleration = (float)(params.peakAcceleration/params.totalDistance);			// scale the acceleration to correspond to unit distance
+			move->deceleration = -(float)(params.peakDeceleration/params.totalDistance);			// scale the deceleration to correspond to unit distance
+		}
+#else
+		move->acceleration = (float)(params.acceleration/params.totalDistance);					// scale the acceleration to correspond to unit distance
+		move->deceleration = -(float)(params.deceleration/params.totalDistance);					// scale the deceleration to correspond to unit distance
+#endif
 		move->extruderDrives = 0;
 		move->numDrivers = canDriver.localDriver + 1;
 		move->zero1 = move->zero2 = 0;

@@ -43,7 +43,7 @@ HttpResponder::HttpResponder(NetworkResponder *_ecv_from _ecv_null n) noexcept :
 }
 
 // Ask the responder to accept this connection, returns true if it did
-bool HttpResponder::Accept(Socket *_ecv_from s, NetworkProtocol protocol) noexcept
+bool HttpResponder::TryAccept(Socket *_ecv_from s, NetworkProtocol protocol) noexcept
 {
 	if (responderState == ResponderState::free && protocol == HttpProtocol)
 	{
@@ -262,7 +262,7 @@ bool HttpResponder::CharFromClient(char c) noexcept
 				parseState = HttpParseState::doingCommandWord;
 				break;
 			}
-			// no break
+			[[fallthrough]];
 		case '%':	// none of our keys needs escaping, so treat an escape within a key as an error
 		case '&':	// key with no value
 			RejectMessage("bad qualifier key");
@@ -396,8 +396,7 @@ bool HttpResponder::CharFromClient(char c) noexcept
 			break;		// ignore spaces between header key and value
 		}
 		parseState = HttpParseState::doingHeaderValue;
-		// no break
-
+		[[fallthrough]];
 	case HttpParseState::doingHeaderValue:
 		if (c == '\n')
 		{
@@ -639,7 +638,7 @@ bool HttpResponder::GetJsonResponse(const char *_ecv_array request, OutputBuffer
 		if (nameVal != nullptr && offsetVal != nullptr && (offset = StrToU32(offsetVal)) != 0)
 		{
 			OutputBuffer::ReleaseAll(response);
-			response = reprap.GetFileFragment(nameVal, offset, false, true);
+			response = reprap.GetFileFragment(nullptr, nameVal, offset, false, true);
 		}
 		else
 		{
@@ -1451,7 +1450,7 @@ void HttpResponder::DoUpload() noexcept
 #endif
 
 // This is called to force termination if we implement the specified protocol
-void HttpResponder::Terminate(NetworkProtocol protocol, const NetworkInterface *_ecv_from interface) noexcept
+void HttpResponder::TryTerminate(NetworkProtocol protocol, const NetworkInterface *_ecv_from interface) noexcept
 {
 	if (responderState != ResponderState::free && (protocol == HttpProtocol || protocol == AnyProtocol) && skt != nullptr && skt->GetInterface() == interface)
 	{
