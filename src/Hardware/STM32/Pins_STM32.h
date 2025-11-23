@@ -222,7 +222,7 @@ NamedEnum(DriverType, uint8_t,
 
 // HAS_SMART_DRIVERS is defined in Pins.h, we duplicate it for the board files to use
 //#define HAS_SMART_DRIVERS		(SUPPORT_TMC2660 || SUPPORT_TMC22xx || SUPPORT_TMC51xx)
-extern Pin ENABLE_PINS[NumDirectDrivers];
+extern Pin DriverEnablePins[NumDirectDrivers];
 extern Pin STEP_PINS[NumDirectDrivers];
 extern Pin DIRECTION_PINS[NumDirectDrivers];
 //#if HAS_SMART_DRIVERS

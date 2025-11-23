@@ -40,7 +40,7 @@ Pin ActLedPin;
 bool ActOnPolarity = true;
 
 //Stepper settings
-Pin ENABLE_PINS[NumDirectDrivers];
+Pin DriverEnablePins[NumDirectDrivers];
 Pin STEP_PINS[NumDirectDrivers];
 Pin DIRECTION_PINS[NumDirectDrivers];
 #if HAS_SMART_DRIVERS

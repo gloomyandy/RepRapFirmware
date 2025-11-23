@@ -92,7 +92,7 @@ static const boardConfigEntry_t boardConfigs[]=
 
     //Steppers
     {"stepper.powerEnablePin", &StepperPowerEnablePin, 1, cvPinType},
-    {"stepper.enablePins", ENABLE_PINS, NumDirectDrivers, cvPinType},
+    {"stepper.enablePins", DriverEnablePins, NumDirectDrivers, cvPinType},
     {"stepper.stepPins", STEP_PINS, NumDirectDrivers, cvPinType},
     {"stepper.directionPins", DIRECTION_PINS, NumDirectDrivers, cvPinType},
     {"stepper.digipotFactor", &digipotFactor, 1, cvFloatType},
@@ -545,13 +545,13 @@ static void CheckDriverPins() noexcept
 {
     for(size_t i=0; i<NumDirectDrivers; i++)
     {
-        if (ENABLE_PINS[i] != NoPin && STEP_PINS[i] != NoPin && DIRECTION_PINS[i] != NoPin)
+        if (DriverEnablePins[i] != NoPin && STEP_PINS[i] != NoPin && DIRECTION_PINS[i] != NoPin)
         {
-            pinMode(ENABLE_PINS[i], INPUT);
-            bool state1 = IoPort::ReadPin(ENABLE_PINS[i]);
+            pinMode(DriverEnablePins[i], INPUT);
+            bool state1 = IoPort::ReadPin(DriverEnablePins[i]);
             pinMode(STEP_PINS[i], OUTPUT_LOW);
             delay(50);
-            bool state2 = IoPort::ReadPin(ENABLE_PINS[i]);
+            bool state2 = IoPort::ReadPin(DriverEnablePins[i]);
             pinMode(STEP_PINS[i], INPUT);
             if (state1 != state2 && state2 == false)
             {
