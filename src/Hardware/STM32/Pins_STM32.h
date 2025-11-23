@@ -40,7 +40,7 @@
 
 #  define IAP_IMAGE_START         0x24038000
 # else
-#  error "Processor undfined"
+#  error "Processor undefined"
 # endif
 #else
 # define FIRMWARE_NAME "RepRapFirmware for STM32F4 based Boards"
