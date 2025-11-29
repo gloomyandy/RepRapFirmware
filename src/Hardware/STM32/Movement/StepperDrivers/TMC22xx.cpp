@@ -5,7 +5,7 @@
  *      Author: David
  * Modified on: 1 Jun 2020 to support TMC2209 (based on Duet expansion board code) on the LPC platform
  *		Author: gloomyandy
- * NOTE: Unlike the Duet driver support for 2209 and 2208 si always enabled in this driver. We also do not
+ * NOTE: Unlike the Duet driver support for 2209 and 2208 is always enabled in this driver. We also do not
  * support 2240 drivers (they are supported via the TMC51xx driver using the SPI interface as all stepsticks
  * seem to use this interface rather than UART
  */

@@ -31,7 +31,7 @@
 # define SYNC_GPIO() __DSB()
 #else
 # define SYNC_GPIO() 
-# endif
+#endif
 
 static inline Move& GetMoveInstance() noexcept { return reprap.GetMove(); }
 
@@ -52,10 +52,6 @@ constexpr uint32_t DefaultThigh = 200;
 constexpr uint32_t LowestTmcClockSpeed =  11500000;			// the lowest speed at which the TMC driver is clocked internally
 constexpr uint32_t NominalTmcClockSpeed = 12000000;			// the nominal speed at which the TMC driver is clocked internally
 constexpr uint32_t HighestTmcClockSpeed = 12600000;			// the highest speed at which the TMC driver is clocked internally
-constexpr float Tmc2240Rref = 12.3;							// TMC2240 reference resistor on Fly boards, in Kohms
-constexpr float Tmc2240FullScaleCurrent = 36000/Tmc2240Rref;// in mA, assuming we set the range bits in the DRV_CONF register to 01b
-constexpr float Tmc2240CsMultiplier = 32.0/Tmc2240FullScaleCurrent;
-constexpr float MaximumTmc2240MotorCurrent = 2500.0;
 #if SUPPORT_CLOSED_LOOP
 constexpr size_t TmcTaskStackWords = 430;					// we need extra stack to handle closed loop tuning and writing to NVM
 #elif SUPPORT_PHASE_STEPPING
@@ -64,19 +60,18 @@ constexpr size_t TmcTaskStackWords = 430;					// we need extra stack to handle p
 constexpr size_t TmcTaskStackWords = 140;					// with 100 stack words, deckingman's M122 on the main board after a major axis shift showed just 10 words left
 #endif
 
-#if TMC_TYPE == 5130
-constexpr float SenseResistor = 0.11;						// 0.082R external + 0.03 internal
-#elif TMC_TYPE == 5160
-#if STM32
-constexpr float DefaultSenseResistor = 0.075;						// This seems to be common for most modules
-#else
-constexpr float DefaultSenseResistor = 0.050;						// assume same as we use for TMC2660
-#endif
+constexpr float Default5160SenseResistor = 0.075;			// Typical value used on step sticks
+constexpr float DefaultMaxTmc5160Current = 6300.0;			// The maximum current we allow the TMC5160/5161 drivers to be set to
+
+constexpr uint32_t Tmc2240CurrentRange = 0x3;				// TMC2240 Current Range max 3A
+constexpr uint32_t Tmc2240SlopeControl = 0x01;				// which slope control we set the TMC2240 to (200V/us)
+constexpr float DefaultTmc2240Rref = 12300.0;				// TMC2240 reference resistor on Fly boards, in ohms
+constexpr float DefaultMaxTmc2240Current = 2500.0;
+
 // Max current and sense resistor values can now be set via gcode, so we calculate other values as needed
 //constexpr float MaximumStandstillCurrent = MaxTmc5160Current * 0.707;
 //constexpr float RecipFullScaleCurrent = SenseResistor/325.0;		// 1.0 divided by full scale current in mA
 constexpr float Vfs = 325.0;										// Full scale voltage from 5160 datasheet
-#endif
 
 // The SPI clock speed is a compromise:
 // - too high and polling the driver chips takes too much of the CPU time
@@ -216,7 +211,7 @@ constexpr unsigned int DRV_CONF2240_CURRENT_RANGE_SHIFT = 0;
 constexpr uint32_t DRV_CONF2240_CURRENT_RANGE_MASK = 0x03;										// 0 = 1A, 1 = 2A, 2 = 3A, 3 = 3A peak current
 constexpr unsigned int DRV_CONF2240_SLOPE_CONTROL_SHIFT = 4;
 constexpr uint32_t DRV_CONF2240_SLOPE_CONTROL_MASK = 0x03 << DRV_CONF2240_SLOPE_CONTROL_SHIFT;		// 0 = 100V/us, 1 = 200V/us, 2 = 400V/us, 3 - 800V/us
-constexpr uint32_t DefaultDrvConfReg2240 = (2 << DRV_CONF2240_CURRENT_RANGE_SHIFT);
+constexpr uint32_t DefaultDrvConfReg2240 = (Tmc2240CurrentRange << DRV_CONF2240_CURRENT_RANGE_SHIFT) | (Tmc2240SlopeControl << DRV_CONF2240_SLOPE_CONTROL_SHIFT);
 
 constexpr uint8_t REGNUM_5160_GLOBAL_SCALER = 0x0B;			// Global scaling of Motor current. This value is multiplied to the current scaling in order to adapt a drive to a
 															// certain motor type. This value should be chosen before tuning other settings, because it also influences chopper hysteresis.
@@ -582,8 +577,8 @@ pre(!driversPowered)
 	newRegistersToUpdate.store(0);
 	specialReadRegisterNumber = specialWriteRegisterNumber = 0xFF;
 	motorCurrent = 0;
-	senseResistor = DefaultSenseResistor;
-	maxCurrent = MaxTmc5160Current;
+	senseResistor = Default5160SenseResistor;
+	maxCurrent = DefaultMaxTmc5160Current;
 	standstillCurrentFraction = (uint16_t)min<uint32_t>((DefaultStandstillCurrentPercent * 256)/100, 256);
 
 #if SUPPORT_PHASE_STEPPING
@@ -658,10 +653,6 @@ void Tmc51xxDriverState::SetStandstillCurrentPercent(float percent) noexcept
 
 bool Tmc51xxDriverState::SetCurrentScaler(int8_t cs) noexcept
 {
-	if (IsTmc2240())
-	{
-		return false;
-	}
 	if (cs > 31)
 	{
 		return false;
@@ -930,11 +921,15 @@ void Tmc51xxDriverState::SetCurrent(float current) noexcept
 
 float Tmc51xxDriverState::CalculateCurrent() const noexcept
 {
+	float RecipFullScaleCurrent;
 	if (IsTmc2240())
 	{
-		return (float) ((GetIRun() + 1)/Tmc2240CsMultiplier);
+		constexpr float Tmc2240Kifs = (Tmc2240CurrentRange == 0b00) ? 11.75f : (Tmc2240CurrentRange == 0b01) ? 24.0f : 36.0f;
+		// Note datasheet uses rRef/sense ik KOhms we hold it in Ohms hence / 1000.0f
+		RecipFullScaleCurrent = (senseResistor / 1000.0f) / (Tmc2240Kifs * 1000.0f);	// reciprocal of full scale current in mA
 	}
-	const float RecipFullScaleCurrent = senseResistor/Vfs;
+	else
+		RecipFullScaleCurrent = senseResistor/Vfs;
 	const uint32_t globalScaler = GetGlobalScaler();
 	const uint32_t gs = (globalScaler == 0) ? 256 : globalScaler;
 	return (float)(gs * (GetIRun() + 1)) / (256 * 32 * RecipFullScaleCurrent);
@@ -942,18 +937,6 @@ float Tmc51xxDriverState::CalculateCurrent() const noexcept
 
 void Tmc51xxDriverState::UpdateCurrent() noexcept
 {
-	if (IsTmc2240())
-	{
-		const float idealIRunCs = motorCurrent * Tmc2240CsMultiplier;
-		uint8_t iRun = constrain<uint32_t>((unsigned int)(idealIRunCs + 0.2), 1, 32) - 1;
-		const float idealIHoldCs = idealIRunCs * standstillCurrentFraction * (1.0/256.0);
-		uint8_t iHold = constrain<uint32_t>((unsigned int)(idealIHoldCs + 0.2), 1, 32) - 1;
-		UpdateRegister(WriteIholdIrun,
-						(writeRegisters[WriteIholdIrun] & ~(IHOLDIRUN_IRUN_MASK | IHOLDIRUN_IHOLD_MASK))
-						| (iRun << IHOLDIRUN_IRUN_SHIFT)
-						| (iHold << IHOLDIRUN_IHOLD_SHIFT));
-		return;
-	}
 #if TMC_TYPE == 5130
 	// Assume a current sense resistor of 0.082 ohms, to which we must add 0.025 ohms internal resistance.
 	// Full scale peak motor current in the high sensitivity range is give by I = 0.18/(R+0.03) = 0.18/0.105 ~= 1.6A
@@ -964,7 +947,15 @@ void Tmc51xxDriverState::UpdateCurrent() noexcept
 	UpdateRegister(WriteIholdIrun,
 					(writeRegisters[WriteIholdIrun] & ~(IHOLDIRUN_IRUN_MASK | IHOLDIRUN_IHOLD_MASK)) | (iRunCsBits << IHOLDIRUN_IRUN_SHIFT) | (iHoldCsBits << IHOLDIRUN_IHOLD_SHIFT));
 #elif TMC_TYPE == 5160
-	const float RecipFullScaleCurrent = senseResistor/Vfs;
+	float RecipFullScaleCurrent;
+	if (IsTmc2240())
+	{
+		constexpr float Tmc2240Kifs = (Tmc2240CurrentRange == 0b00) ? 11.75f : (Tmc2240CurrentRange == 0b01) ? 24.0f : 36.0f;
+		// Note datasheet uses rRef/sense ik KOhms we hold it in Ohms hence / 1000.0f
+		RecipFullScaleCurrent = (senseResistor / 1000.0f) / (Tmc2240Kifs * 1000.0f);	// reciprocal of full scale current in mA
+	}
+	else
+		RecipFullScaleCurrent = senseResistor/Vfs;
 	// See if we can set IRUN to 31 (or user defined value) and do the current adjustment in the global scaler
 	uint8_t iRun = (currentScaler < 0) ? 31 : (uint8_t)currentScaler;
 
@@ -1033,8 +1024,10 @@ float Tmc51xxDriverState::GetMaxCurrent() const noexcept
 
 void Tmc51xxDriverState::SetMaxCurrent(float value) noexcept
 {
-	if (value > 0.0f) maxCurrent = value;
-	if (maxCurrent > Vfs/senseResistor) maxCurrent = Vfs/senseResistor;
+	if (IsTmc2240())
+		maxCurrent = constrain<float>(value, 0.0f, (Tmc2240CurrentRange == 0b00) ? 1000.0f : (Tmc2240CurrentRange == 0b01) ? 2000.0f : 3000.0f);
+	else
+		maxCurrent = constrain<float>(value, 0.0f, Vfs/senseResistor);
 	SetCurrent(motorCurrent);
 }
 
@@ -1458,6 +1451,8 @@ DriversState Tmc51xxDriverState::SetupDriver() noexcept
 					UpdateRegister(WriteIholdIrun, writeRegisters[WriteIholdIrun] | (0x4 << IHOLDIRUN2240_IRUNDELAY_SHIFT));
 					UpdateRegister(Write5160DrvConf, DefaultDrvConfReg2240);
 					UpdateRegister(WritePwmConf, DefaultPwmConfReg2240);
+					senseResistor = DefaultTmc2240Rref;
+					maxCurrent = DefaultMaxTmc2240Current;
 
 				}
 				else if (version == IOIN_VERSION_5160)

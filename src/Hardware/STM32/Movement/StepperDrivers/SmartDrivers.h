@@ -1,6 +1,10 @@
 /*
  * This is the public interface to TMC Smart drivers. Currently
- * We support TMC22xx and TMC51xx devices. 
+ * We support TMC2208, TMC2209 using the UART interface and TMC5160, TMC2240 devices
+ * using the SPI interface. Really the SUPPORT_TMC51xx and SUPPORT_TMC22xx defines
+ * should be changed to SUPPORT_TMC_SPI and SUPPORT_TMC_UART, but that would mean modifications
+ * in many places that would make tracking changes in the Duet code difficult so for
+ * now we use the old define. 
  * 
  * Author: GA
  */

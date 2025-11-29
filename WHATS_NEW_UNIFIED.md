@@ -6,6 +6,9 @@ Version 3.7.0-alpha.1
 * ESP32C5 support (5GHz)
 * Improved Ethernet support (allow forcing of speed/duplex)
 * Reduced hardware SPI latency
+* SDIO improvements
+* Reduced RAM usage on F4 builds
+* Improved current control for TMC2240 drivers
 
 Version 3.6.1+2
 ===============
