@@ -9,6 +9,7 @@ Version 3.7.0-alpha.1
 * SDIO improvements
 * Reduced RAM usage on F4 builds
 * Improved current control for TMC2240 drivers
+* Added support for TMC2240 drivers using SPI on expansion boards (thanks Nine Mile).
 
 Version 3.6.1+2
 ===============
