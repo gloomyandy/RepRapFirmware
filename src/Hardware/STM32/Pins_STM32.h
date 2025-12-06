@@ -19,7 +19,6 @@
 # define DEFAULT_BOARD_TYPE BoardType::Stm32H7
 # define SUPPORT_CAN_EXPANSION       1
 # define DUAL_CAN                    0
-# define SUPPORT_SPICAN              0
 # define FLASH_DATA_LENGTH (128*1024) //size of the Software Reset Data in Flash
 # define SUPPORT_PHASE_STEPPING      1
 # if STM32H743xx
@@ -47,7 +46,6 @@
 # define DEFAULT_BOARD_TYPE BoardType::Stm32F4
 # define SUPPORT_CAN_EXPANSION       1
 # define DUAL_CAN                    0
-# define SUPPORT_SPICAN              1
 # define SUPPORT_PHASE_STEPPING      1
 # define FLASH_DATA_LENGTH (16*1024) //size of the Software Reset Data in Flash
 
@@ -277,7 +275,7 @@ extern SSPChannel TempSensorSSPChannel;
     extern bool SbcMode;
 #endif
 
-#if SUPPORT_SPICAN
+#if USE_SPICAN
     extern Pin CanCsPin;
     extern SSPChannel CanSpiChannel;
     extern uint32_t CanSpiFrequency;

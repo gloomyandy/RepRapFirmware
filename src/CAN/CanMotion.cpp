@@ -43,7 +43,7 @@ namespace CanMotion
 	static uint32_t currentMoveClocks;
 	static volatile bool revertAll = false;
 	static volatile bool revertedAll = false;
-	#if SUPPORT_SPICAN
+	#if USE_SPICAN
 	static bool canEnabled = false;
 	#endif
 	static volatile uint32_t whenRevertedAll;
@@ -58,7 +58,7 @@ void CanMotion::Init() noexcept
 {
 	movementBufferList = nullptr;
 	stopListMutex.Create("stopList");
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	canEnabled = true;
 #endif
 }
@@ -80,7 +80,7 @@ void CanMotion::FreeMovementBuffers() noexcept
 // This is called by DDA::Prepare at the start of preparing a movement
 void CanMotion::StartMovement() noexcept
 {
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	if (!canEnabled) return;
 #endif
 	FreeMovementBuffers();					// there shouldn't be any movement buffers in the list, but free any that there may be
@@ -188,7 +188,7 @@ CanMessageBuffer *_ecv_null CanMotion::GetBuffer(const PrepParams& params, Drive
 // This is called by DDA::Prepare for each active CAN DM in the move
 void CanMotion::AddAxisMovement(const PrepParams& params, DriverId canDriver, int32_t steps) noexcept
 {
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	if (!canEnabled) return;
 #endif
 	CanMessageBuffer * const buf = GetBuffer(params, canDriver);
@@ -212,7 +212,7 @@ void CanMotion::AddExtruderMovement(const PrepParams& params, DriverId canDriver
 // This is called by DDA::Prepare when all DMs for CAN drives have been processed. Return the calculated move time in steps, or 0 if there are no CAN moves
 uint32_t CanMotion::FinishMovement(const DDA& dda, uint32_t moveStartTime, bool simulating) noexcept
 {
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	if (!canEnabled) return 0;
 #endif
 	uint32_t clocks = 0;
@@ -267,7 +267,7 @@ uint32_t CanMotion::FinishMovement(const DDA& dda, uint32_t moveStartTime, bool 
 
 bool CanMotion::CanPrepareMove() noexcept
 {
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	if (!canEnabled) return true;
 #endif
 	return CanMessageBuffer::GetFreeBuffers() >= MaxCanBoards;
@@ -277,7 +277,7 @@ bool CanMotion::CanPrepareMove() noexcept
 // The only urgent messages we may have currently are messages to stop drivers, or to tell them that all drivers have now been stopped and they need to revert to the requested stop position.
 CanMessageBuffer *CanMotion::GetUrgentMessage() noexcept
 {
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	if (!canEnabled) return nullptr;
 #endif
 	if (!revertedAll)
@@ -346,7 +346,7 @@ CanMessageBuffer *CanMotion::GetUrgentMessage() noexcept
 // Flag a CAN-connected driver as not moving when we haven't sent the movement message yet
 void CanMotion::StopDriverWhenProvisional(DriverId driver) noexcept
 {
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	if (!canEnabled) return;
 #endif
 	// Search for the correct movement buffer
@@ -366,7 +366,7 @@ void CanMotion::StopDriverWhenProvisional(DriverId driver) noexcept
 // Tell a CAN-connected driver to stop moving after we have sent the movement message
 bool CanMotion::StopDriverWhenExecuting(DriverId driver, int32_t netStepsTaken) noexcept
 {
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	if (!canEnabled) return false;
 #endif
 	DriversStopList *sl = stopList;
@@ -390,7 +390,7 @@ bool CanMotion::StopDriverWhenExecuting(DriverId driver, int32_t netStepsTaken) 
 // Revert any stopped drivers that we haven't already and return true when there are no drivers to revert
 bool CanMotion::RevertStoppedDrivers() noexcept
 {
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	if (!canEnabled) return true;
 #endif
 	if (!revertAll && !revertedAll)							// if not started reverting yet

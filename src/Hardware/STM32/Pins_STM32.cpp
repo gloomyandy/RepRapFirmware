@@ -102,7 +102,7 @@ Pin SPIPins[NumSPIDevices][NumSPIPins];                 //GPIO pins for hardware
     bool SbcMode;
 #endif
 
-#if SUPPORT_SPICAN
+#if USE_SPICAN
     Pin CanCsPin;
     SSPChannel CanSpiChannel;
     uint32_t CanSpiFrequency;

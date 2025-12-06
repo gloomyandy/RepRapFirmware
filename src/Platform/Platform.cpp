@@ -882,7 +882,7 @@ void Platform::Spin() noexcept
 	// Blink the LED at about 2Hz.
 	digitalWrite(DiagPin, XNor(DiagOnPolarity, StepTimer::GetTimerTicks() & (1u << 19)) != 0);
 #endif
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	// with SPICAN the can device may not be present, in which case we handle the LED here
 	if (!CanInterface::IsCanEnabled())
 	{
@@ -2277,7 +2277,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 			uint32_t startClocks, endClocks;
 			uint16_t startTimeStamp, endTimeStamp;
 			{
-# if SUPPORT_SPICAN
+# if USE_SPICAN
 				CanInterface::GetTimeStampCounters(startTimeStamp, startClocks);
 # else
 				AtomicCriticalSectionLocker lock;
@@ -2288,7 +2288,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 			}
 			delay(2);
 			{
-# if SUPPORT_SPICAN
+# if USE_SPICAN
 				CanInterface::GetTimeStampCounters(endTimeStamp, endClocks);
 #else
 				AtomicCriticalSectionLocker lock;

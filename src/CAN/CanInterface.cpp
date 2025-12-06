@@ -33,7 +33,7 @@
 # include "SBC/SbcInterface.h"
 #endif
 
-# if SUPPORT_SPICAN
+# if USE_SPICAN
 #  include "CanSpi.h"
 #endif
 
@@ -67,7 +67,7 @@ constexpr uint32_t MaxRequestSendWait = CanInterface::UsualSendTimeout;		// mill
 // When we used a 200us interval here, this meant that the same clash would occur 1 second later, and again 1 second after that.
 // Using a value here that is relatively prime to 250ms avoids that happening. Alternatively we could add a random element to the interval.
 constexpr uint32_t CanClockIntervalMillis = 211;
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 constexpr uint16_t MaxTimeSyncDelay = 2000;									// the maximum normal delay before a CAN time sync message is sent
 #else
 // Define the maximum time sync delay that we tolerate. Occasionally on the SAME70 we get spurious very long delays, so we must ignore those.
@@ -149,7 +149,7 @@ static_assert(Can0Config.IsValid());
 static uint32_t can0Memory[Can0Config.GetMemorySize()] __attribute__ ((section (".CanMessage")));
 #endif
 
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 CanDevice *can0dev = nullptr;
 #else
 static CanDevice *can0dev = nullptr;
@@ -199,7 +199,7 @@ constexpr auto RxBufferIndexBroadcast = CanDevice::RxBufferNumber::fifo0;
 constexpr auto RxBufferIndexRequest = CanDevice::RxBufferNumber::fifo0;
 constexpr auto RxBufferIndexResponse = CanDevice::RxBufferNumber::fifo1;
 
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 // CanSender management task
 constexpr size_t CanSenderTaskStackWords = 225;
 static TASKMEM Task<CanSenderTaskStackWords> canSenderTask;
@@ -308,7 +308,7 @@ static void InitReceiveFilters() noexcept
 // This is the function called by the transmit event handler when the message marker is nonzero
 void TxCallback(uint8_t marker, CanId id, uint16_t timeStamp) noexcept
 {
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	// MCP2517FD only provides 7 bit id markers
 	if (marker == (currentTimeSyncMarker & 0x7f))
 #else
@@ -385,7 +385,7 @@ void CanInterface::Init() noexcept
 
 void CanInterface::Shutdown() noexcept
 {
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	if (can0dev == nullptr) return;
 #endif
 	canClockTask.TerminateAndUnlink();
@@ -399,7 +399,7 @@ void CanInterface::Shutdown() noexcept
 	}
 }
 
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 bool CanInterface::IsCanEnabled() noexcept
 {
 	return can0dev != nullptr;
@@ -437,7 +437,7 @@ static void ReInit() noexcept
 
 void CanInterface::SwitchToExpansionMode(CanAddress addr, bool useTestMode) noexcept
 {
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	DRV_SPI_Select();
 #else
 	TaskCriticalSectionLocker lock;
@@ -448,7 +448,7 @@ void CanInterface::SwitchToExpansionMode(CanAddress addr, bool useTestMode) noex
 	reprap.GetGCodes().SwitchToExpansionMode();
 	reprap.GetMove().SwitchToExpansionMode();
 	ReInit();										// reset the CAN filters to account for our new CAN address
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	DRV_SPI_Deselect();
 #endif
 }
@@ -524,7 +524,7 @@ void CanInterface::CheckCanAddress(uint32_t address, const GCodeBuffer& gb) THRO
 	}
 }
 
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 void CanInterface::GetTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) noexcept
 {
 	return can0dev->ReadTimeStampCounters(canTimeStamp, stepTimeStamp);
@@ -709,7 +709,7 @@ extern "C" [[noreturn]] void CanClockLoop(void *) noexcept
 		}
 #if SAME70
 		lastTimeSent = StepTimer::GetTimerTicks();
-#elif SUPPORT_SPICAN
+#elif USE_SPICAN
 		{
 			CanInterface::GetTimeStampCounters(lastTimeSyncTxPreparedStamp, lastTimeSent);
 			uint16_t tsCheck1;

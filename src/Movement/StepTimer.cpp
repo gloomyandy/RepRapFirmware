@@ -303,7 +303,7 @@ void StepTimer::DisableTimerInterrupt() noexcept
 #else
 	uint32_t localTimeNow;
 	uint16_t timeStampNow;
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	{
 		CanInterface::GetTimeStampCounters(timeStampNow, localTimeNow);
 		uint16_t tsCheck1;
