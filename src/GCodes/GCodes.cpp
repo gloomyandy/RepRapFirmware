@@ -4120,7 +4120,7 @@ void GCodes::HandleReplyPreserveResult(GCodeBuffer& gb, GCodeResult rslt, const 
 {
 #if HAS_SBC_INTERFACE
 	// Deal with replies to the SBC
-	if (gb.LatestMachineState().lastCodeFromSbc || (gb.GetCommandLetter() == 'M' && gb.GetCommandNumber() == 121))
+	if (gb.LatestMachineState().lastCodeFromSbc)
 	{
 		MessageType type = gb.GetResponseMessageType();
 		if (rslt == GCodeResult::notFinished || gb.HasJustStartedMacro() ||

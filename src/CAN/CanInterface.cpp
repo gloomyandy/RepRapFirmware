@@ -354,7 +354,7 @@ void CanInterface::Init() noexcept
 
 	// Initialise the CAN hardware
 	CanTiming timing;
-	timing.SetDefaults_1Mb();
+	timing.SetDefaults(CanTiming::DefaultCanBitRate);
 #if STM32
 #if STM32H7
 	can0dev = CanDevice::Init(0, CanDeviceNumber, Can0Config, nullptr, timing, nullptr, CanReadPin, CanWritePin);
@@ -377,7 +377,7 @@ void CanInterface::Init() noexcept
 	canReceiverTask.Create(CanReceiverLoop, "CanReceiver", nullptr, TaskPriority::CanReceiverPriority);
 
 #if DUAL_CAN
-	timing.SetDefaults_250kb();
+	timing.SetDefaults(250'000);
 	can1dev = CanDevice::Init(1, SecondaryCanDeviceNumber, Can1Config, can1Memory, timing, nullptr);
 	can1dev->SetShortFilterElement(0, CanDevice::RxBufferNumber::fifo0, 0, 0);			// set up a filter to receive all messages in FIFO 0
 	can1dev->SetExtendedFilterElement(0, CanDevice::RxBufferNumber::fifo0, 0, 0);
