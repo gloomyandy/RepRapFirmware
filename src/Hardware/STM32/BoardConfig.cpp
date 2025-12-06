@@ -197,7 +197,7 @@ static const boardConfigEntry_t boardConfigs[]=
 #if SUPPORT_ACCELEROMETERS
     {"accelerometer.spiChannel", &AccelerometerSpiChannel, 1, cvUint8Type},
 #endif
-#if SUPPORT_SPICAN
+#if USE_SPICAN
     {"can.spiChannel", &CanSpiChannel, 1, cvUint8Type},
     {"can.csPin", &CanCsPin, 1, cvPinType},
     {"can.spiFrequencyHz", &CanSpiFrequency, 1, cvUint32Type},
@@ -283,7 +283,7 @@ static void ClearConfig() noexcept
     SbcCsPinConfig = PB_12;
     SbcSpiChannel = SSP2;
 #endif
-#if SUPPORT_SPICAN
+#if USE_SPICAN
     CanSpiFrequency = 15000000;
 #endif
 #if STM32H7
@@ -467,7 +467,7 @@ static void ConfigureGPIOPins() noexcept
     SetPinMode(LcdBeepPin, OUTPUT_LOW);
     // Set the 12864 display CS pin low to prevent it from receiving garbage due to other SPI traffic
     SetPinMode(LcdCSPin, OUTPUT_LOW);
-#if SUPPORT_SPICAN
+#if USE_SPICAN
     SetPinMode(CanCsPin, OUTPUT_HIGH);
 #endif
 

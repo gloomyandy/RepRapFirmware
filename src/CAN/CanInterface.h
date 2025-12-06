@@ -31,7 +31,7 @@ namespace CanInterface
 	void Init() noexcept;
 	void Shutdown() noexcept;
 	inline CanAddress GetCurrentMasterAddress() noexcept { return CanId::MasterAddress; }		// currently fixed, but might change in future
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	bool IsCanEnabled() noexcept;
 #endif
 
@@ -60,7 +60,7 @@ namespace CanInterface
 	bool GetFirmwareUpdateResponse(CanMessageBuffer *buf) noexcept;
 #endif
 
-#if SUPPORT_SPICAN
+#if USE_SPICAN
 	void GetTimeStampCounters(uint16_t& canTimeStamp, uint32_t& stepTimeStamp) noexcept;
 #else
 	uint16_t GetTimeStampCounter() noexcept;
