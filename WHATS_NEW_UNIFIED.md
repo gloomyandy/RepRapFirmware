@@ -1,3 +1,8 @@
+Vsrsion 3.6.2-beta.1
+====================
+* Duet3d 3.6.2-beta.1
+* Back port esp32C5 support
+
 Version 3.6.1+2
 ===============
 * Duet3d 3.6.1+2
@@ -7,7 +12,6 @@ Version 3.6.1
 =============
 * Duet3d 3.6.1
 * Added support for Fly D8 Pro
-
 
 Version 3.6.0
 =============
