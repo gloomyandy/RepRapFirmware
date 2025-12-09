@@ -86,11 +86,9 @@ constexpr uint32_t MaxBitRate = 5000;
 
 constexpr float MinSamplePoint = 0.5;
 constexpr float MaxSamplePoint = 0.95;
-constexpr float DefaultSamplePoint = 0.75;
 
 constexpr float MinJumpWidth = 0.05;
 constexpr float MaxJumpWidth = 0.5;
-constexpr float DefaultJumpWidth = 0.25;
 
 static Mutex transactionMutex;
 
@@ -354,6 +352,7 @@ void CanInterface::Init() noexcept
 
 	// Initialise the CAN hardware
 	CanTiming timing;
+<<<<<<< HEAD
 	timing.SetDefaults_1Mb();
 #if STM32
 #if STM32H7
@@ -364,6 +363,9 @@ void CanInterface::Init() noexcept
 	if (can0dev == nullptr) return;
 	CanMessageBuffer::Init(NumCanBuffers);
 #else
+=======
+	timing.SetDefaults(CanTiming::DefaultCanBitRate);
+>>>>>>> upstream/3.7-dev
 	can0dev = CanDevice::Init(0, CanDeviceNumber, Can0Config, can0Memory, timing, nullptr);
 #endif
 	InitReceiveFilters();
@@ -377,7 +379,7 @@ void CanInterface::Init() noexcept
 	canReceiverTask.Create(CanReceiverLoop, "CanReceiver", nullptr, TaskPriority::CanReceiverPriority);
 
 #if DUAL_CAN
-	timing.SetDefaults_250kb();
+	timing.SetDefaults(250'000);
 	can1dev = CanDevice::Init(1, SecondaryCanDeviceNumber, Can1Config, can1Memory, timing, nullptr);
 	can1dev->SetShortFilterElement(0, CanDevice::RxBufferNumber::fifo0, 0, 0);			// set up a filter to receive all messages in FIFO 0
 	can1dev->SetExtendedFilterElement(0, CanDevice::RxBufferNumber::fifo0, 0, 0);
@@ -656,6 +658,7 @@ extern "C" [[noreturn]] void CanClockLoop(void *) noexcept
 	for (;;)
 	{
 		CanMessageTimeSync * const msg = buf.SetupBroadcastMessage<CanMessageTimeSync>(CanInterface::GetCanAddress());
+		msg->fastDataRate = 0;												// we don't use bit rate switching yet
 		msg->lastTimeSent = lastTimeSent;
 		msg->lastTimeAcknowledgeDelay = 0;									// assume we don't have the transmit delay available
 
@@ -1740,22 +1743,29 @@ GCodeResult CanInterface::ChangeAddressAndNormalTiming(GCodeBuffer& gb, const St
 			return GCodeResult::error;
 		}
 		speed *= 1000;
-		timing.period = (CanTiming::ClockFrequency + speed - 1)/speed;
-		const float tseg1 = gb.Seen('T') ? gb.GetFValue() : DefaultSamplePoint;
-		if (tseg1 < MinSamplePoint || tseg1 > MaxSamplePoint)
-		{
-			reply.copy("Sample point out of range");
-			return GCodeResult::error;
-		}
-		timing.tseg1 = lrintf(timing.period * tseg1);
+		timing.SetDefaults(speed);
 
-		const float jumpWidth = (gb.Seen('J')) ? gb.GetFValue() : DefaultJumpWidth;
-		if (jumpWidth < MinJumpWidth || jumpWidth > MaxJumpWidth)
+		if (gb.Seen('T'))
 		{
-			reply.copy("Jump width out of range");
-			return GCodeResult::error;
+			const float samplePoint = gb.GetFValue();
+			if (samplePoint < MinSamplePoint || samplePoint > MaxSamplePoint)
+			{
+				reply.copy("Sample point out of range");
+				return GCodeResult::error;
+			}
+			timing.SetSamplePoint(samplePoint);
 		}
-		timing.jumpWidth = constrain<uint16_t>(lrintf(timing.period * jumpWidth), 1, timing.period - timing.tseg1 - 2);
+
+		if (gb.Seen('J'))
+		{
+			const float jumpWidth = gb.GetFValue();
+			if (jumpWidth < MinJumpWidth || jumpWidth > MaxJumpWidth)
+			{
+				reply.copy("Jump width out of range");
+				return GCodeResult::error;
+			}
+			timing.SetJumpWidth(jumpWidth);
+		}
 		changeTiming = true;
 	}
 
@@ -1768,9 +1778,9 @@ GCodeResult CanInterface::ChangeAddressAndNormalTiming(GCodeBuffer& gb, const St
 		else
 		{
 			can0dev->GetLocalCanTiming(timing);
-			reply.printf("CAN bus speed %.1fkbps, tseg1 %.2f, jump width %.2f",
+			reply.printf("CAN bus speed %.1fkbps, sample point %.2f, jump width %.2f",
 							(double)((float)CanTiming::ClockFrequency/(1000 * timing.period)),
-							(double)((float)timing.tseg1/(float)timing.period),
+							(double)((float)(timing.tseg1 + 1)/(float)timing.period),
 							(double)((float)timing.jumpWidth/(float)timing.period));
 		}
 		return GCodeResult::ok;
