@@ -792,11 +792,11 @@ const char *_ecv_array _ecv_null Tmc22xxDriverState::CheckStallDetectionEnabled(
 	}
 	if (speed * (float)StepClockRate * (float)writeRegisters[WriteTcoolthrs] < (float)((HighestTmcClockSpeed/256) << microstepShiftFactor))
 	{
-		return "move is too slow for driver %u to detect stall (increase speed or Tcoolthrs)";
+		return "move is too slow for driver %u to detect stall (increase speed or reduce M915 H parameter)";
 	}
 	if (speed * (float)StepClockRate * (float)writeRegisters[WriteTpwmthrs] > (float)((LowestTmcClockSpeed/256) << microstepShiftFactor))
 	{
-		return "move is too fast for driver %u to detect stall (reduce speed or Tpwmthrs)";
+		return "move is too fast for driver %u to detect stall (reduce speed or M569 V parameter)";
 	}
 	return nullptr;
 }
