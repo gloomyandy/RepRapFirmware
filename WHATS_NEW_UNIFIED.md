@@ -1,6 +1,6 @@
 Version 3.7.0-alpha.1
 =====================
-* Duet3d 3.7 (not S curve)
+* Duet3d 3.7 (S-Curve not enabled)
 * RP2350 support
 * RP2040 now runs at 200MHz
 * ESP32C5 support (5GHz)
@@ -11,6 +11,11 @@ Version 3.7.0-alpha.1
 * Improved current control for TMC2240 drivers
 * Added support for TMC2240 drivers using SPI on expansion boards (thanks Nine Mile).
 
+Vsrsion 3.6.2-beta.1
+====================
+* Duet3d 3.6.2-beta.1
+* Back port esp32C5 support
+
 Version 3.6.1+2
 ===============
 * Duet3d 3.6.1+2
@@ -20,7 +25,6 @@ Version 3.6.1
 =============
 * Duet3d 3.6.1
 * Added support for Fly D8 Pro
-
 
 Version 3.6.0
 =============
