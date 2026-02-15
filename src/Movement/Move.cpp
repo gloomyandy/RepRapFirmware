@@ -1416,14 +1416,21 @@ void Move::SetLatestMeshDeviation(const Deviation& d) noexcept
 	latestMeshDeviation = d;
 }
 
-inline void Move::WakeMoveTaskFromISR() noexcept
+inline void Move::WakeMoveTask() noexcept
 {
 	// No need to check whether the Move task is running because GiveFromISR does that
 #if SUPPORT_REMOTE_COMMANDS
 	if (!inExpansionMode)
 #endif
 	{
-		moveTask.GiveFromISR(NotifyIndices::Move);
+		if (inInterrupt())
+		{
+			moveTask.GiveFromISR(NotifyIndices::Move);
+		}
+		else
+		{
+			moveTask.Give(NotifyIndices::Move);
+		}
 	}
 }
 
@@ -2300,7 +2307,7 @@ void Move::Interrupt() noexcept
 
 			if (activeDMs == nullptr || hadStepError)
 			{
-				WakeMoveTaskFromISR();							// we may have just completed a special move, so wake up the Move task so that it can notice that
+				WakeMoveTask();					// we may have just completed a special move, so wake up the Move task so that it can notice that
 				break;
 			}
 
@@ -2384,6 +2391,7 @@ void Move::DeactivateDM(DriveMovement *dmToRemove) noexcept
 }
 
 // Check the endstops, given that we know that this move checks endstops.
+// This may be called both from the step ISR and from the CanReceive task.
 // If executingMove is set then the move is already being executed; otherwise we are preparing to commit the move.
 #if SUPPORT_CAN_EXPANSION
 // Returns true if the caller needs to wake the async sender task because CAN-connected drivers need to be stopped
@@ -2419,7 +2427,7 @@ void Move::CheckEndstops(bool executingMove) noexcept
 
 			if (executingMove)
 			{
-				WakeMoveTaskFromISR();					// wake move task so that it sets the move as finished promptly
+				WakeMoveTask();			// wake move task so that it sets the move as finished promptly
 			}
 #if SUPPORT_CAN_EXPANSION
 			return wakeAsyncSender;
@@ -2438,7 +2446,7 @@ void Move::CheckEndstops(bool executingMove) noexcept
 
 			if (executingMove && !emgr.AnyEndstopsActive())
 			{
-				WakeMoveTaskFromISR();					// wake move task so that it sets the move as finished promptly
+				WakeMoveTask();			// wake move task so that it sets the move as finished promptly
 			}
 			break;
 
@@ -2761,7 +2769,7 @@ bool Move::StopAxisOrExtruder(bool executingMove, size_t logicalDrive) noexcept
 	{
 		IterateDrivers(logicalDrive,
 						[](uint8_t)->void { },						// no action if the driver is local
-						[executingMove, wasMoving, netStepsTaken, &wakeAsyncSender](DriverId did)->void
+						[executingMove, netStepsTaken, &wakeAsyncSender](DriverId did)->void
 							{
 								if (executingMove)
 								{
