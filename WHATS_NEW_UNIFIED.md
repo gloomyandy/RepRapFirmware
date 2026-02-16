@@ -1,4 +1,11 @@
-Vsrsion 3.6.2-beta.1
+
+Version 3.6.2-rc.1
+====================
+* Duet3d 3.6.2-rc.1
+* Added support for Fly C8 pro
+* Added support for Longboi
+
+Version 3.6.2-beta.1
 ====================
 * Duet3d 3.6.2-beta.1
 * Back port esp32C5 support
