@@ -51,8 +51,8 @@ public:
 	bool IsPrintAborted() noexcept;												// Check if the current print has been aborted
 	bool FillBuffer(GCodeBuffer &gb) noexcept;									// Try to fill up the G-code buffer with the next available G-code
 
-	void SetPauseReason(FilePosition position, PrintPausedReason reason) noexcept;	// Set parameters for the next pause request
-	void SetEmergencyPauseReason(FilePosition position, PrintPausedReason reason) noexcept;	// Set parameters for the next emergency pause request
+	void SetPauseReason(FilePosition position, FilePosition position2, PrintPausedReason reason) noexcept;	// Set parameters for the next pause request
+	void SetEmergencyPauseReason(FilePosition position, FilePosition position2, PrintPausedReason reason) noexcept;	// Set parameters for the next emergency pause request
 	void ReportPause() noexcept;												// Report that the print has been paused
 
 	void HandleGCodeReply(MessageType type, const char *reply) noexcept;		// accessed by Platform
@@ -83,7 +83,7 @@ private:
 	volatile uint32_t numEvents;
 
 	GCodeFileInfo fileInfo;
-	FilePosition pauseFilePosition;
+	FilePosition pauseFilePosition, pauseFilePosition2;
 	PrintPausedReason pauseReason;
 	bool reportPause, reportPauseWritten, printAborted;
 
@@ -142,17 +142,19 @@ private:
 	bool DoFileOperation(FileOperation f) noexcept;							// Ask the SBC task to do a file operation
 };
 
-inline void SbcInterface::SetPauseReason(FilePosition position, PrintPausedReason reason) noexcept
+inline void SbcInterface::SetPauseReason(FilePosition position, FilePosition position2, PrintPausedReason reason) noexcept
 {
 	TaskCriticalSectionLocker locker;
 	pauseFilePosition = position;
+	pauseFilePosition2 = position2;
 	pauseReason = reason;
 	reportPauseWritten = false;
 }
 
-inline void SbcInterface::SetEmergencyPauseReason(FilePosition position, PrintPausedReason reason) noexcept
+inline void SbcInterface::SetEmergencyPauseReason(FilePosition position, FilePosition position2, PrintPausedReason reason) noexcept
 {
 	pauseFilePosition = position;
+	pauseFilePosition2 = position2;
 	pauseReason = reason;
 	reportPauseWritten = false;
 	reportPause = true;

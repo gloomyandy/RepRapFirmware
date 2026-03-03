@@ -236,8 +236,6 @@ public:
 		pre(restorePointNumber < NumTotalRestorePoints);							// Save position etc. to a restore point
 	void StartToolChange(GCodeBuffer& gb, MovementState& ms, uint8_t param) noexcept;
 
-	unsigned int GetPrimaryWorkplaceCoordinateSystemNumber() const noexcept { return GetPrimaryMovementState().currentCoordinateSystem + 1; }
-
 #if SUPPORT_COORDINATE_ROTATION
 	void RotateCoordinates(const MovementState& ms, float angleDegrees, float coords[2]) const noexcept;		// Account for coordinate rotation
 #endif
@@ -259,8 +257,6 @@ public:
 	{
 		return workplaceCoordinates[workplaceNumber][axis];
 	}
-	float GetPrimaryMaxPrintingAcceleration() const noexcept { return moveStates[0].maxPrintingAcceleration; }
-	float GetPrimaryMaxTravelAcceleration() const noexcept { return moveStates[0].maxTravelAcceleration; }
 
 # if SUPPORT_COORDINATE_ROTATION
 	float GetRotationAngle(const MovementState& ms) const noexcept { return ms.g68Angle; }
@@ -370,6 +366,7 @@ private:
 #if SUPPORT_ASYNC_MOVES
 	void UnlockMovementFrom(const GCodeBuffer& gb, MovementSystemNumber firstMsNumber) noexcept;	// Release movement locks greater or equal to than the specified one
 #endif
+	bool WaitForEndstopOrProbingMoveToFinish(GCodeBuffer& gb) noexcept;			// Wait for movement to stop after performing a move that may terminate early
 
 	void SetInitialAxisAndDrivePositions() noexcept;							// Called at initialisation and when new axes are added
 	void AdjustEndpoint(size_t drive, float ratio) const noexcept;				// Adjust an endpoint following a change to steps/mm
@@ -464,7 +461,6 @@ private:
 	bool ToolHeatersAtSetTemperatures(const Tool *_ecv_null tool, bool waitWhenCooling, float tolerance, bool waitOnFault) const noexcept;
 																							// Wait for the heaters associated with the specified tool to reach their set temperatures
 	void GenerateTemperatureReport(const GCodeBuffer& gb, const StringRef& reply) const noexcept;	// Store a standard-format temperature report in reply
-	OutputBuffer *_ecv_null GenerateJsonStatusResponse(int type, int seq, ResponseSource source) const noexcept;	// Generate a M408 response
 	void CheckReportDue(GCodeBuffer& gb, const StringRef& reply) const noexcept;			// Check whether we need to report temperatures or status
 
 	void RestorePosition(MovementState& ms, const RestorePoint& rp) noexcept;				// Restore user position from a restore point
@@ -626,6 +622,7 @@ private:
 	GCodeBuffer *_ecv_null  TelnetGCode() const noexcept { return gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Telnet)]; }
 	GCodeBuffer *_ecv_null  FileGCode() const noexcept { return gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::File)]; }
 	GCodeBuffer *_ecv_null  UsbGCode() const noexcept { return gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::USB)]; }
+	GCodeBuffer *_ecv_null  Usb2GCode() const noexcept { return gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::USB2)]; }
 	GCodeBuffer *_ecv_null  AuxGCode() const noexcept { return gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Aux)]; }					// This one is for the PanelDue on the async serial interface
 	GCodeBuffer *_ecv_null  TriggerGCode() const noexcept { return gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Trigger)]; }			// Used for executing config.g and trigger macro files
 	GCodeBuffer *_ecv_null  QueuedGCode() const noexcept { return gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Queue)]; }
@@ -792,8 +789,6 @@ private:
 	char filamentToLoad[FilamentNameLength];	// Name of the filament being loaded
 
 	static constexpr const float MinServoPulseWidth = 544.0, MaxServoPulseWidth = 2400.0;
-
-	static constexpr int8_t ObjectModelAuxStatusReportType = 100;		// A non-negative value distinct from any M408 report type
 };
 
 // Called by the Move task to report that a move could not be queued

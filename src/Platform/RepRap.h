@@ -123,8 +123,6 @@ public:
 	OutputBuffer *_ecv_null GetConfigResponse() noexcept;
 #endif
 
-	OutputBuffer *_ecv_null GetLegacyStatusResponse(uint8_t type, int seq) const noexcept;
-
 #if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
 	OutputBuffer *_ecv_null GetFilesResponse(const GCodeBuffer *_ecv_null gb, c_string dir, unsigned int startAt, int maxItems, bool flagsDirs) noexcept;
 	OutputBuffer *_ecv_null GetFilelistResponse(const GCodeBuffer *_ecv_null gb, c_string dir, unsigned int startAt, int maxItems) noexcept;
@@ -176,7 +174,6 @@ public:
 	void JobUpdated() noexcept { ++jobSeq; }
 	void MoveUpdated() noexcept { ++moveSeq; }
 	void NetworkUpdated() noexcept { ++networkSeq; }
-	void ScannerUpdated() noexcept { ++scannerSeq; }
 	void SensorsUpdated() noexcept { ++sensorsSeq; }
 	void SpindlesUpdated() noexcept { ++spindlesSeq; }
 	void StateUpdated() noexcept { ++stateSeq; }
@@ -257,7 +254,7 @@ private:
 #endif
 
 	uint16_t boardsSeq, directoriesSeq, fansSeq, heatSeq, inputsSeq, jobSeq, ledStripsSeq, moveSeq, globalSeq;
-	uint16_t networkSeq, scannerSeq, sensorsSeq, spindlesSeq, stateSeq, toolsSeq, volumesSeq;
+	uint16_t networkSeq, sensorsSeq, spindlesSeq, stateSeq, toolsSeq, volumesSeq;
 
 	GlobalVariables globalVariables;
 

@@ -240,27 +240,6 @@ static GCodeResult EutGetInfo(const CanMessageReturnInfo& msg, const StringRef& 
 #endif
 		break;
 
-	case CanMessageReturnInfo::typeM408:
-		// For now we ignore the parameter and always return the same set of info
-		// This command is only used by the old ATE, which needs the board type and the voltages
-		reply.printf("{\"firmwareElectronics\":\"Duet 3 %.0s\"", BOARD_NAME);
-#if HAS_VOLTAGE_MONITOR
-		{
-			const MinCurMax voltages = reprap.GetPlatform().GetPowerVoltages();
-			reply.catf(",\"vin\":{\"min\":%.1f,\"cur\":%.1f,\"max\":%.1f}",
-					(double)voltages.minimum, (double)voltages.current, (double)voltages.maximum);
-		}
-#endif
-#if HAS_12V_MONITOR
-		{
-			const MinCurMax voltages = reprap.GetPlatform().GetV12Voltages();
-			reply.catf(",\"v12\":{\"min\":%.1f,\"cur\":%.1f,\"max\":%.1f}",
-					(double)voltages.minimum, (double)voltages.current, (double)voltages.maximum);
-		}
-#endif
-		reply.cat('}');
-		break;
-
 	case CanMessageReturnInfo::typeBoardUniqueId:
 		reprap.GetPlatform().GetUniqueId().AppendCharsToString(reply);
 		break;
@@ -364,20 +343,21 @@ static GCodeResult ChangeAddressAndDataRate(const CanMessageSetAddressAndNormalT
 // Process a received broadcast or request message. Don't free the message buffer
 void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 {
-	if (buf->id.Src() != CanInterface::GetCanAddress())								// I don't think we should receive our own broadcasts, but in case we do...
+	if (buf->id.Src() != CanInterface::GetCanAddress())				// I don't think we should receive our own messages, but in case we do...
 	{
-		if (   buf->id.Dst() != CanId::BroadcastAddress
-			&& buf->id.MsgType() != CanMessageType::fansReport						// don't flash whenever we receive a regular status message
-			&& buf->id.MsgType() != CanMessageType::heatersStatusReport
-			&& buf->id.MsgType() != CanMessageType::boardStatusReportV1
-			&& buf->id.MsgType() != CanMessageType::driversStatusReport
-			&& buf->id.MsgType() != CanMessageType::filamentMonitorsStatusReportV2
+		const CanMessageType id = buf->id.MsgType();
+		if (   buf->id.Dst() != CanId::BroadcastAddress				// ignore broadcast messages e.g. temperature reports
+			&& id != CanMessageType::fansReport						// don't flash whenever we receive a regular status message
+			&& id != CanMessageType::heatersStatusReport
+			&& id != CanMessageType::boardStatusReportV0
+			&& id != CanMessageType::boardStatusReportV1
+			&& id != CanMessageType::driversStatusReport
+			&& id != CanMessageType::filamentMonitorsStatusReportV2
 		   )
 		{
 			reprap.GetPlatform().OnProcessingCanMessage();
 		}
 
-		const CanMessageType id = buf->id.MsgType();
 #if SUPPORT_REMOTE_COMMANDS
 		if (CanInterface::InExpansionMode())
 		{
@@ -485,12 +465,12 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				rslt = reprap.GetHeat().ApplyFeedForward(buf->msg.heaterFeedForwardV1, replyRef);
 				break;
 
-			case CanMessageType::heaterModelV2:
-				requestId = buf->msg.heaterModelV2.requestId;
-				rslt = reprap.GetHeat().ProcessM307V1(buf->msg.heaterModelV2, replyRef);
+			case CanMessageType::heaterModelV3:
+				requestId = buf->msg.heaterModelV3.requestId;
+				rslt = reprap.GetHeat().ProcessM307(buf->msg.heaterModelV3, replyRef);
 				break;
 
-			case CanMessageType::setHeaterTemperature:
+			case CanMessageType::setHeaterTemperatureV1:
 				requestId = buf->msg.setTemp.requestId;
 				rslt = reprap.GetHeat().SetTemperature(buf->msg.setTemp, replyRef);
 				break;
@@ -509,6 +489,11 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				requestId = buf->msg.setHeaterMonitors.requestId;
 				rslt = reprap.GetHeat().SetHeaterMonitors(buf->msg.setHeaterMonitors, replyRef);
 				break;
+
+			case CanMessageType::setDefaultHeaterModel:
+				reprap.GetHeat().SetDefaultHeaterModel(*buf);
+				CanInterface::SendResponseNoFree(buf);
+				return;
 
 			case CanMessageType::m308V1:
 				requestId = buf->msg.generic.requestId;
@@ -745,6 +730,7 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				break;
 
 			case CanMessageType::boardStatusReportV0:
+			case CanMessageType::boardStatusReportV1:
 				reprap.GetExpansion().ProcessBoardStatusReport(buf);
 				break;
 
@@ -800,7 +786,6 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 
 					CanMessageStandardReply * const msg = buf->SetupResponseMessage<CanMessageStandardReply>(requestId, CanInterface::GetCanAddress(), srcAddress);
 					msg->resultCode = (uint16_t)GCodeResult::ok;
-					msg->extra = 0;
 					msg->text[0] = 0;
 					buf->dataLength = msg->GetActualDataLength(0);
 					msg->fragmentNumber = 0;

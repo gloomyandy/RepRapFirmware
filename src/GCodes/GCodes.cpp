@@ -114,19 +114,26 @@ GCodes::GCodes(Platform& p) noexcept :
 #else
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Telnet)] = nullptr;
 #endif // SUPPORT_TELNET || HAS_SBC_INTERFACE
-#if defined(SERIAL_MAIN_DEVICE)
+#ifdef SERIAL_USB_DEVICE
 # if SAME5x && !CORE_USES_TINYUSB
 	// SAME5x USB driver already uses an efficient buffer for receiving data from USB
-	StreamGCodeInput * const usbInput = new StreamGCodeInput(SERIAL_MAIN_DEVICE);
+	StreamGCodeInput * const usbInput = new StreamGCodeInput(SERIAL_USB_DEVICE);
 # else
 	// Old USB driver and tinyusb drivers are inefficient when read in single-character mode
-	BufferedStreamGCodeInput * const usbInput = new BufferedStreamGCodeInput(SERIAL_MAIN_DEVICE);
+	BufferedStreamGCodeInput * const usbInput = new BufferedStreamGCodeInput(SERIAL_USB_DEVICE);
 # endif
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::USB)] = new GCodeBuffer(GCodeChannel::USB, usbInput, fileInput, UsbMessage, Compatibility::Marlin);
 #elif HAS_SBC_INTERFACE
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::USB)] = new GCodeBuffer(GCodeChannel::USB, nullptr, fileInput, UsbMessage, Compatibility::Marlin);
 #else
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::USB)] = nullptr;
+#endif
+
+#ifdef SERIAL_USB2_DEVICE
+	BufferedStreamGCodeInput * const usb2Input = new BufferedStreamGCodeInput(SERIAL_USB2_DEVICE);
+	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::USB2)] = new GCodeBuffer(GCodeChannel::USB2, usb2Input, fileInput, Usb2Message, Compatibility::Marlin);
+#else
+	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::USB2)] = nullptr;
 #endif
 
 #if HAS_AUX_DEVICES
@@ -152,7 +159,7 @@ GCodes::GCodes(Platform& p) noexcept :
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::SBC)] = nullptr;
 #endif
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Daemon)] = new GCodeBuffer(GCodeChannel::Daemon, nullptr, fileInput, GenericMessage);
-#if defined(SERIAL_AUX2_DEVICE)
+#ifdef SERIAL_AUX2_DEVICE
 	StreamGCodeInput * const aux2Input = new StreamGCodeInput(SERIAL_AUX2_DEVICE);
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Aux2)] = new GCodeBuffer(GCodeChannel::Aux2, aux2Input, fileInput, Aux2Message);
 #elif HAS_SBC_INTERFACE
@@ -338,10 +345,13 @@ GCodeBuffer *_ecv_null GCodes::GetSerialGCodeBuffer(size_t serialPortNumber) con
 {
 	switch (serialPortNumber)
 	{
-	case 0:		return UsbGCode();
-	case 1:		return AuxGCode();
-	case 2:		return Aux2GCode();
-	default:	return nullptr;
+	case 0:						return UsbGCode();
+#ifdef SERIAL_USB2_DEVICE
+	case 1:						return Usb2GCode();
+#endif
+	case FirstAuxChannel:		return AuxGCode();
+	case FirstAuxChannel + 1:	return Aux2GCode();
+	default:					return nullptr;
 	}
 }
 
@@ -965,7 +975,8 @@ bool GCodes::DoSynchronousPause(GCodeBuffer& gb, PrintPausedReason reason, GCode
 	if (reprap.UsingSbcInterface())
 	{
 		// Prepare notification for the SBC
-		reprap.GetSbcInterface().SetPauseReason(ms.GetPauseRestorePoint().filePos, reason);
+		// FIXME This should pass the file position of the first and second file, or noFilePosition if not applicable
+		reprap.GetSbcInterface().SetPauseReason(ms.GetPauseRestorePoint().filePos, noFilePosition, reason);
 	}
 #endif
 
@@ -1102,7 +1113,8 @@ bool GCodes::DoAsynchronousPause(GCodeBuffer& gb, PrintPausedReason reason, GCod
 		if (reprap.UsingSbcInterface() && ms.GetNumber() == 0)
 		{
 			// Prepare notification for the SBC
-			reprap.GetSbcInterface().SetPauseReason(ms.GetPauseRestorePoint().filePos, reason);
+			// FIXME This should pass the file position of the first and second file, or noFilePosition if not applicable
+			reprap.GetSbcInterface().SetPauseReason(ms.GetPauseRestorePoint().filePos, noFilePosition, reason);
 		}
 #endif
 
@@ -1255,8 +1267,9 @@ bool GCodes::DoEmergencyPause() noexcept
 #if HAS_SBC_INTERFACE
 		if (reprap.UsingSbcInterface() && ms.GetNumber() == 0)
 		{
+			// FIXME This needs to report the file position of the second file as well (if applicable)
 			PrintPausedReason reason = platform.IsPowerOk() ? PrintPausedReason::stall : PrintPausedReason::lowVoltage;
-			reprap.GetSbcInterface().SetEmergencyPauseReason(ms.GetPauseRestorePoint().filePos, reason);
+			reprap.GetSbcInterface().SetEmergencyPauseReason(ms.GetPauseRestorePoint().filePos, noFilePosition, reason);
 			reprap.GetSbcInterface().EventOccurred(true);
 		}
 #endif
@@ -1976,7 +1989,7 @@ bool GCodes::LoadExtrusionFromGCode(GCodeBuffer& gb, MovementState& ms) THROWS(G
 						{
 							extrusionAmount *= volumetricExtrusionFactors[extruder];
 						}
-						if (eDrive == 0 && ms.moveType == 0 && !gb.IsDoingFileMacro())
+						if (ms.moveType == 0 && !gb.IsDoingFileMacro())
 						{
 							rawExtruderTotalByDrive[extruder] += extrusionAmount;
 						}
@@ -3360,7 +3373,7 @@ bool GCodes::DoFileMacroWithParameters(GCodeBuffer& gb, const char *_ecv_array f
 }
 
 // Run a file macro. Prior to calling this, 'state' must be set to the state we want to enter when the macro has been completed.
-// Return true if the file was found or it wasn't and we were asked to report that fact.
+// Return true if the file was found or it wasn't and we were asked to report that fact. If the file wasn't found and we were not asked to report that, return false.
 // 'codeRunning' is the G or M command we are running, or 0 for a tool change file. In particular:
 // 501 = running M501
 // 502 = running M502
@@ -4165,9 +4178,9 @@ void GCodes::HandleReplyPreserveResult(GCodeBuffer& gb, GCodeResult rslt, const 
 			|| &gb == Queue2GCode()
 #endif
 #if HAS_AUX_DEVICES
-			|| (&gb == AuxGCode() && !platform.IsChanRaw(1))
+			|| (&gb == AuxGCode() && !platform.IsChanRaw(FirstAuxChannel))
 # ifdef SERIAL_AUX2_DEVICE
-			|| (&gb == Aux2GCode() && !platform.IsChanRaw(2))
+			|| (&gb == Aux2GCode() && !platform.IsChanRaw(FirstAuxChannel + 1))
 # endif
 #endif
 			|| gb.IsDoingFileMacro()
@@ -5113,18 +5126,8 @@ void GCodes::CheckReportDue(GCodeBuffer& gb, const StringRef& reply) const noexc
 			if (reply.strlen() > 0)
 			{
 				reply.cat('\n');
-				platform.Message(UsbMessage, reply.c_str());
+				platform.Message(gb.GetResponseMessageType(), reply.c_str());
 				reply.Clear();
-			}
-			break;
-
-		case StatusReportType::m408:
-			{
-				OutputBuffer *_ecv_null statusBuf = GenerateJsonStatusResponse(0, -1, ResponseSource::AUX);		// older PanelDueFirmware using M408
-				if (statusBuf != nullptr)
-				{
-					platform.AppendAuxReply(0, nullptr, statusBuf, true);
-				}
 			}
 			break;
 
@@ -5139,7 +5142,7 @@ void GCodes::CheckReportDue(GCodeBuffer& gb, const StringRef& reply) const noexc
 				}
 				if (statusBuf != nullptr)
 				{
-					platform.AppendAuxReply(0, nullptr, statusBuf, true);
+					platform.Message(gb.GetResponseMessageType(), statusBuf);
 				}
 			}
 			catch (const GCodeException&)
@@ -5152,46 +5155,6 @@ void GCodes::CheckReportDue(GCodeBuffer& gb, const StringRef& reply) const noexc
 			break;
 		}
 	}
-}
-
-// Generate a M408 response
-// Return the output buffer containing the response, or nullptr if we failed
-OutputBuffer *_ecv_null GCodes::GenerateJsonStatusResponse(int type, int seq, ResponseSource source) const noexcept
-{
-	OutputBuffer *_ecv_null statusResponse = nullptr;
-#if 0	// removed support for types > 1because we ran out of flash memory on Duet 2
-	switch (type)
-	{
-		case 0:
-		case 1:
-			statusResponse = reprap.GetLegacyStatusResponse(type + 2, seq);
-			break;
-
-		default:				// need a default clause to prevent the command hanging by always returning a null buffer
-			type = 2;
-			[[fallthrough]];
-		case 2:
-		case 3:
-		case 4:
-			statusResponse = reprap.GetStatusResponse(type - 1, source);
-			break;
-
-		case 5:
-			statusResponse = reprap.GetConfigResponse();
-			break;
-	}
-#else
-	statusResponse = reprap.GetLegacyStatusResponse(type + 2, seq);
-#endif
-	if (statusResponse != nullptr)
-	{
-		statusResponse->cat('\n');
-		if (statusResponse->HadOverflow())
-		{
-			OutputBuffer::ReleaseAll(statusResponse);
-		}
-	}
-	return statusResponse;
 }
 
 // Initiate a tool change. Caller has already checked that the correct tool isn't loaded and set up ms.newToolNumber.

@@ -45,8 +45,6 @@
 # endif
 #endif
 
-#include <memory>
-
 #define SUPPORT_CAN		1				// needed by CanDevice.h
 #include <CanDevice.h>
 #if SAME70
@@ -877,7 +875,7 @@ unsigned int CanInterface::GetNumPendingMotionMessages() noexcept
 // Send a request to an expansion board and append the response to 'reply'
 GCodeResult CanInterface::SendRequestAndGetStandardReply(CanMessageBuffer *buf, CanRequestId rid, const StringRef& reply, uint8_t *extra) noexcept
 {
-	return SendRequestAndGetCustomReply(buf, rid, reply, extra, CanMessageType::unusedMessageType, [](const CanMessageBuffer*) { });
+	return SendRequestAndGetCustomReply(buf, rid, reply, extra, CanMessageType::unusedMessageType, [](const CanMessageBuffer*) noexcept->void { });
 }
 
 // Send a request to an expansion board and append the response to 'reply'. The response may either be a standard reply or 'replyType'.
@@ -1427,11 +1425,6 @@ GCodeResult CanInterface::RemoteDiagnostics(MessageType mt, uint32_t boardAddres
 	return SendRequestAndGetStandardReply(buf, rid, reply);	// we may not actually get a reply if the test is one that crashes the expansion board
 }
 
-GCodeResult CanInterface::RemoteM408(uint32_t boardAddress, unsigned int type, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
-{
-	return GetRemoteInfo(CanMessageReturnInfo::typeM408, boardAddress, type, gb, reply, nullptr);
-}
-
 GCodeResult CanInterface::GetRemoteFirmwareDetails(uint32_t boardAddress, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {
 	return GetRemoteInfo(CanMessageReturnInfo::typeFirmwareVersion, boardAddress, 0, gb, reply);
@@ -1554,10 +1547,10 @@ GCodeResult CanInterface::ChangeHandleResponseTime(CanAddress boardAddress, Remo
 	return ret;
 }
 
-GCodeResult CanInterface::ChangeHandleThreshold(CanAddress boardAddress, RemoteInputHandle h, uint32_t threshold, bool *_ecv_null currentState, const StringRef &reply) noexcept
+GCodeResult CanInterface::ChangeHandleThreshold(CanAddress boardAddress, RemoteInputHandle h, int32_t threshold, bool *_ecv_null currentState, const StringRef &reply) noexcept
 {
 	uint8_t rVal;
-	const GCodeResult ret =  ChangeInputMonitor(boardAddress, h, CanMessageChangeInputMonitorV1::actionChangeThreshold, threshold, &rVal, reply);
+	const GCodeResult ret =  ChangeInputMonitor(boardAddress, h, CanMessageChangeInputMonitorV1::actionChangeThreshold, (uint32_t)threshold, &rVal, reply);
 	if (ret < GCodeResult::error && currentState != nullptr)
 	{
 		*currentState = (rVal != 0);

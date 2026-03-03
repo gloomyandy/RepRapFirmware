@@ -742,6 +742,16 @@ int DataTransfer::ReadFileData(char *buffer, size_t length) noexcept
 	return bytesToRead;
 }
 
+GCodeChannel DataTransfer::ReadSetLastCodeResult(GCodeResult& result) noexcept
+{
+	// Read header
+	const SetLastCodeResultHeader *header = ReadDataHeader<SetLastCodeResultHeader>();
+
+	// Read values
+	result = header->result;
+	return GCodeChannel(header->channel);
+}
+
 void DataTransfer::ExchangeHeader() noexcept
 {
 	Cache::FlushBeforeDMASend(&txHeader, sizeof(txHeader));
@@ -1208,7 +1218,7 @@ bool DataTransfer::WriteMacroFileClosed(GCodeChannel channel) noexcept
 	return true;
 }
 
-bool DataTransfer::WritePrintPaused(FilePosition position, PrintPausedReason reason) noexcept
+bool DataTransfer::WritePrintPaused(FilePosition position, FilePosition position2, PrintPausedReason reason) noexcept
 {
 	if (!CanWritePacket(sizeof(PrintPausedHeader)))
 	{
@@ -1221,6 +1231,7 @@ bool DataTransfer::WritePrintPaused(FilePosition position, PrintPausedReason rea
 	// Write header
 	PrintPausedHeader *header = WriteDataHeader<PrintPausedHeader>();
 	header->filePosition = position;
+	header->filePosition2 = position2;
 	header->pauseReason = reason;
 	header->paddingA = 0;
 	header->paddingB = 0;
@@ -1245,7 +1256,7 @@ bool DataTransfer::WriteLocked(GCodeChannel channel) noexcept
 	return true;
 }
 
-bool DataTransfer::WriteEvaluationResult(const char *expression, const ExpressionValue& value) noexcept
+bool DataTransfer::WriteEvaluationResult(GCodeChannel channel, const char *expression, const ExpressionValue& value) noexcept
 {
 	// Calculate payload length
 	const size_t expressionLength = strlen(expression);
@@ -1257,12 +1268,19 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, const Expressio
 	case TypeCode::Bool_tc:
 	case TypeCode::DriverId_tc:
 	case TypeCode::Uint32:
-	case TypeCode::Float:
 	case TypeCode::Int32:
 	case TypeCode::Char:
+	case TypeCode::Bitmap16:
+	case TypeCode::Bitmap32:
 		payloadLength = expressionLength;
 		break;
+	case TypeCode::Float:
+		payloadLength = expressionLength + sizeof(uint8_t);
+		break;
 	case TypeCode::Uint64:
+#if SUPPORT_BITMAP64
+	case TypeCode::Bitmap64:
+#endif
 		payloadLength = AddPadding(expressionLength) + sizeof(uint64_t);
 		break;
 	case TypeCode::CString:
@@ -1300,7 +1318,15 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, const Expressio
 
 	// Write partial header
 	EvaluationResultHeader *header = WriteDataHeader<EvaluationResultHeader>();
+	header->channel = channel.ToBaseType();
 	header->expressionLength = expressionLength;
+
+	// Write precision in case of float values
+	if (value.GetType() == TypeCode::Float)
+	{
+		uint8_t numDigits = value.param;
+		WriteData(reinterpret_cast<const char *>(&numDigits), sizeof(uint8_t));
+	}
 
 	// Write expression
 	WriteData(expression, expressionLength);
@@ -1334,7 +1360,7 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, const Expressio
 		header->uintValue = value.uVal;
 		break;
 	case TypeCode::Float:
-		header->dataType = DataType::Float;
+		header->dataType = DataType::FloatWithDigits;
 		header->floatValue = value.fVal;
 		break;
 	case TypeCode::Int32:
@@ -1350,6 +1376,25 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, const Expressio
 		WriteData(reinterpret_cast<const char *>(&ulVal), sizeof(uint64_t));
 		break;
 	}
+	case TypeCode::Bitmap16:
+		header->dataType = DataType::Bitmap16;
+		header->intValue = value.uVal;
+		break;
+	case TypeCode::Bitmap32:
+		header->dataType = DataType::Bitmap32;
+		header->uintValue = value.uVal;
+		break;
+#if SUPPORT_BITMAP64
+	case TypeCode::Bitmap64:
+	{
+		header->dataType = DataType::Bitmap64;
+		header->uintValue = 0;
+		txPointer = AddPadding(txPointer);		// add padding to remain on a 4-byte boundary
+		uint64_t ulVal = value.Get56BitValue();
+		WriteData(reinterpret_cast<const char *>(&ulVal), sizeof(uint64_t));
+		break;
+	}
+#endif
 	case TypeCode::HeapString:
 		header->dataType = DataType::String;
 		header->intValue = value.shVal.GetLength();
@@ -1370,7 +1415,7 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, const Expressio
 	return true;
 }
 
-bool DataTransfer::WriteEvaluationResult(const char *expression, OutputBuffer *json) noexcept
+bool DataTransfer::WriteEvaluationResult(GCodeChannel channel, const char *expression, OutputBuffer *json) noexcept
 {
 	// Check if we can write the JSON result
 	const size_t expressionLength = strlen(expression);
@@ -1385,6 +1430,7 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, OutputBuffer *j
 
 	// Write partial header
 	EvaluationResultHeader *header = WriteDataHeader<EvaluationResultHeader>();
+	header->channel = channel.ToBaseType();
 	header->expressionLength = expressionLength;
 
 	// Write expression
@@ -1401,7 +1447,7 @@ bool DataTransfer::WriteEvaluationResult(const char *expression, OutputBuffer *j
 	return true;
 }
 
-bool DataTransfer::WriteEvaluationError(const char *expression, const char *errorMessage) noexcept
+bool DataTransfer::WriteEvaluationError(GCodeChannel channel, const char *expression, const char *errorMessage) noexcept
 {
 	// Check if it fits
 	size_t expressionLength = strlen(expression), errorLength = strlen(errorMessage);
@@ -1415,6 +1461,7 @@ bool DataTransfer::WriteEvaluationError(const char *expression, const char *erro
 
 	// Write partial header
 	EvaluationResultHeader *header = WriteDataHeader<EvaluationResultHeader>();
+	header->channel = channel.ToBaseType();
 	header->dataType = DataType::Expression;
 	header->expressionLength = expressionLength;
 	header->intValue = errorLength;
@@ -1481,7 +1528,7 @@ bool DataTransfer::WriteMessageAcknowledged(GCodeChannel channel) noexcept
 	return true;
 }
 
-bool DataTransfer::WriteSetVariableResult(const char *varName, const ExpressionValue& value) noexcept
+bool DataTransfer::WriteSetVariableResult(GCodeChannel channel, const char *varName, const ExpressionValue& value) noexcept
 {
 	// Calculate payload length
 	const size_t varNameLength = strlen(varName);
@@ -1492,10 +1539,12 @@ bool DataTransfer::WriteSetVariableResult(const char *varName, const ExpressionV
 	case TypeCode::Bool_tc:
 	case TypeCode::DriverId_tc:
 	case TypeCode::Uint32:
-	case TypeCode::Float:
 	case TypeCode::Int32:
 	case TypeCode::Char:
 		payloadLength = varNameLength;
+		break;
+	case TypeCode::Float:
+		payloadLength = varNameLength + sizeof(uint8_t);
 		break;
 	case TypeCode::CString:
 		payloadLength = varNameLength + strlen(value.sVal);
@@ -1528,7 +1577,15 @@ bool DataTransfer::WriteSetVariableResult(const char *varName, const ExpressionV
 
 	// Write partial header
 	EvaluationResultHeader *header = WriteDataHeader<EvaluationResultHeader>();
+	header->channel = channel.ToBaseType();
 	header->expressionLength = varNameLength;
+
+	// Write precision in case of float values
+	if (value.GetType() == TypeCode::Float)
+	{
+		uint8_t numDigits = value.param;
+		WriteData(reinterpret_cast<const char *>(&numDigits), sizeof(uint8_t));
+	}
 
 	// Write variable name
 	WriteData(varName, varNameLength);
@@ -1558,7 +1615,7 @@ bool DataTransfer::WriteSetVariableResult(const char *varName, const ExpressionV
 		header->uintValue = value.uVal;
 		break;
 	case TypeCode::Float:
-		header->dataType = DataType::Float;
+		header->dataType = DataType::FloatWithDigits;
 		header->floatValue = value.fVal;
 		break;
 	case TypeCode::Int32:
@@ -1583,7 +1640,7 @@ bool DataTransfer::WriteSetVariableResult(const char *varName, const ExpressionV
 	return true;
 }
 
-bool DataTransfer::WriteSetVariableResult(const char *varName, OutputBuffer *json) noexcept
+bool DataTransfer::WriteSetVariableResult(GCodeChannel channel, const char *varName, OutputBuffer *json) noexcept
 {
 	// Check if we can write the JSON result
 	const size_t varNameLength = strlen(varName);
@@ -1598,6 +1655,7 @@ bool DataTransfer::WriteSetVariableResult(const char *varName, OutputBuffer *jso
 
 	// Write partial header
 	EvaluationResultHeader *header = WriteDataHeader<EvaluationResultHeader>();
+	header->channel = channel.ToBaseType();
 	header->expressionLength = varNameLength;
 
 	// Write variable name
@@ -1614,7 +1672,7 @@ bool DataTransfer::WriteSetVariableResult(const char *varName, OutputBuffer *jso
 	return true;
 }
 
-bool DataTransfer::WriteSetVariableError(const char *varName, const char *errorMessage) noexcept
+bool DataTransfer::WriteSetVariableError(GCodeChannel channel, const char *varName, const char *errorMessage) noexcept
 {
 	// Check if it fits
 	size_t varNameLength = strlen(varName), errorLength = strlen(errorMessage);
@@ -1628,6 +1686,7 @@ bool DataTransfer::WriteSetVariableError(const char *varName, const char *errorM
 
 	// Write partial header
 	EvaluationResultHeader *header = WriteDataHeader<EvaluationResultHeader>();
+	header->channel = channel.ToBaseType();
 	header->dataType = DataType::Expression;
 	header->expressionLength = varNameLength;
 	header->intValue = errorLength;

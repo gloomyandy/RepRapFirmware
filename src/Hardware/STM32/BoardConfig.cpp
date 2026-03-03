@@ -714,7 +714,7 @@ void BoardConfig::Init() noexcept
     for(int i = 0; i < STARTUP_DELAY; i++)
     {
         delay(1);
-        if (SERIAL_MAIN_DEVICE.IsConnected())
+        if (SERIAL_USB_DEVICE.IsConnected())
         {
             // For some reason if we start using USB straightaway we end up reading back some data we just
             // sent. Adding a small delay seems to fix the problem.

@@ -61,6 +61,8 @@
 
 #include <limits>
 
+#define AVOID_SHORT_SEGMENTS	(0)
+
 constexpr float MinStepPulseTiming = 0.2;												// we assume that we always generate step high and low times at least this wide without special action
 
 TASKMEM Task<Move::MoveTaskStackWords> Move::moveTask;
@@ -172,19 +174,19 @@ constexpr ObjectModelTableEntry Move::objectModelTable[] =
 	{ "kinematics",				OBJECT_MODEL_FUNC(self->kinematics),															ObjectModelEntryFlags::none },
 	{ "limitAxes",				OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().LimitAxes()),										ObjectModelEntryFlags::none },
 	{ "noMovesBeforeHoming",	OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().NoMovesBeforeHoming()),								ObjectModelEntryFlags::none },
-	{ "printingAcceleration",	OBJECT_MODEL_FUNC_NOSELF(InverseConvertAcceleration(reprap.GetGCodes().GetPrimaryMaxPrintingAcceleration()), 1),	ObjectModelEntryFlags::none },
+	{ "printingAcceleration",	OBJECT_MODEL_FUNC_NOSELF(InverseConvertAcceleration(reprap.GetGCodes().GetCurrentMovementState(context).maxPrintingAcceleration), 1),	ObjectModelEntryFlags::none },
 	{ "queue",					OBJECT_MODEL_FUNC_ARRAY(2),																		ObjectModelEntryFlags::none },
 #if SUPPORT_COORDINATE_ROTATION
 	{ "rotation",				OBJECT_MODEL_FUNC(self, 15),																	ObjectModelEntryFlags::notPanelDue },
 #endif
 	{ "shaping",				OBJECT_MODEL_FUNC(&self->axisShaper, 0),														ObjectModelEntryFlags::none },
-	{ "speedFactor",			OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetPrimarySpeedFactor(), 2),						ObjectModelEntryFlags::none },
-	{ "travelAcceleration",		OBJECT_MODEL_FUNC_NOSELF(InverseConvertAcceleration(reprap.GetGCodes().GetPrimaryMaxTravelAcceleration()), 1),		ObjectModelEntryFlags::none },
+	{ "speedFactor",			OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetCurrentMovementState(context).speedFactor, 2),	ObjectModelEntryFlags::none },
+	{ "travelAcceleration",		OBJECT_MODEL_FUNC_NOSELF(InverseConvertAcceleration(reprap.GetGCodes().GetCurrentMovementState(context).maxTravelAcceleration), 1),		ObjectModelEntryFlags::none },
 #if SUPPORT_S_CURVE
 	{ "usingSCurve",			OBJECT_MODEL_FUNC(self->usingSCurve),															ObjectModelEntryFlags::none },
 #endif
 	{ "virtualEPos",			OBJECT_MODEL_FUNC_NOSELF(reprap.GetGCodes().GetCurrentMovementState(context).latestVirtualExtruderPosition, 5),		ObjectModelEntryFlags::liveNotPanelDue },
-	{ "workplaceNumber",		OBJECT_MODEL_FUNC_NOSELF((int32_t)reprap.GetGCodes().GetPrimaryWorkplaceCoordinateSystemNumber() - 1),				ObjectModelEntryFlags::none },
+	{ "workplaceNumber",		OBJECT_MODEL_FUNC_NOSELF((int32_t)reprap.GetGCodes().GetCurrentMovementState(context).currentCoordinateSystem),		ObjectModelEntryFlags::none },
 
 	// 1. Move.Idle members
 	{ "factor",					OBJECT_MODEL_FUNC(self->GetIdleCurrentFactor(), 1),												ObjectModelEntryFlags::none },
@@ -1425,14 +1427,21 @@ void Move::SetLatestMeshDeviation(const Deviation& d) noexcept
 	latestMeshDeviation = d;
 }
 
-inline void Move::WakeMoveTaskFromISR() noexcept
+inline void Move::WakeMoveTask() noexcept
 {
 	// No need to check whether the Move task is running because GiveFromISR does that
 #if SUPPORT_REMOTE_COMMANDS
 	if (!inExpansionMode)
 #endif
 	{
-		moveTask.GiveFromISR(NotifyIndices::Move);
+		if (inInterrupt())
+		{
+			moveTask.GiveFromISR(NotifyIndices::Move);
+		}
+		else
+		{
+			moveTask.Give(NotifyIndices::Move);
+		}
 	}
 }
 
@@ -1710,18 +1719,20 @@ MoveSegment *Move::AddSegment(MoveSegment *list, uint32_t startTime, uint32_t du
 			{
 				break;															// new segment fits entirely before the existing one
 			}
+#if AVOID_SHORT_SEGMENTS
 			if (offset >= -MoveSegment::MinDuration && duration >= 10 * (uint32_t)MoveSegment::MinDuration)	// if it starts only slightly earlier and we can reasonably shorten it
 			{
 				startTime = seg->GetStartTime();								// then just delay and shorten the new segment slightly, to avoid creating a tiny segment
-#if SEGMENT_DEBUG
+# if SEGMENT_DEBUG
 				debugPrintf("Adjusting(1) t=%" PRIu32 " a=%.4e", duration, (double)a);
-#endif
+# endif
 				duration = (uint32_t)((int32_t)duration + offset);
-#if SEGMENT_DEBUG
+# if SEGMENT_DEBUG
 				debugPrintf(" to t=%" PRIu32 " a=%.4e\n", duration, (double)a);
-#endif
+# endif
 			}
 			else																// new segment starts before the existing one and can't be delayed/shortened so that it doesn't
+#endif
 			{
 				// Insert part of the new segment before the existing one, then merge the rest
 				seg = MoveSegment::Allocate(seg);
@@ -1764,21 +1775,23 @@ MoveSegment *Move::AddSegment(MoveSegment *list, uint32_t startTime, uint32_t du
 		// At this point the new segment starts later or at the same time as the existing one (i.e. offset is non-negative)
 		if (offset < (int32_t)seg->GetDuration())													// if new segment starts before the existing one ends
 		{
+#if AVOID_SHORT_SEGMENTS
 			if (offset != 0 && offset + MoveSegment::MinDuration >= (int32_t)seg->GetDuration() && duration >= 10 * (uint32_t)MoveSegment::MinDuration)
 			{
 				// New segment starts just before the existing one ends, but we can delay and shorten it to start when the existing segment ends
-#if SEGMENT_DEBUG
+# if SEGMENT_DEBUG
 				debugPrintf("Adjusting(3) t=%" PRIu32 " a=%.4e", duration, (double)a);
-#endif
+# endif
 				const uint32_t startDelay = seg->GetDuration() - (uint32_t)offset;
 				startTime += startDelay;																	// postpone and shorten it a little
 				duration -= startDelay;
-#if SEGMENT_DEBUG
+# if SEGMENT_DEBUG
 				debugPrintf(" to t=%" PRIu32 " a=%.4e\n", duration, (double)a);
-#endif
+# endif
 				// Go round the loop again
 			}
 			else
+#endif
 			{
 				// The new segment overlaps the existing one and can't be delayed so that it doesn't.
 				// If the new segment starts later than the existing one does, split the existing one.
@@ -1795,19 +1808,20 @@ MoveSegment *Move::AddSegment(MoveSegment *list, uint32_t startTime, uint32_t du
 
 				// The segment we wish to add now starts at the same time as 'seg' but it may end earlier or later than the one at 'seg' does.
 				int32_t timeDifference = (int32_t)(duration - seg->GetDuration());
+#if AVOID_SHORT_SEGMENTS
 				if (timeDifference > 0 && timeDifference <= MoveSegment::MinDuration && duration >= 10 * (uint32_t)MoveSegment::MinDuration)
 				{
 					// New segment is slightly longer then the old one but it can be shortened
-#if SEGMENT_DEBUG
+# if SEGMENT_DEBUG
 					debugPrintf("Adjusting(3) t=%" PRIu32 " a=%.4e", duration, (double)a);
-#endif
+# endif
 					duration -= (uint32_t)timeDifference;
-#if SEGMENT_DEBUG
+# if SEGMENT_DEBUG
 					debugPrintf(" to t=%" PRIu32 " a=%.4e\n", duration, (double)a);
-#endif
+# endif
 					timeDifference = 0;
 				}
-
+#endif
 				if (timeDifference > 0)
 				{
 					// The existing segment is shorter in time than the new one, so add the new segment in two or more parts
@@ -2212,6 +2226,7 @@ void Move::ConfigurePhaseStepping(size_t axisOrExtruder, float value, PhaseStepC
 {
 	switch (config)
 	{
+	default:
 		break;
 	case PhaseStepConfig::kv:
 		dms[axisOrExtruder].phaseStepControl.SetKv(value);
@@ -2446,7 +2461,7 @@ void Move::Interrupt() noexcept
 
 			if (activeDMs == nullptr || hadStepError)
 			{
-				WakeMoveTaskFromISR();							// we may have just completed a special move, so wake up the Move task so that it can notice that
+				WakeMoveTask();					// we may have just completed a special move, so wake up the Move task so that it can notice that
 				break;
 			}
 
@@ -2530,6 +2545,7 @@ void Move::DeactivateDM(DriveMovement *dmToRemove) noexcept
 }
 
 // Check the endstops, given that we know that this move checks endstops.
+// This may be called both from the step ISR and from the CanReceive task.
 // If executingMove is set then the move is already being executed; otherwise we are preparing to commit the move.
 #if SUPPORT_CAN_EXPANSION
 // Returns true if the caller needs to wake the async sender task because CAN-connected drivers need to be stopped
@@ -2565,7 +2581,7 @@ void Move::CheckEndstops(bool executingMove) noexcept
 
 			if (executingMove)
 			{
-				WakeMoveTaskFromISR();					// wake move task so that it sets the move as finished promptly
+				WakeMoveTask();			// wake move task so that it sets the move as finished promptly
 			}
 #if SUPPORT_CAN_EXPANSION
 			return wakeAsyncSender;
@@ -2584,7 +2600,7 @@ void Move::CheckEndstops(bool executingMove) noexcept
 
 			if (executingMove && !emgr.AnyEndstopsActive())
 			{
-				WakeMoveTaskFromISR();					// wake move task so that it sets the move as finished promptly
+				WakeMoveTask();			// wake move task so that it sets the move as finished promptly
 			}
 			break;
 
@@ -2907,7 +2923,7 @@ bool Move::StopAxisOrExtruder(bool executingMove, size_t logicalDrive) noexcept
 	{
 		IterateDrivers(logicalDrive,
 						[](uint8_t)->void { },						// no action if the driver is local
-						[executingMove, wasMoving, netStepsTaken, &wakeAsyncSender](DriverId did)->void
+						[executingMove, netStepsTaken, &wakeAsyncSender](DriverId did)->void
 							{
 								if (executingMove)
 								{
@@ -3029,6 +3045,7 @@ void Move::SetAxisDriversConfig(size_t axis, size_t numValues, const DriverId dr
 		}
 	}
 	dms[axis].driversNormallyUsed = bitmap;
+	dms[axis].isExtruder = false;
 }
 
 // Set the characteristics of an axis
@@ -3063,17 +3080,19 @@ void Move::SetAxisType(size_t axis, AxisWrapType wrapType, bool isNistRotational
 void Move::SetExtruderDriver(size_t extruder, DriverId driver) noexcept
 {
 	extruderDrivers[extruder] = driver;
+	const size_t logicalDriveNumber = ExtruderToLogicalDrive(extruder);
 	if (driver.IsLocal())
 	{
 #if HAS_SMART_DRIVERS
-		SmartDrivers::SetAxisNumber(driver.localDriver, ExtruderToLogicalDrive(extruder));
+		SmartDrivers::SetAxisNumber(driver.localDriver, logicalDriveNumber);
 #endif
-		dms[ExtruderToLogicalDrive(extruder)].driversNormallyUsed = StepPins::CalcDriverBitmap(driver.localDriver);
+		dms[logicalDriveNumber].driversNormallyUsed = StepPins::CalcDriverBitmap(driver.localDriver);
 	}
 	else
 	{
-		dms[ExtruderToLogicalDrive(extruder)].driversNormallyUsed = 0;
+		dms[logicalDriveNumber].driversNormallyUsed = 0;
 	}
+	dms[logicalDriveNumber].isExtruder = true;
 }
 
 void Move::SetDriverStepTiming(size_t driver, const float microseconds[4]) noexcept

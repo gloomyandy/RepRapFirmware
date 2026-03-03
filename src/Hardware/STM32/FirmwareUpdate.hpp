@@ -149,7 +149,7 @@ void RepRap::RunCanIap(c_string _ecv_null  filenameRef) noexcept
         debugPrintf("Using bootloader\n");
         delay(1000);
         // no SD card available, request that the bootloader performs the update
-	    SERIAL_MAIN_DEVICE.end();
+	    SERIAL_USB_DEVICE.end();
 	    // Disable all IRQs
 	    SysTick->CTRL  = SysTick_CTRL_CLKSOURCE_Msk;	// disable the system tick exception
 	    IrqDisable();
