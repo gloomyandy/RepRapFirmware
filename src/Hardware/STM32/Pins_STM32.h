@@ -324,13 +324,23 @@ extern bool ActOnPolarity;
 constexpr size_t NumSPIPins = 3;
 extern Pin SPIPins[NumSPIDevices][NumSPIPins]; //GPIO pins for softwareSPI (used with SharedSPI)
 
+#define SERIAL_USB_DEVICE serialUSB
+#if CORE_USES_TINYUSB
+# define SERIAL_USB2_DEVICE serialUSB2
+#endif
 #define SERIAL_AUX_DEVICE   UART_Slot0
 #define serialWiFi  UART_Slot1
 #define SERIAL_AUX2_DEVICE  UART_Slot2
 
+#ifdef SERIAL_USB2_DEVICE
+constexpr size_t NumSerialChannels = 4;				// The number of serial IO channels not counting the WiFi serial connection (USB, USB2, and two auxiliary UARTs)
+constexpr size_t FirstAuxChannel = 2;
+#else
 constexpr size_t NumSerialChannels = 3;				// The number of serial IO channels not counting the WiFi serial connection (USB and two auxiliary UARTs)
 constexpr size_t FirstAuxChannel = 1;
+#endif
 constexpr size_t NumAuxChannels = NumSerialChannels - FirstAuxChannel;
+
 constexpr size_t NumberSerialPins = 2;
 extern Pin AuxSerialRxTxPins[NumberSerialPins];
 
@@ -338,7 +348,6 @@ extern Pin AuxSerialRxTxPins[NumberSerialPins];
     extern Pin Aux2SerialRxTxPins[NumberSerialPins];
 #endif
 
-#define SERIAL_USB_DEVICE  serialUSB  //USB
 constexpr Pin UsbVBusPin = NoPin;
 
 #if HAS_WIFI_NETWORKING

@@ -6,13 +6,17 @@
 # include <TinyUsbInterface.h>
 # include <Platform/TaskPriorities.h>
 #endif
-SerialCDC serialUSB;
 
 #if CORE_USES_TINYUSB
 
 constexpr size_t UsbDeviceTaskStackWords = 200;
 static Task<UsbDeviceTaskStackWords> usbDeviceTask;
 
+#endif
+
+SerialCDC serialUSB;
+#ifdef SERIAL_USB2_DEVICE
+SerialCDC serialUSB2(1);
 #endif
 
 
