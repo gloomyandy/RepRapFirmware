@@ -47,7 +47,7 @@ void setup_spi(void *inBuffer, const void *outBuffer, size_t bytesToTransfer)
         disable_spi();
         // Fall through
     case Disabled:
-        spiDevice->configureDevice(SPI_MODE_SLAVE, 8, (uint8_t)SPI_MODE_0, 100000000);
+        spiDevice->configureDevice(SPI_MODE_SLAVE, 8, (uint8_t)SpiMode::mode0, 100000000);
         break;
     case Uninitialised:
         InitSpi();
@@ -69,6 +69,6 @@ void InitSpi() noexcept
 {
     SetPinMode(SbcCsPin, INPUT_PULLUP, false);
     spiDevice = (HardwareSPI *) SPI::getSSPDevice(SbcSpiChannel);
-    spiDevice->configureDevice(SPI_MODE_SLAVE, 8, (uint8_t)SPI_MODE_0, 100000000);
+    spiDevice->configureDevice(SPI_MODE_SLAVE, 8, (uint8_t)SpiMode::mode0, 100000000);
     status = Ready;
 }

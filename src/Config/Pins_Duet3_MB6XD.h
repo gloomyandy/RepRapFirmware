@@ -43,6 +43,7 @@ constexpr uint32_t IAP_IMAGE_START = 0x20458000;		// last 32kb of RAM
 #define SUPPORT_IOBITS			1					// set to support P parameter in G0/G1 commands
 #define SUPPORT_DHT_SENSOR		1					// set nonzero to support DHT temperature/humidity sensors
 #define SUPPORT_BME280			1
+#define SUPPORT_BME68X			1
 #define SUPPORT_ADS131A02		1
 
 #define SUPPORT_ACCELEROMETERS	1
@@ -70,7 +71,8 @@ constexpr size_t MaxPortsPerHeater = 3;
 
 constexpr size_t MaxBedHeaters = 12;
 constexpr size_t MaxChamberHeaters = 8;
-constexpr int8_t DefaultE0Heater = 1;				// Index of the default first extruder heater, used only for the legacy status response
+constexpr size_t MaxHeatersPerBed = 4;
+constexpr size_t MaxHeatersPerChamber = 4;
 
 constexpr size_t NumThermistorInputs = 4;
 constexpr size_t NumTmcDriversSenseChannels = 1;
@@ -95,13 +97,12 @@ constexpr unsigned int MaxTriggers = 32;			// Must be <= 32 because we store a b
 #define SERIAL_AUX2_DEVICE serialUart2
 
 #ifdef SERIAL_USB2_DEVICE
+constexpr size_t NumUsbChannels = 2;
 constexpr size_t NumSerialChannels = 4;				// The number of serial IO channels not counting the WiFi serial connection (USB, USB2, and two auxiliary UARTs)
-constexpr size_t FirstAuxChannel = 2;
 #else
+constexpr size_t NumUsbChannels = 1;
 constexpr size_t NumSerialChannels = 3;				// The number of serial IO channels not counting the WiFi serial connection (USB and two auxiliary UARTs)
-constexpr size_t FirstAuxChannel = 1;
 #endif
-constexpr size_t NumAuxChannels = NumSerialChannels - FirstAuxChannel;
 
 // Shared SPI (USART 1)
 constexpr Pin APIN_USART_SSPI_SCK = PortBPin(13);

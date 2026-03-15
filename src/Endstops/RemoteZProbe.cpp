@@ -58,7 +58,7 @@ int32_t RemoteZProbe::GetRawReading() const noexcept
 {
 	return (type == ZProbeType::scanningAnalog || type == ZProbeType::analog) ? lastValue
 			: (lastValue != 0) ? 1000						// if it's not a scanning probe then it must be digital because we don't yet support analog probes on expansion boards
-				: 0;										// for digital probes the reading sent over CAN (stored in lastValue) is 0xFFFFFFFF or zero.
+				: 0;										// for digital probes the reading sent over CAN (stored in lastValue) is 0xFFFFFFFF (in 3.6.x), 0x7FFFFFF (3.7.x), or zero.
 }
 
 bool RemoteZProbe::SetProbing(bool isProbing) noexcept

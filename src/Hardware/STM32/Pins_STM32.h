@@ -150,8 +150,8 @@ constexpr size_t MaxPortsPerHeater = 3;
 
 constexpr size_t MaxBedHeaters = 12;
 constexpr size_t MaxChamberHeaters = 8;
-constexpr int8_t DefaultBedHeater = 0;
-constexpr int8_t DefaultE0Heater = 1;                // Index of the default first extruder heater, used only for the legacy status response
+constexpr size_t MaxHeatersPerBed = 4;
+constexpr size_t MaxHeatersPerChamber = 4;
 
 constexpr size_t NumThermistorInputs = 9;
 
@@ -177,8 +177,8 @@ constexpr size_t MaxPortsPerHeater = 2;
 
 constexpr size_t MaxBedHeaters = 4;
 constexpr size_t MaxChamberHeaters = 4;
-constexpr int8_t DefaultBedHeater = 0;
-constexpr int8_t DefaultE0Heater = 1;                // Index of the default first extruder heater, used only for the legacy status response
+constexpr size_t MaxHeatersPerBed = 4;
+constexpr size_t MaxHeatersPerChamber = 4;
 
 constexpr size_t NumThermistorInputs = 9;
 
@@ -333,13 +333,12 @@ extern Pin SPIPins[NumSPIDevices][NumSPIPins]; //GPIO pins for softwareSPI (used
 #define SERIAL_AUX2_DEVICE  UART_Slot2
 
 #ifdef SERIAL_USB2_DEVICE
+constexpr size_t NumUsbChannels = 2;
 constexpr size_t NumSerialChannels = 4;				// The number of serial IO channels not counting the WiFi serial connection (USB, USB2, and two auxiliary UARTs)
-constexpr size_t FirstAuxChannel = 2;
 #else
+constexpr size_t NumUsbChannels = 1;
 constexpr size_t NumSerialChannels = 3;				// The number of serial IO channels not counting the WiFi serial connection (USB and two auxiliary UARTs)
-constexpr size_t FirstAuxChannel = 1;
 #endif
-constexpr size_t NumAuxChannels = NumSerialChannels - FirstAuxChannel;
 
 constexpr size_t NumberSerialPins = 2;
 extern Pin AuxSerialRxTxPins[NumberSerialPins];

@@ -43,6 +43,10 @@
 
 #include P_INCLUDE_FILE
 
+// Derive channel counts from platform-specific values
+constexpr size_t FirstAuxChannel = NumUsbChannels;
+constexpr size_t NumAuxChannels = NumSerialChannels - FirstAuxChannel;
+
 // Apply default values to anything not configured
 #ifndef SUPPORT_NONLINEAR_EXTRUSION
 # define SUPPORT_NONLINEAR_EXTRUSION	1		// for now this is always enabled
@@ -94,6 +98,10 @@
 
 #ifndef SUPPORT_BME280
 # define SUPPORT_BME280			0
+#endif
+
+#ifndef SUPPORT_BME68X
+# define SUPPORT_BME68X			0
 #endif
 
 #ifndef SUPPORT_ADS131A02

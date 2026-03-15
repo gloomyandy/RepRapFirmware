@@ -79,7 +79,7 @@ pre(buf->id.MsgType() == CanMessageType::firmwareBlockRequest)
 
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE
 		// Fetch the firmware file from the local SD card or SBC
-		FileStore * const f = reprap.GetPlatform().OpenFile(FIRMWARE_DIRECTORY, fname.c_str(), OpenMode::read);
+		FileStore *_ecv_null const f = reprap.GetPlatform().OpenFile(FIRMWARE_DIRECTORY, fname.c_str(), OpenMode::read);
 		if (f != nullptr)
 		{
 			fileLength = f->Length();
@@ -217,7 +217,7 @@ static void HandleInputStateChanged(const CanMessageInputChangedV1& msg, CanAddr
 
 #if SUPPORT_REMOTE_COMMANDS
 
-static GCodeResult EutGetInfo(const CanMessageReturnInfo& msg, const StringRef& reply, uint8_t& extra)
+static GCodeResult EutGetInfo(const CanMessageReturnInfo& msg, const StringRef& reply, uint8_t& extra) noexcept
 {
 	switch (msg.type)
 	{
@@ -261,7 +261,7 @@ static GCodeResult EutGetInfo(const CanMessageReturnInfo& msg, const StringRef& 
 	return GCodeResult::ok;
 }
 
-static GCodeResult InitiateFirmwareUpdate(const CanMessageUpdateYourFirmware& msg, const StringRef& reply)
+static GCodeResult InitiateFirmwareUpdate(const CanMessageUpdateYourFirmware& msg, const StringRef& reply) noexcept
 {
 	if (msg.boardId != CanInterface::GetCanAddress() || msg.invertedBoardId != (uint8_t)~CanInterface::GetCanAddress() || (msg.module != 0 && msg.module != 3))
 	{
@@ -382,7 +382,7 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				// Check for duplicate and out-of-sequence message
 				// We can get out-of-sequence messages because of a bug in the CAN hardware; so use only the sequence number to detect duplicates
 				{
-					const int8_t seq = buf->msg.moveLinearShaped.seq;
+					const uint8_t seq = buf->msg.moveLinearShaped.seq;
 					if (((seq + 1) & CanMessageMovementLinearShaped::SeqMask) == expectedSeq)
 					{
 						++duplicateMotionMessages;
@@ -671,6 +671,7 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				requestId = CanRequestIdAcceptAlways;
 				reply.printf("Board %u received unknown msg type %u", CanInterface::GetCanAddress(), (unsigned int)buf->id.MsgType());
 				rslt = GCodeResult::error;
+				break;
 			}
 
 			if (requestId != CanRequestIdNoReplyNeeded)				// if a reply is needed

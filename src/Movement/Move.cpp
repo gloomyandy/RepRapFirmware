@@ -1158,7 +1158,7 @@ void Move::SetMotorPosition(size_t drive, int32_t pos, bool clearBacklash) noexc
 	if (dm->IsPhaseStepEnabled())
 	{
 		GetCurrentMotion(drive, now, dm->phaseStepControl.mParams);
-		IterateLocalDrivers(drive, [dm, &currentPhases](uint8_t driver){
+		IterateLocalDrivers(drive, [dm, &currentPhases](uint8_t driver) noexcept -> void {
 			currentPhases[driver] = dm->phaseStepControl.CalculateStepPhase((size_t)driver);
 			dm->phaseStepControl.SetPhaseOffset(driver, 0);
 		});
@@ -1182,7 +1182,7 @@ void Move::SetMotorPosition(size_t drive, int32_t pos, bool clearBacklash) noexc
 	if (dm->IsPhaseStepEnabled())
 	{
 		GetCurrentMotion(drive, now, dm->phaseStepControl.mParams);
-		IterateLocalDrivers(drive, [dm, &currentPhases](uint8_t driver){
+		IterateLocalDrivers(drive, [dm, &currentPhases](uint8_t driver) noexcept -> void {
 			uint16_t newPhase = dm->phaseStepControl.CalculateStepPhase((size_t)driver);
 
 			dm->phaseStepControl.SetPhaseOffset(driver, currentPhases[driver] - newPhase);
@@ -1191,9 +1191,9 @@ void Move::SetMotorPosition(size_t drive, int32_t pos, bool clearBacklash) noexc
 #endif
 }
 
-void Move::SetMotorPositions(LogicalDrivesBitmap drives, const int32_t *positions, bool clearBacklash) noexcept
+void Move::SetMotorPositions(LogicalDrivesBitmap drives, const int32_t *_ecv_array positions, bool clearBacklash) noexcept
 {
-	drives.Iterate([this, positions, clearBacklash](unsigned int drive, unsigned int count) noexcept { SetMotorPosition(drive, positions[drive], clearBacklash); });
+	drives.Iterate([this, positions, clearBacklash](unsigned int drive, unsigned int count) noexcept -> void { SetMotorPosition(drive, positions[drive], clearBacklash); });
 }
 
 void Move::SetLastEndpoints(MovementSystemNumber msNumber, LogicalDrivesBitmap logicalDrives, const int32_t *_ecv_array ep) noexcept
@@ -1297,7 +1297,7 @@ bool Move::WriteAxisLimits(FileStore *f, AxesBitmap axesProbed, const float limi
 
 	String<StringLength100> scratchString;
 	scratchString.printf("M208 S%d", sParam);
-	axesProbed.Iterate([&scratchString, limits](unsigned int axis, unsigned int) noexcept { scratchString.catf(" %c%.2f", reprap.GetGCodes().GetAxisLetters()[axis], (double)limits[axis]); });
+	axesProbed.Iterate([&scratchString, limits](unsigned int axis, unsigned int) noexcept -> void { scratchString.catf(" %c%.2f", reprap.GetGCodes().GetAxisLetters()[axis], (double)limits[axis]); });
 	scratchString.cat('\n');
 	return f->Write(scratchString.c_str());
 }
@@ -1316,7 +1316,7 @@ GCodeResult Move::EutSetRemotePressureAdvance(const CanMessageMultipleDrivesRequ
 	}
 
 	GCodeResult rslt = GCodeResult::ok;
-	drivers.Iterate([this, &msg, &reply, &rslt](unsigned int driver, unsigned int count) noexcept
+	drivers.Iterate([this, &msg, &reply, &rslt](unsigned int driver, unsigned int count) noexcept -> void
 						{
 							if (driver >= NumDirectDrivers)
 							{
@@ -1356,7 +1356,7 @@ void Move::RevertPosition(const CanMessageRevertPosition& msg) noexcept
 	for (size_t driver = 0; driver < numDriversToRevert; ++driver)
 	{
 		int32_t steps = 0;
-		if (msg.whichDrives & (1u << driver))
+		if ((msg.whichDrives & (1u << driver)) !=0)
 		{
 			const int32_t stepsWanted = msg.finalStepCounts[index++];
 			const int32_t stepsTaken = GetLastMoveStepsTaken(driver);
@@ -1507,8 +1507,8 @@ void Move::PrepareScanningProbeDataCollection(const DDA& dda, const PrepParams& 
 		if (dda.flags.useScurve)
 		{
 			// The following is only approximate but should be good enough
-			probeControl.acceleration = (float)((params.peakAcceleration * params.TotalAccelClocks() - (motioncalc_t)0.5 * params.jerk * (msquare(params.phaseClocks[0]) + msquare(params.phaseClocks[2])))/params.TotalAccelClocks());
-			probeControl.deceleration = (float)((params.peakDeceleration * params.TotalDecelClocks() + (motioncalc_t)0.5 * params.jerk * (msquare(params.phaseClocks[4]) + msquare(params.phaseClocks[6])))/params.TotalDecelClocks());
+			probeControl.acceleration = (float)((params.peakAcceleration * params.TotalAccelClocks() - (motioncalc_t)0.5 * params.jerk * (msquare((motioncalc_t)params.phaseClocks[0]) + msquare((motioncalc_t)params.phaseClocks[2])))/params.TotalAccelClocks());
+			probeControl.deceleration = (float)((params.peakDeceleration * params.TotalDecelClocks() + (motioncalc_t)0.5 * params.jerk * (msquare((motioncalc_t)params.phaseClocks[4]) + msquare((motioncalc_t)params.phaseClocks[6])))/params.TotalDecelClocks());
 		}
 		else
 		{
@@ -2254,7 +2254,7 @@ bool Move::GetCurrentMotion(size_t driver, uint32_t when, MotionParameters& mPar
 bool Move::SetStepMode(size_t axisOrExtruder, StepMode mode, const StringRef& reply) noexcept
 {
 	bool hasRemoteDrivers = false;
-	IterateRemoteDrivers(axisOrExtruder, [&hasRemoteDrivers](DriverId driver) { hasRemoteDrivers = true; });
+	IterateRemoteDrivers(axisOrExtruder, [&hasRemoteDrivers](DriverId driver) noexcept -> void { hasRemoteDrivers = true; });
 
 	// Phase stepping does not support remote drivers
 	if (hasRemoteDrivers && mode == StepMode::phase)
@@ -2270,7 +2270,7 @@ bool Move::SetStepMode(size_t axisOrExtruder, StepMode mode, const StringRef& re
 	unsigned int microsteps = GetMicrostepping(axisOrExtruder, interpolation);
 	GetCurrentMotion(axisOrExtruder, now, dm->phaseStepControl.mParams);								// Update position variable
 
-	IterateLocalDrivers(axisOrExtruder, [this, dm, &ret, &mode, axisOrExtruder, microsteps](uint8_t driver) {
+	IterateLocalDrivers(axisOrExtruder, [this, dm, &ret, &mode, axisOrExtruder, microsteps](uint8_t driver) noexcept -> void {
 		// If we are going from step dir to phase step, we need to update the phase offset so the calculated phase matches MSCNT
 		if (!SmartDrivers::IsPhaseSteppingEnabled(driver) && mode == StepMode::phase)
 		{
@@ -2288,7 +2288,7 @@ bool Move::SetStepMode(size_t axisOrExtruder, StepMode mode, const StringRef& re
 		{
 			const uint16_t targetPhase = dm->phaseStepControl.CalculateStepPhase(driver) / 4;
 			uint16_t mscnt = SmartDrivers::GetMicrostepPosition(driver);
-			int16_t steps = ((int16_t)mscnt - (int16_t)targetPhase) / (256 / microsteps);
+			int16_t steps = ((int16_t)mscnt - (int16_t)targetPhase) / (int)(256 / microsteps);
 			if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::PhaseStep))
 			{
 				debugPrintf("dms[%u]: mscnt=%u, targetPhase=%u, steps=%d", axisOrExtruder, mscnt, targetPhase, steps);
@@ -2304,7 +2304,7 @@ bool Move::SetStepMode(size_t axisOrExtruder, StepMode mode, const StringRef& re
 				digitalWrite(DIRECTION_PINS[driver], true);
 			}
 
-			steps = abs(steps);
+			steps = (int16_t)abs((int)steps);
 
 			while (steps > 0)
 			{
@@ -2361,7 +2361,7 @@ void Move::PhaseStepControlLoop() noexcept
 	flags.Clear();
 
 	{
-		const DriveMovement *dm = phaseStepDMs;
+		const DriveMovement *_ecv_null dm = phaseStepDMs;
 		while (dm != nullptr)
 		{
 			if (dm->state > DMState::starting)
@@ -2378,10 +2378,10 @@ void Move::PhaseStepControlLoop() noexcept
 	}
 
 	bool inserted = false;
-	DriveMovement **dmp = &phaseStepDMs;
+	DriveMovement *_ecv_null *dmp = &phaseStepDMs;
 	while (*dmp != nullptr)
 	{
-		DriveMovement * const dm = *dmp;
+		DriveMovement * const dm = _ecv_not_null(*dmp);
 		GetCurrentMotion(dm->drive, now, dm->phaseStepControl.mParams);
 
 		if (dm->state != DMState::phaseStepping)
@@ -2400,7 +2400,7 @@ void Move::PhaseStepControlLoop() noexcept
 		{
 			dm->phaseStepControl.CalculateCurrentFraction();
 
-			IterateLocalDrivers(dm->drive, [dm](uint8_t driver) {
+			IterateLocalDrivers(dm->drive, [dm](uint8_t driver) noexcept -> void {
 				if ((dm->driversCurrentlyUsed & StepPins::CalcDriverBitmap(driver)) == 0)
 				{
 					if (likely(dm->state > DMState::starting))
@@ -2533,7 +2533,7 @@ void Move::DeactivateDM(DriveMovement *dmToRemove) noexcept
 #endif
 	while (*dmp != nullptr)
 	{
-		DriveMovement * const dm = *dmp;
+		DriveMovement * const dm = _ecv_not_null(*dmp);
 		if (dm == dmToRemove)
 		{
 			(*dmp) = dm->nextDM;
@@ -2922,8 +2922,8 @@ bool Move::StopAxisOrExtruder(bool executingMove, size_t logicalDrive) noexcept
 	if (wasMoving)
 	{
 		IterateDrivers(logicalDrive,
-						[](uint8_t)->void { },						// no action if the driver is local
-						[executingMove, netStepsTaken, &wakeAsyncSender](DriverId did)->void
+						[](uint8_t) noexcept -> void { },						// no action if the driver is local
+						[executingMove, netStepsTaken, &wakeAsyncSender](DriverId did) noexcept -> void
 							{
 								if (executingMove)
 								{
@@ -3188,9 +3188,9 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 		if (gb.Seen(reprap.GetGCodes().GetAxisLetters()[axis]))
 		{
 			IterateDrivers(axis,
-							[&drivers](uint8_t localDriver){ drivers.SetBit(localDriver); }
+							[&drivers](uint8_t localDriver) noexcept -> void { drivers.SetBit(localDriver); }
 # if SUPPORT_CAN_EXPANSION
-						  , [&canDrivers](DriverId driver){ canDrivers.AddEntry(driver); }
+						  , [&canDrivers](DriverId driver) noexcept -> void { canDrivers.AddEntry(driver); }
 # endif
 						  );
 		}
@@ -3236,7 +3236,7 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 #endif
 		   ))
 		{
-			drivers.Iterate([sgThreshold](unsigned int drive, unsigned int) noexcept { SmartDrivers::SetStallThreshold(drive, sgThreshold); });
+			drivers.Iterate([sgThreshold](unsigned int drive, unsigned int) noexcept -> void { SmartDrivers::SetStallThreshold(drive, sgThreshold); });
 		}
 	}
 
@@ -3245,7 +3245,7 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 		bool sgFilter;
 		if (gb.TryGetBValue('F', sgFilter, seen))
 		{
-			drivers.Iterate([sgFilter](unsigned int drive, unsigned int) noexcept { SmartDrivers::SetStallFilter(drive, sgFilter); });
+			drivers.Iterate([sgFilter](unsigned int drive, unsigned int) noexcept -> void { SmartDrivers::SetStallFilter(drive, sgFilter); });
 		}
 	}
 
@@ -3254,7 +3254,7 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 	{
 		seen = true;
 		const unsigned int stepsPerSecond = gb.GetUIValue();
-		drivers.Iterate([stepsPerSecond](unsigned int drive, unsigned int) noexcept { SmartDrivers::SetStallMinimumStepsPerSecond(drive, stepsPerSecond); });
+		drivers.Iterate([stepsPerSecond](unsigned int drive, unsigned int) noexcept -> void { SmartDrivers::SetStallMinimumStepsPerSecond(drive, stepsPerSecond); });
 	}
 
 	// Check for coolconf parameter
@@ -3262,7 +3262,7 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 		uint32_t coolStepConfig;
 		if (gb.TryGetLimitedUIValue('T', coolStepConfig, seen, 1u << 16))
 		{
-			drivers.Iterate([coolStepConfig](unsigned int drive, unsigned int) noexcept { SmartDrivers::SetRegister(drive, SmartDriverRegister::coolStep, coolStepConfig); } );
+			drivers.Iterate([coolStepConfig](unsigned int drive, unsigned int) noexcept -> void { SmartDrivers::SetRegister(drive, SmartDriverRegister::coolStep, coolStepConfig); } );
 		}
 	}
 
@@ -3270,24 +3270,26 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 	{
 		uint32_t action;
 		if (gb.TryGetLimitedUIValue('R', action, seen, 4))
-		switch (action)
 		{
-		case 0:
-		default:
-			logOnStallDrivers &= ~drivers;
-			eventOnStallDrivers &= ~drivers;
-			break;
+			switch (action)
+			{
+			case 0:
+			default:
+				logOnStallDrivers &= ~drivers;
+				eventOnStallDrivers &= ~drivers;
+				break;
 
-		case 1:
-			eventOnStallDrivers &= ~drivers;
-			logOnStallDrivers |= drivers;
-			break;
+			case 1:
+				eventOnStallDrivers &= ~drivers;
+				logOnStallDrivers |= drivers;
+				break;
 
-		case 2:
-		case 3:
-			logOnStallDrivers &= ~drivers;
-			eventOnStallDrivers |= drivers;
-			break;
+			case 2:
+			case 3:
+				logOnStallDrivers &= ~drivers;
+				eventOnStallDrivers |= drivers;
+				break;
+			}
 		}
 	}
 
@@ -3330,7 +3332,7 @@ GCodeResult Move::ConfigureStallDetection(GCodeBuffer& gb, const StringRef& repl
 	}
 
 	drivers.Iterate
-		([buf, this, &reply](unsigned int drive, unsigned int) noexcept
+		([buf, this, &reply](unsigned int drive, unsigned int) noexcept -> void
 			{
 #  if SUPPORT_CAN_EXPANSION
 				buf->lcatf("Driver 0.%u: ", drive);
@@ -3589,7 +3591,7 @@ void Move::PollOneDriver(size_t driver) noexcept
 	if (currentBrakePwm[driver] != 0.0 && reprap.GetPlatform().GetVinVoltage() > 10.0)
 	{
 		const float newBrakePwm = min<float>(brakeVoltages[driver]/reprap.GetPlatform().GetVinVoltage(), 1.0);
-		if (fabsf(newBrakePwm - currentBrakePwm[driver] >= 0.05))
+		if (fabsf(newBrakePwm - currentBrakePwm[driver]) >= 0.05)
 		{
 			brakePorts[driver].WriteAnalog(newBrakePwm);
 			currentBrakePwm[driver] = newBrakePwm;
@@ -3670,11 +3672,11 @@ void Move::OnEndstopOrZProbeStatesChanged() noexcept
 GCodeResult Move::UpdateRemoteStepsPerMmAndMicrostepping(AxesBitmap axesAndExtruders, const StringRef& reply) noexcept
 {
 	CanDriversData<StepsPerUnitAndMicrostepping> data;
-	axesAndExtruders.Iterate([this, &data](unsigned int axisOrExtruder, unsigned int count) noexcept
+	axesAndExtruders.Iterate([this, &data](unsigned int axisOrExtruder, unsigned int count) noexcept -> void
 								{
 									const StepsPerUnitAndMicrostepping driverData(DriveStepsPerMm(axisOrExtruder), GetRawMicrostepping(axisOrExtruder));
 									this->IterateRemoteDrivers(axisOrExtruder,
-																[&data, &driverData](DriverId driver) noexcept
+																[&data, &driverData](DriverId driver) noexcept -> void
 																{
 																	data.AddEntry(driver, driverData);
 																}
@@ -3690,7 +3692,7 @@ GCodeResult Move::UpdateRemoteStepsPerMmAndMicrostepping(AxesBitmap axesAndExtru
 
 // Get and lock the aux move buffer. If successful, return a pointer to the buffer.
 // The caller must not attempt to lock the aux buffer more than once, and must call ReleaseAuxMove to release the buffer.
-AsyncMove *Move::LockAuxMove() noexcept
+AsyncMove *_ecv_null Move::LockAuxMove() noexcept
 {
 	AtomicCriticalSectionLocker lock;
 	if (!auxMoveLocked && !auxMoveAvailable)

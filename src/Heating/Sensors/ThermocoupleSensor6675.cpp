@@ -30,7 +30,7 @@ const uint32_t MAX6675_Frequency = 4000000;	// maximum for MAX6675 is 5MHz
 // If the inactive state of SCL is LOW (CPOL = 0) (in the case of the MAX6675, this is sampled on the falling edge of CS):
 // The MAX6675 sets up the first data bit after the falling edge of CLK, and changes the data on each falling clock edge.
 // So the SAM needs to sample data on the rising clock edge. This requires NCPHA = 1.
-const SpiMode MAX6675_SpiMode = SPI_MODE_0;
+const SpiMode MAX6675_SpiMode = SpiMode::mode0;
 
 // Define the minimum interval between readings
 const uint32_t MinimumReadInterval = 250;		// minimum interval between reads, in milliseconds

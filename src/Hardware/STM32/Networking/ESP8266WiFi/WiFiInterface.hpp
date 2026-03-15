@@ -80,6 +80,6 @@ void WiFiInterface::SetupSpi() noexcept
 {
     AttachPinInterrupt(SamCsPin, SpiCSInterrupt, InterruptMode::rising, CallbackParameter(nullptr));
     spiDevice = (HardwareSPI *) SPI::getSSPDevice(WiFiSpiChannel);
-    spiDevice->configureDevice(SPI_MODE_SLAVE, 8, (uint8_t)SPI_MODE_1, 100000000);
+    spiDevice->configureDevice(SPI_MODE_SLAVE, 8, (uint8_t)SpiMode::mode1, 100000000);
 }
     
