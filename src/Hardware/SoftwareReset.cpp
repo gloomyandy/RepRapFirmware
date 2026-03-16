@@ -11,7 +11,7 @@
 #include <Platform/Platform.h>
 #include <General/Portability.h>
 
-extern uint32_t _estack;			// defined in the linker script
+extern uint8_t _estack;			// defined in the linker script
 
 // The following must be kept in line with enum class SoftwareResetReason
 const char *_ecv_array const SoftwareResetData::ReasonText[] =
@@ -103,7 +103,7 @@ void SoftwareResetData::Populate(uint16_t reason, const uint32_t *_ecv_array _ec
 				stk += 18;				// skip the FP registers
 			}
 #endif
-			stack[i] = (stk < &_estack) ? *stk++ : 0xFFFFFFFFu;
+			stack[i] = ((uint8_t *)stk < &_estack) ? *stk++ : 0xFFFFFFFFu;
 		}
 	}
 }

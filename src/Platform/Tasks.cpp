@@ -68,7 +68,7 @@ constexpr unsigned int MainTaskStackWords = max<unsigned int>(1860, (MaxAxes * M
 #else
 // On other processors we use matrices of floats when doing auto calibration
 // Increase minimum stack words to 1370 for WPA Enterprise support (now 1430 after increasing GCodeReplyLength)
-constexpr unsigned int MainTaskStackWords = max<unsigned int>(1430, (MaxAxes * MaxAxes * 2) + 610);
+constexpr unsigned int MainTaskStackWords = max<unsigned int>(4000, (MaxAxes * MaxAxes * 2) + 610);
 #endif
 
 static TASKMEM Task<MainTaskStackWords> mainTask;

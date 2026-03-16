@@ -14,7 +14,7 @@
 
 constexpr uint32_t DefaultSharedSpiClockFrequency = 2000000;
 constexpr uint32_t SpiTimeout = 10000;
-static const char *names[] = { "SPI0", "SPI1", "SPI2", "SPI3", "SPI4", "SPI5" 
+static const char *names[NumSPIDevices] = { "SPI0", "SPI1", "SPI2", "SPI3", "SPI4", "SPI5" 
 #if STM32H7
 								"SPI6", "SPI7", "SPI8"
 #endif

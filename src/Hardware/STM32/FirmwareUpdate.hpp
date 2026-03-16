@@ -3,7 +3,7 @@
     moving firmware.bin to / and rebooting.
 */
 
-extern uint32_t _estack;			// defined in the linker script
+extern uint8_t _estack;			// defined in the linker script
 static constexpr size_t BootloaderFlashStart = 0x8000000;
 
 

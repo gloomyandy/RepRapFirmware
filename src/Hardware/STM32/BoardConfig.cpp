@@ -704,6 +704,7 @@ CanAddress BoardConfig::GetSavedCanExpansionAddress() noexcept
 
 void BoardConfig::Init() noexcept
 {
+    NVIC_SetPriorityGrouping(0);
     SSPChannel sdChannel = SSPNONE;
 	String<100> reply;
 #if !HAS_MASS_STORAGE
@@ -1171,16 +1172,16 @@ void BoardConfig::PrintValue(MessageType mtype, configValueType configType, void
 
 
 extern "C" uint32_t USBReadOverrun;
-extern uint32_t _sdata;
-extern uint32_t _estack;
+extern uint8_t _sdata;
+extern uint8_t _estack;
 #if STM32F4
-extern uint32_t _sccmram;
-extern uint32_t _ccmramend;
+extern uint8_t _sccmram;
+extern uint8_t _ccmramend;
 #elif STM32H7
-extern uint32_t _nocache_ram_start;
-extern uint32_t _nocache_ram_end;
-extern uint32_t _nocache2_ram_start;
-extern uint32_t _nocache2_ram_end;
+extern uint8_t _nocache_ram_start;
+extern uint8_t _nocache_ram_end;
+extern uint8_t _nocache2_ram_start;
+extern uint8_t _nocache2_ram_end;
 #endif
 
 //Information printed by M122 P200
