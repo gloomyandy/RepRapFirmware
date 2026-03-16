@@ -71,7 +71,7 @@ $(info - Linker Script used: $(LINKER_SCRIPT))
 
 
 #Flags common for Core in c and c++
-FLAGS  = -D__$(PROCESSOR)__ -D_XOPEN_SOURCE -DSTM32 -DSTM32H7 -D$(VARIANT)xx -DSTM32H7xx
+FLAGS  = -flto=auto -D__$(PROCESSOR)__ -D_XOPEN_SOURCE -DSTM32 -DSTM32H7 -D$(VARIANT)xx -DSTM32H7xx
 
 # UART configuration
 FLAGS  += -DHAVE_HWSERIAL1 -DHAVE_HWSERIAL2 -DHAVE_HWSERIAL3 -DHAVE_HWSERIAL4 -DHAVE_HWSERIAL5 -DHAVE_HWSERIAL6 -DUSB_CDC_USE_DTR
@@ -146,23 +146,13 @@ all: firmware
 
 firmware:  $(BUILD_DIR)/$(OUTPUT_NAME).elf
 
-coreSTM: $(BUILD_DIR)/core.a
-
-$(BUILD_DIR)/libSTMCore.a: $(CORE_OBJS) $(TINYUSB_OBJS)
-	$(V)$(AR) rcs $@ $(CORE_OBJS) $(TINYUSB_OBJS)
-	@echo "\nBuilt STMCore\n"
-	
-$(BUILD_DIR)/libRRFLibraries.a: $(RRFLIBRARIES_OBJS)
-	$(V)$(AR) rcs $@ $(RRFLIBRARIES_OBJS)
-	@echo "\nBuilt RRF Libraries\n"
-
 #$(BUILD_DIR)/$(OUTPUT_NAME).elf: $(BUILD_DIR)/src/CoreMain.o $(BUILD_DIR)/libSTMCore.a $(BUILD_DIR)/libRRFLibraries.a $(RRFLIBC_OBJS)
 #	$(V)$(LD) -L$(BUILD_DIR)/ -L$(CORE_DIR)/variants/BIGTREE_SKR_PRO_1v1/ -L$(CORE_DIR)/CMSIS/CMSIS/DSP/Lib/GCC --specs=nano.specs -Os -Wl,--warn-section-align -Wl,--fatal-warnings -fmerge-all-constants -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m4 -mthumb -T$(LINKER_SCRIPT) -Wl,-Map,$(BUILD_DIR)/$(OUTPUT_NAME).map -o $(BUILD_DIR)/$(OUTPUT_NAME).elf -Wl,--cref -Wl,--check-sections -Wl,--gc-sections,--relax -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-section-align -Wl,--warn-unresolved-symbols -Wl,--defsym=LD_MAX_SIZE=1048576 -Wl,--defsym=LD_MAX_DATA_SIZE=196608 -Wl,--defsym=LD_FLASH_OFFSET=0x0 -Wl,--start-group $(BUILD_DIR)/src/CoreMain.o -lSTMCore -lRRFLibraries -larm_cortexM4l_math -lc -lm -lgcc -lstdc++ -Wl,--end-group
 
-$(BUILD_DIR)/$(OUTPUT_NAME).elf: $(BUILD_DIR)/libSTMCore.a $(BUILD_DIR)/libRRFLibraries.a $(CANLIB_OBJS) $(RRFLIBC_OBJS) $(RRF_OBJS)
+$(BUILD_DIR)/$(OUTPUT_NAME).elf: $(CORE_OBJS) $(RRFLIBRARIES_OBJS) $(CANLIB_OBJS) $(RRFLIBC_OBJS) $(RRF_OBJS) $(TINYUSB_OBJS)
 	@echo "\nCreating $(OUTPUT_NAME).bin"
 	$(V)$(MKDIR) $(dir $@)
-	$(V)$(LD) -L$(BUILD_DIR)/ --specs=nosys.specs -Xlinker -z -Xlinker muldefs -Os -Wl,--fatal-warnings -fmerge-all-constants -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mfp16-format=ieee -mcpu=cortex-m7 -mthumb -fno-math-errno -T$(LINKER_SCRIPT) -Wl,-Map,$(BUILD_DIR)/$(OUTPUT_NAME).map -o $(BUILD_DIR)/$(OUTPUT_NAME).elf -Wl,--cref -Wl,--check-sections -Wl,--gc-sections,--relax -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-unresolved-symbols -Wl,--no-warn-rwx-segment -Wl,--defsym=LD_MAX_SIZE=2097152 -Wl,--defsym=LD_MAX_DATA_SIZE=524288 -Wl,--defsym=LD_FLASH_OFFSET=0x0 -Wl,--start-group $(RRFLIBC_OBJS) -lSTMCore $(RRF_OBJS) $(CANLIB_OBJS) -lRRFLibraries -lc -lm -lgcc -lstdc++ -Wl,--end-group
+	$(V)$(LD) -L$(BUILD_DIR)/ -flto=auto --specs=nosys.specs -Xlinker -z -Xlinker muldefs -Os -Wl,--fatal-warnings -fmerge-all-constants -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mfp16-format=ieee -mcpu=cortex-m7 -mthumb -fno-math-errno -T$(LINKER_SCRIPT) -Wl,-Map,$(BUILD_DIR)/$(OUTPUT_NAME).map -o $(BUILD_DIR)/$(OUTPUT_NAME).elf -Wl,--cref -Wl,--check-sections -Wl,--gc-sections,--relax -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-unresolved-symbols -Wl,--no-warn-rwx-segment -Wl,--defsym=LD_MAX_SIZE=2097152 -Wl,--defsym=LD_MAX_DATA_SIZE=524288 -Wl,--defsym=LD_FLASH_OFFSET=0x0 -Wl,--start-group $(RRFLIBC_OBJS) $(CORE_OBJS) $(TINYUSB_OBJS) $(RRF_OBJS) $(CANLIB_OBJS) $(RRFLIBRARIES_OBJS) -lc -lm -lgcc -lstdc++ -Wl,--end-group
 	$(V)$(OBJCOPY) --strip-unneeded -O binary $(BUILD_DIR)/$(OUTPUT_NAME).elf $(BUILD_DIR)/$(OUTPUT_NAME).bin
 	$(V)$(SIZE) $(BUILD_DIR)/$(OUTPUT_NAME).elf
 	-@$(MAKE_DIR)/staticMemStats.sh $(BUILD_DIR)/$(OUTPUT_NAME)
