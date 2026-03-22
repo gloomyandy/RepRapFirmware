@@ -15,7 +15,7 @@
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <RTOSIface/RTOSIface.h>
 #include <Platform/TaskPriorities.h>
-#include <Hardware/Spi/SharedSpiDevice.h>
+#include <SPI/SharedSpiDevice.h>
 #include <AppNotifyIndices.h>
 
 #if SUPPORT_CAN_EXPANSION
@@ -320,9 +320,9 @@ GCodeResult Accelerometers::ConfigureAccelerometer(GCodeBuffer& gb, const String
 			reply.copy("Accelerometer SPI channel has not been configured");
 			return GCodeResult::error;
 		}
-		auto temp = new LISAccelerometer(SharedSpiDevice::GetSharedSpiDevice(AccelerometerSpiChannel), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin());
+		auto temp = new LISAccelerometer(Platform::GetSharedSpiDevice(AccelerometerSpiChannel), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin());
 #else
-		auto temp = new LISAccelerometer(SharedSpiDevice::GetMainSharedSpiDevice(), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin());
+		auto temp = new LISAccelerometer(Platform::GetSharedSpiDevice(), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin());
 #endif
 		if (temp->CheckPresent())
 		{

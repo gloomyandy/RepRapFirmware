@@ -9,15 +9,16 @@
 
 #if SUPPORT_SPI_SENSORS
 
+#include <Platform/Platform.h>
 #include <Platform/Tasks.h>
-#include <Hardware/Spi/SharedSpiDevice.h>
+#include <SPI/SharedSpiDevice.h>
 
 SpiTemperatureSensor::SpiTemperatureSensor(unsigned int sensorNum, const char *_ecv_array name, SpiMode spiMode, uint32_t clockFrequency) noexcept
 	: SensorWithPort(sensorNum, name), 
 #if STM32
-	device(SharedSpiDevice::GetSharedSpiDevice(TempSensorSSPChannel),
+	device(Platform::GetSharedSpiDevice(TempSensorSSPChannel),
 #else
-	device(SharedSpiDevice::GetMainSharedSpiDevice(),
+	device(Platform::GetSharedSpiDevice(),
 #endif
 	 clockFrequency, spiMode, NoPin, false)
 {

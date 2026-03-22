@@ -490,7 +490,10 @@ static void ConfigureGPIOPins() noexcept
 
 static void ConfigureSPIPins(SSPChannel dev, Pin clk, Pin miso, Pin mosi) noexcept
 {
-    SPI::getSSPDevice(dev)->initPins(clk, miso, mosi, NvicPrioritySpi);
+    SPI::getSPIDevice(dev)->initPins(clk, miso, mosi, NvicPrioritySpi);
+    SpiParameters params;
+    params.instanceNumber = dev;
+    Platform::SetSharedSpiDevice(dev, *(new SharedSpiDevice(params)));
 }
 
 static void ConfigureDriveType() noexcept
@@ -630,7 +633,7 @@ static bool TryConfig(uint32_t config, bool mount) noexcept
         return true;
     // mount failed, reset the hardware
     if (conf->device != SSPSDIO)
-        ((HardwareSPI *)(SPI::getSSPDevice(conf->device)))->disable();
+        ((HardwareSPI *)(SPI::getSPIDevice(conf->device)))->disable();
     for (size_t i = 0; i < ARRAY_SIZE(conf->pins); i++)
         SetPinMode(conf->pins[i], INPUT, false);    
     sd_mmc_setSSPChannel(0, SSPNONE, NoPin);

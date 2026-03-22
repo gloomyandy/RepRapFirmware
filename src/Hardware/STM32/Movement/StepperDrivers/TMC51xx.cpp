@@ -15,8 +15,8 @@
 #include <Platform/Platform.h>
 #include <Platform/RepRap.h>
 #include <Movement/Move.h>
-#include <Hardware/Spi/SharedSpiDevice.h>
-#include <Hardware/Spi/SharedSpiClient.h>
+#include <SharedSpiDevice.h>
+#include <SharedSpiClient.h>
 #include <Platform/TaskPriorities.h>
 #include <General/Portability.h>
 #include <AppNotifyIndices.h>
@@ -1686,7 +1686,7 @@ void Tmc51xxDriver::Init(size_t numDrivers) noexcept
 	}
 	if (!tmcTask.IsRunning())
 	{
-		spiDevice = new SharedSpiClient(SharedSpiDevice::GetSharedSpiDevice(SmartDriversSpiChannel), DefaultDriversSpiClockFrequency, SpiMode::mode3, NoPin, false);
+		spiDevice = new SharedSpiClient(Platform::GetSharedSpiDevice(SmartDriversSpiChannel), DefaultDriversSpiClockFrequency, SpiMode::mode3, NoPin, false);
 		tmcTask.Create(TmcLoop, "TMC51xx", nullptr, TaskPriority::TmcPriority);
 	}
 	driversState = DriversState::powerWait;

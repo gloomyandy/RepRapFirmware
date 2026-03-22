@@ -9,7 +9,7 @@
 
 
 #include "SDCard.h"
-#include "Hardware/Spi/SharedSpiClient.h"
+#include "SharedSpiClient.h"
 class SDCardSPI : public SDCard {
 public:
     ~SDCardSPI() noexcept {};

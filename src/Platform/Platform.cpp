@@ -39,7 +39,7 @@
 #include "Logger.h"
 #include "Tasks.h"
 #include <Cache.h>
-#include <Hardware/Spi/SharedSpiDevice.h>
+#include <SPI/SharedSpiDevice.h>
 #include <Math/Isqrt.h>
 #include <Hardware/I2C.h>
 #include <Hardware/NonVolatileMemory.h>
@@ -346,6 +346,11 @@ bool Platform::deliberateError = false;						// true if we deliberately caused a
 String<StringLength256> Platform::genericDebugBuffer;
 bool Platform::hasGenericDebug = false;
 bool Platform::shouldTurnOffHeaters = false;
+#if STM32
+SharedSpiDevice *_ecv_null Platform::SharedSpiDevices[NumSPIDevices];
+#else
+SharedSpiDevice *_ecv_null Platform::mainSharedSpiDevice = nullptr;
+#endif
 
 Platform::Platform() noexcept :
 #if HAS_MASS_STORAGE
@@ -482,20 +487,24 @@ void Platform::Init() noexcept
 	commsParams[FirstAuxChannel + 1] = 0;
 #endif
 
-#ifdef DUET3_MB6XD
-	SetPinMode(ModbusTxPin, OUTPUT_LOW);		// turn off the RS485 transmitter
-#endif
-#ifdef DUET3_MB6HC
+	// Turn off the RS485 transmitter
+#if defined(DUET3_MB6XD)
+	SetPinMode(ModbusTxPin, OUTPUT_LOW);
+#elif defined(DUET3_MB6HC)
 	if (board == BoardType::Duet3_6HC_v102c)
 	{
-		SetPinMode(ModbusTxPin, OUTPUT_LOW);	// turn off the RS485 transmitter
+		SetPinMode(ModbusTxPin, OUTPUT_LOW);
 	}
 #endif
 
 	// Initialise the IO port subsystem
 	IoPort::Init();
+#if STM32
+	// We initialise the Shared SPI devices in BoardConfig.cpp
+#else
 	// Shared SPI subsystem
-	SharedSpiDevice::Init();
+	mainSharedSpiDevice = new SharedSpiDevice(SharedSpiParams);
+#endif
 
 	// File management and SD card interfaces
 	for (size_t i = 0; i < NumSdCards; ++i)
@@ -600,10 +609,11 @@ void Platform::Init() noexcept
 #endif
 
 	// If MISO from a MAX31856 board breaks after initialising the MAX31856 then if MISO floats low and reads as all zeros, this looks like a temperature of 0C and no error.
-	// Enable the pullup resistor, with luck this will make it float high instead.
+	// Enable the pullup resistor, this makes it float high instead.
 #if SAME5x || STM32
+	// nothing to do here
 #else
-	SetPinMode(APIN_USART_SSPI_MISO, INPUT_PULLUP, false);
+	SetPinMode(SharedSpiParams.misoPin, INPUT_PULLUP, false);
 #endif
 
 #ifdef PCCB
@@ -771,7 +781,7 @@ void Platform::Exit() noexcept
 	active = false;
 
 	// Close down USB and serial ports and release output buffers
-	for (UsbDevice& dev : usbDevices)
+	for (UsbDeviceRrf& dev : usbDevices)
 	{
 		dev.Shutdown();
 	}
@@ -822,7 +832,7 @@ bool Platform::FlushMessages() noexcept
 
 	// Write non-blocking data to USB lines
 	bool usbHasMore = false;
-	for (UsbDevice& port : usbDevices)
+	for (UsbDeviceRrf& port : usbDevices)
 	{
 		if (port.Flush())
 		{
@@ -3793,7 +3803,7 @@ void Platform::SetBoardType() noexcept
 	driverPowerOffAdcReading = PowerVoltageToAdcReading(9.5);
 #elif defined(DUET3_MB6XD)
 	board = GetMB6XDBoardType();
-#elif defined(FMDC_V02) || defined(FMDC_V03)
+#elif defined(FMDC_V03)
 	board = BoardType::FMDC;
 #elif defined(DUET_NG)
 	// Get ready to test whether the Ethernet module is present, so that we avoid additional delays
@@ -3858,7 +3868,7 @@ const char *_ecv_array Platform::GetElectronicsString() const noexcept
 	case BoardType::Duet3_6XD_v100:			return "Duet 3 " BOARD_SHORT_NAME " v1.0";
 	case BoardType::Duet3_6XD_v101:			return "Duet 3 " BOARD_SHORT_NAME " v1.01";
 	case BoardType::Duet3_6XD_v102:			return "Duet 3 " BOARD_SHORT_NAME " v1.02 or later";
-#elif defined(FMDC_V02) || defined(FMDC_V03)
+#elif defined(FMDC_V03)
 	case BoardType::FMDC:					return "Duet 3 " BOARD_SHORT_NAME;
 #elif defined(DUET_NG)
 	// This is the string that the Duet 2 ATE uses to identify the board. The version number must be at the end.
@@ -3902,7 +3912,7 @@ const char *_ecv_array Platform::GetBoardString() const noexcept
 	case BoardType::Duet3_6XD_v100:			return "duet3mb6xd100";
 	case BoardType::Duet3_6XD_v101:			return "duet3mb6xd101";
 	case BoardType::Duet3_6XD_v102:			return "duet3mb6xd102";
-#elif defined(FMDC_V02) || defined(FMDC_V03)
+#elif defined(FMDC_V03)
 	case BoardType::FMDC:					return "fmdc";
 #elif defined(DUET_NG)
 	case BoardType::DuetWiFi_10:			return "duetwifi10";

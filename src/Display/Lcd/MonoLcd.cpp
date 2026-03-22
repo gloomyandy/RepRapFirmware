@@ -6,16 +6,17 @@
  */
 
 #include "MonoLcd.h"
-#include <Hardware/Spi/SharedSpiDevice.h>
+#include <SPI/SharedSpiDevice.h>
+#include <Platform/Platform.h>
 
 #if SUPPORT_12864_LCD
 
 MonoLcd::MonoLcd(PixelNumber nr, PixelNumber nc, const LcdFont * const fnts[], size_t nFonts, SpiMode mode) noexcept
 	: Lcd(nr, nc, fnts, nFonts),
 #if STM32
- 	device(SharedSpiDevice::GetSharedSpiDevice(LcdSpiChannel), LcdSpiClockFrequency, mode, NoPin, true)
+ 	device(Platform::GetSharedSpiDevice(LcdSpiChannel), LcdSpiClockFrequency, mode, NoPin, true)
 #else
- 	device(SharedSpiDevice::GetMainSharedSpiDevice(), LcdSpiClockFrequency, mode, NoPin, true)
+ 	device(Platform::GetSharedSpiDevice(), LcdSpiClockFrequency, mode, NoPin, true)
 #endif
 {
 	imageSize = nr * ((nc + 7)/8);

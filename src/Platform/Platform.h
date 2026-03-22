@@ -27,6 +27,7 @@ Licence: GPL
 #include <RepRapFirmware.h>
 #include <ObjectModel/ObjectModel.h>
 #include <Hardware/IoPorts.h>
+#include <SPI/SharedSpiDevice.h>
 #include <Fans/FansManager.h>
 
 #include <TemperatureError.h>
@@ -41,7 +42,7 @@ Licence: GPL
 #include <GPIO/GpInPort.h>
 #include <GPIO/GpOutPort.h>
 #include <Comms/AuxDevice.h>
-#include <Comms/UsbDevice.h>
+#include <Comms/UsbDeviceRrf.h>
 #include <General/IPAddress.h>
 #include <General/function_ref.h>
 
@@ -126,7 +127,7 @@ enum class BoardType : uint8_t
 	Duet3_6XD_v100 = 2,
 	Duet3_6XD_v101 = 3,
 	Duet3_6XD_v102 = 4,
-#elif defined(FMDC_V02) || defined(FMDC_V03)
+#elif defined(FMDC_V03)
 	FMDC,
 #elif defined(DUET_NG)
 	DuetWiFi_10 = 1,
@@ -248,6 +249,12 @@ public:
 
 	void Diagnostics(unsigned int part, const StringRef& reply) noexcept;
 	static constexpr unsigned int NumPlatformDiagnosticParts = 7;
+#if STM32
+	static SharedSpiDevice& GetSharedSpiDevice(SSPChannel chan) noexcept { return *_ecv_not_null(SharedSpiDevices[chan]); }
+	static void SetSharedSpiDevice(SSPChannel chan, SharedSpiDevice& device) { SharedSpiDevices[chan] = &device; }
+#else
+	static SharedSpiDevice& GetSharedSpiDevice() noexcept { return *_ecv_not_null(mainSharedSpiDevice); }
+#endif
 
 	GCodeResult DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, OutputBuffer *_ecv_null & buf, unsigned int d) THROWS(GCodeException);
 	static const char *_ecv_array GetResetReasonText() noexcept;
@@ -529,6 +536,12 @@ protected:
 	DECLARE_OBJECT_MODEL_WITH_ARRAYS
 
 private:
+#if STM32
+	static SharedSpiDevice *_ecv_null SharedSpiDevices[NumSPIDevices];
+#else
+	static SharedSpiDevice *_ecv_null mainSharedSpiDevice;
+#endif
+
 	void RawMessage(const GCodeBuffer *_ecv_null gb, MessageType type, const char *_ecv_array message) noexcept;	// called by Message after handling error/warning flags
 	float GetCpuTemperature() const noexcept;
 	GCodeResult PrintTestReport(GCodeBuffer& gb, const StringRef& reply, OutputBuffer *_ecv_null & buf) const THROWS(GCodeException);
@@ -620,7 +633,7 @@ private:
   	// Serial/USB
 	uint8_t commsParams[NumSerialChannels];							// the M575 S parameter for each serial channel
 	AuxMode GetChannelMode(size_t chan) const noexcept;
-	UsbDevice usbDevices[NumUsbChannels];
+	UsbDeviceRrf usbDevices[NumUsbChannels];
 
 #if HAS_AUX_DEVICES
 	AuxDevice auxDevices[NumAuxChannels];

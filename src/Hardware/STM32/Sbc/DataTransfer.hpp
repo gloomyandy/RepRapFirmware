@@ -1,7 +1,7 @@
 //Author: sdavi
 
 //SBC connected to SSP0
-#include "Hardware/Spi/SpiMode.h"
+#include "SpiMode.h"
 #include "HardwareSPI.h"
 static HardwareSPI *spiDevice;
 
@@ -68,7 +68,7 @@ void setup_spi(void *inBuffer, const void *outBuffer, size_t bytesToTransfer)
 void InitSpi() noexcept
 {
     SetPinMode(SbcCsPin, INPUT_PULLUP, false);
-    spiDevice = (HardwareSPI *) SPI::getSSPDevice(SbcSpiChannel);
+    spiDevice = (HardwareSPI *) SPI::getSPIDevice(SbcSpiChannel);
     spiDevice->configureDevice(SPI_MODE_SLAVE, 8, (uint8_t)SpiMode::mode0, 100000000);
     status = Ready;
 }

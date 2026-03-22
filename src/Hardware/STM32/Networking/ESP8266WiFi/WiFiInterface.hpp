@@ -1,5 +1,5 @@
 //Author: sdavi/gloomyandy
-#include "Hardware/Spi/SpiMode.h"
+#include "SpiMode.h"
 #include "HardwareSPI.h"
 
 //ESP connected to SSP0
@@ -79,7 +79,7 @@ static void SpiCSInterrupt(CallbackParameter) noexcept
 void WiFiInterface::SetupSpi() noexcept
 {
     AttachPinInterrupt(SamCsPin, SpiCSInterrupt, InterruptMode::rising, CallbackParameter(nullptr));
-    spiDevice = (HardwareSPI *) SPI::getSSPDevice(WiFiSpiChannel);
+    spiDevice = (HardwareSPI *) SPI::getSPIDevice(WiFiSpiChannel);
     spiDevice->configureDevice(SPI_MODE_SLAVE, 8, (uint8_t)SpiMode::mode1, 100000000);
 }
     

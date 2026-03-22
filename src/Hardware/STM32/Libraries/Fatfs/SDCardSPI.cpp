@@ -18,11 +18,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "RepRapFirmware.h"
-
+#include "Platform.h"
 #include "SDCardSPI.h"
-#include "Hardware/Spi/SpiMode.h"
-#include "Hardware/Spi/SharedSpiDevice.h"
-#include "Hardware/Spi/SharedSpiClient.h"
 
 //#define SD_DEBUG 1
 
@@ -69,7 +66,7 @@ void SDCardSPI::init(SSPChannel SSPSlot, Pin cs) noexcept {
     sdcardBlockSize = 512;
     if (SSPSlot != SSPNONE)
     {
-        spi = new SharedSpiClient(SharedSpiDevice::GetSharedSpiDevice(SSPSlot), SCLK_INIT, SpiMode::mode0, cs, false);
+        spi = new SharedSpiClient(Platform::GetSharedSpiDevice(SSPSlot), SCLK_INIT, SpiMode::mode0, cs, false);
     }
     else
         spi = nullptr;
