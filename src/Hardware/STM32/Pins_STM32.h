@@ -3,6 +3,7 @@
 #include "Core.h"
 #include "sd_mmc.h"
 #include "NVMEmulation.h"
+#include <UART/UartParameters.h>
 
 #if !defined(COMBINEDFW)
 # error "unsupported network build options"
@@ -328,24 +329,33 @@ extern Pin SPIPins[NumSPIDevices][NumSPIPins]; //GPIO pins for softwareSPI (used
 #if CORE_USES_TINYUSB
 # define SERIAL_USB2_DEVICE serialUSB2
 #endif
-#define SERIAL_AUX_DEVICE   UART_Slot0
-#define serialWiFi  UART_Slot1
-#define SERIAL_AUX2_DEVICE  UART_Slot2
+#define NUM_ASYNC_PORTS			(2)
+#define NUM_ASYNC_CHANNELS		(2)
 
 #ifdef SERIAL_USB2_DEVICE
 constexpr size_t NumUsbChannels = 2;
-constexpr size_t NumSerialChannels = 4;				// The number of serial IO channels not counting the WiFi serial connection (USB, USB2, and two auxiliary UARTs)
 #else
 constexpr size_t NumUsbChannels = 1;
-constexpr size_t NumSerialChannels = 3;				// The number of serial IO channels not counting the WiFi serial connection (USB and two auxiliary UARTs)
 #endif
+constexpr size_t NumSerialChannels = NumUsbChannels + NUM_ASYNC_CHANNELS;	// The number of serial IO channels not counting the WiFi serial connection (USB, USB2, and two auxiliary UARTs)
+
 
 constexpr size_t NumberSerialPins = 2;
-extern Pin AuxSerialRxTxPins[NumberSerialPins];
+constexpr UartParameters Serial0Params =
+{
+    .instanceNumber = 0,
+    .numRxSlots = 512,
+    .numTxSlots = 512
+};
+extern Pin Serial0RxTxPins[NumberSerialPins];
 
-#if defined(SERIAL_AUX2_DEVICE)
-    extern Pin Aux2SerialRxTxPins[NumberSerialPins];
-#endif
+constexpr UartParameters Serial1Params =
+{
+    .instanceNumber = 1,
+    .numRxSlots = 512,
+    .numTxSlots = 512
+};
+extern Pin Serial1RxTxPins[NumberSerialPins];
 
 constexpr Pin UsbVBusPin = NoPin;
 
@@ -368,9 +378,14 @@ constexpr Pin UsbVBusPin = NoPin;
     extern Pin EspResetPin;
     extern Pin EspEnablePin;
     extern Pin SamCsPin;
-    extern Pin APIN_SerialWiFi_TXD;
-    extern Pin APIN_SerialWiFi_RXD;
-    extern Pin WifiSerialRxTxPins[NumberSerialPins];
+    constexpr UartParameters SerialWiFiParams =
+    {
+        .instanceNumber = 2,
+        .numRxSlots = 512,
+        .numTxSlots = 512
+    };
+
+    extern Pin SerialWiFiRxTxPins[NumberSerialPins];
     extern SSPChannel WiFiSpiChannel;
     extern uint32_t WiFiClockReg;
 

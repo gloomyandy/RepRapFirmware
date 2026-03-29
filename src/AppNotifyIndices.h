@@ -23,7 +23,6 @@ namespace NotifyIndices
 #else
 	constexpr uint32_t FirstAvailableApp = NextAvailableAfterCore;
 #endif
-	constexpr uint32_t I2C = FirstAvailableApp;
 #if HAS_WRITER_TASK
 	constexpr uint32_t FileIO = FirstAvailableApp;
 #endif

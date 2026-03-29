@@ -157,7 +157,7 @@ static const boardConfigEntry_t boardConfigs[]=
     {"8266wifi.lpcTfrReadyPin", &SamTfrReadyPin, 1, cvPinType},
     {"8266wifi.espResetPin", &EspResetPin, 1, cvPinType},
     {"8266wifi.csPin", &SamCsPin, 1, cvPinType},
-    {"8266wifi.serialRxTxPins", &WifiSerialRxTxPins, NumberSerialPins, cvPinType},
+    {"8266wifi.serialRxTxPins", &SerialWiFiRxTxPins, NumberSerialPins, cvPinType},
     {"8266wifi.spiChannel", &WiFiSpiChannel, 1, cvUint8Type},    
     {"8266wifi.clockReg", &WiFiClockReg, 1, cvUint32Type},
     {"8266wifi.moduleType", &NetworkModule, 1, cvModuleType},
@@ -165,7 +165,7 @@ static const boardConfigEntry_t boardConfigs[]=
     {"wifi.TfrReadyPin", &SamTfrReadyPin, 1, cvPinType},
     {"wifi.espResetPin", &EspResetPin, 1, cvPinType},
     {"wifi.csPin", &SamCsPin, 1, cvPinType},
-    {"wifi.serialRxTxPins", &WifiSerialRxTxPins, NumberSerialPins, cvPinType},
+    {"wifi.serialRxTxPins", &SerialWiFiRxTxPins, NumberSerialPins, cvPinType},
     {"wifi.spiChannel", &WiFiSpiChannel, 1, cvUint8Type},    
     {"wifi.clockReg", &WiFiClockReg, 1, cvUint32Type},
     {"wifi.moduleType", &NetworkModule, 1, cvModuleType},
@@ -179,11 +179,11 @@ static const boardConfigEntry_t boardConfigs[]=
     {"sbc.SBCMode", &SbcMode, 1, cvBoolType},
 #endif
 
-#if defined(SERIAL_AUX_DEVICE)
-    {"serial.aux.rxTxPins", &AuxSerialRxTxPins, NumberSerialPins, cvPinType},
+#if NUM_ASYNC_PORTS != 0
+    {"serial.aux.rxTxPins", &Serial1RxTxPins, NumberSerialPins, cvPinType},
 #endif
-#if defined(SERIAL_AUX2_DEVICE)
-    {"serial.aux2.rxTxPins", &Aux2SerialRxTxPins, NumberSerialPins, cvPinType},
+#if NUM_ASYNC_PORTS > 1
+    {"serial.aux2.rxTxPins", &Serial1RxTxPins, NumberSerialPins, cvPinType},
 #endif
     
 #if SUPPORT_LED_STRIPS
@@ -275,9 +275,9 @@ static void ClearConfig() noexcept
     SamCsPin = PB_12;
     WiFiSpiChannel = SSP2;
 #endif
-#if defined(SERIAL_AUX_DEVICE)
-    AuxSerialRxTxPins[0] = PA_10;
-    AuxSerialRxTxPins[1] = PA_9;
+#if NUM_ASYNC_PORTS != 0
+    Serial0RxTxPins[0] = PA_10;
+    Serial0RxTxPins[1] = PA_9;
 #endif
 #if HAS_SBC_INTERFACE
     SbcCsPinConfig = PB_12;
@@ -867,40 +867,28 @@ void BoardConfig::Init() noexcept
     APIN_ESP_SPI_MOSI = SPIPins[WiFiSpiChannel][2];
     APIN_ESP_SPI_MISO = SPIPins[WiFiSpiChannel][1];
     APIN_ESP_SPI_SCK = SPIPins[WiFiSpiChannel][0];
-
-    if(WifiSerialRxTxPins[0] != NoPin && WifiSerialRxTxPins[1] != NoPin)
-    {
-        //Setup the Serial Port for ESP Wifi
-        APIN_SerialWiFi_RXD = WifiSerialRxTxPins[0];
-        APIN_SerialWiFi_TXD = WifiSerialRxTxPins[1];
-        
-        if(!serialWiFi.Configure(WifiSerialRxTxPins[0], WifiSerialRxTxPins[1]))
-        {
-            reprap.GetPlatform().MessageF(UsbMessage, "Failed to set WIFI Serial with pins %c.%d and %c.%d.\n", 'A'+(WifiSerialRxTxPins[0] >> 4), (WifiSerialRxTxPins[0] & 0xF), 'A'+(WifiSerialRxTxPins[1] >> 4), (WifiSerialRxTxPins[1] & 0xF) );
-        }
-    }
 #endif
 
 
-#if defined(SERIAL_AUX_DEVICE)
+#if NUM_ASYNC_PORTS != 0
     //Configure Aux Serial
-    if(AuxSerialRxTxPins[0] != NoPin && AuxSerialRxTxPins[1] != NoPin)
+    if(Serial0RxTxPins[0] != NoPin && Serial0RxTxPins[1] != NoPin)
     {
-        if(!SERIAL_AUX_DEVICE.Configure(AuxSerialRxTxPins[0], AuxSerialRxTxPins[1]))
+        if(!reprap.GetPlatform().GetAsyncPort(0)->Configure(Serial0RxTxPins[0], Serial0RxTxPins[1]))
         {
-            reprap.GetPlatform().MessageF(UsbMessage, "Failed to set AUX Serial with pins %c.%d and %c.%d.\n", 'A'+(AuxSerialRxTxPins[0] >> 4), (AuxSerialRxTxPins[0] & 0xF), 'A'+(AuxSerialRxTxPins[1] >> 4), (AuxSerialRxTxPins[1] & 0xF) );
+            MessageF(UsbMessage, "Failed to set Serial0 with pins %c.%d and %c.%d.\n", 'A'+(Serial0RxTxPins[0] >> 4), (Serial0RxTxPins[0] & 0xF), 'A'+(Serial0RxTxPins[1] >> 4), (Serial0RxTxPins[1] & 0xF) );
         }
 
     }
 #endif
 
-#if defined(SERIAL_AUX2_DEVICE)
+#if NUM_ASYNC_PORTS > 1
     //Configure Aux2 Serial
-    if(Aux2SerialRxTxPins[0] != NoPin && Aux2SerialRxTxPins[1] != NoPin)
+    if(Serial1RxTxPins[0] != NoPin && Serial1RxTxPins[1] != NoPin)
     {
-        if(!SERIAL_AUX2_DEVICE.Configure(Aux2SerialRxTxPins[0], Aux2SerialRxTxPins[1]))
+        if(!reprap.GetPlatform().GetAsyncPort(1)->Configure(Serial1RxTxPins[0], Serial1RxTxPins[1]))
         {
-            reprap.GetPlatform().MessageF(UsbMessage, "Failed to set AUX2 Serial with pins %d.%d and %d.%d.\n", (Aux2SerialRxTxPins[0] >> 5), (Aux2SerialRxTxPins[0] & 0x1F), (Aux2SerialRxTxPins[1] >> 5), (Aux2SerialRxTxPins[1] & 0x1F) );
+            MessageF(UsbMessage, "Failed to set AUX2 Serial with pins %d.%d and %d.%d.\n", (Serial1RxTxPins[0] >> 5), (Serial1RxTxPins[0] & 0x1F), (Serial1RxTxPins[1] >> 5), (Serial1RxTxPins[1] & 0x1F) );
         }
 
     }
@@ -1187,6 +1175,9 @@ extern uint8_t _nocache2_ram_start;
 extern uint8_t _nocache2_ram_end;
 #endif
 
+#if HAS_WIFI_NETWORKING
+extern AsyncSerial *serialWiFiDevice;
+#endif
 //Information printed by M122 P200
 void BoardConfig::Diagnostics(MessageType mtype) noexcept
 {
@@ -1251,16 +1242,19 @@ void BoardConfig::Diagnostics(MessageType mtype) noexcept
         }
     }
     
-#if defined(SERIAL_AUX_DEVICE) || defined(SERIAL_AUX2_DEVICE) || HAS_WIFI_NETWORKING
+#if NUM_ASYNC_PORTS != 0 || HAS_WIFI_NETWORKING
     MessageF(mtype, "\n== Hardware Serial ==\n");
-    #if defined(SERIAL_AUX_DEVICE)
-        MessageF(mtype, "AUX Serial: %s%c\n", ((SERIAL_AUX_DEVICE.GetUARTPortNumber() == -1)?"Disabled": "UART "), (SERIAL_AUX_DEVICE.GetUARTPortNumber() == -1)?' ': ('0' + SERIAL_AUX_DEVICE.GetUARTPortNumber()));
+    #if NUM_ASYNC_PORTS != 0
+        AsyncSerial *dev;
+        dev = reprap.GetPlatform().GetAsyncPort(0);
+        MessageF(mtype, "AUX Serial: %s%c\n", ((dev->GetUARTPortNumber() == -1)?"Disabled": "UART "), (dev->GetUARTPortNumber() == -1)?' ': ('0' + dev->GetUARTPortNumber()));
     #endif
-    #if defined(SERIAL_AUX2_DEVICE)
-        MessageF(mtype, "AUX2 Serial: %s%c\n", ((SERIAL_AUX2_DEVICE.GetUARTPortNumber() == -1)?"Disabled": "UART "), (SERIAL_AUX2_DEVICE.GetUARTPortNumber() == -1)?' ': ('0' + SERIAL_AUX2_DEVICE.GetUARTPortNumber()));
+    #if NUM_ASYNC_PORTS > 1
+        dev = reprap.GetPlatform().GetAsyncPort(1);
+        MessageF(mtype, "AUX2 Serial: %s%c\n", ((dev->GetUARTPortNumber() == -1)?"Disabled": "UART "), (dev->GetUARTPortNumber() == -1)?' ': ('0' + dev->GetUARTPortNumber()));
     #endif
     #if HAS_WIFI_NETWORKING
-        MessageF(mtype, "WIFI Serial: %s%c\n", ((serialWiFi.GetUARTPortNumber() == -1)?"Disabled": "UART "), (serialWiFi.GetUARTPortNumber() == -1)?' ': ('0' + serialWiFi.GetUARTPortNumber()));
+        MessageF(mtype, "WIFI Serial: %s%c\n", ((serialWiFiDevice->GetUARTPortNumber() == -1)?"Disabled": "UART "), (serialWiFiDevice->GetUARTPortNumber() == -1)?' ': ('0' + serialWiFiDevice->GetUARTPortNumber()));
     #endif
 #endif
     

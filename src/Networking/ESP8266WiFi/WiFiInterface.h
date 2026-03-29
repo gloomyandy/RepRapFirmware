@@ -60,7 +60,7 @@ public:
 	void Start() noexcept;
 	void Stop() noexcept;
 
-	GCodeResult EnableInterface(int mode, const StringRef& ssid, const StringRef& reply) noexcept override;			// enable or disable the network
+	GCodeResult EnableInterface(int mode, const StringRef& ssid, const StringRef& reply, bool tlsAllowed = true) noexcept override;			// enable or disable the network
 
 	GCodeResult GetNetworkState(const StringRef& reply) noexcept override;
 	int EnableState() const noexcept override;
@@ -76,7 +76,7 @@ public:
 	GCodeResult SetMacAddress(const MacAddress& mac, const StringRef& reply) noexcept override;
 	const MacAddress& GetMacAddress() const noexcept override { return macAddress; }
 
-	void OpenDataPort(TcpPort port) noexcept override;
+	bool OpenDataPort(TcpPort port, bool useTls = false) noexcept override;
 	void TerminateDataPort() noexcept override;
 
 	// The remaining functions are specific to the WiFi version
@@ -84,15 +84,21 @@ public:
 	WifiFirmwareUploader *_ecv_null GetWifiUploader() const noexcept { return uploader; }
 	void StartWiFi() noexcept;
 	void ResetWiFi() noexcept;
-	void ResetWiFiForUpload(bool external) noexcept;
+	void ResetWiFiForUpload() noexcept;
 	const char *_ecv_array GetWiFiServerVersion() const noexcept { return wiFiServerVersion.c_str(); }
 	static const char *_ecv_array TranslateWiFiState(WiFiState w) noexcept;
-	void SpiInterrupt() noexcept;
 	void EspRequestsTransfer() noexcept;
 	void UpdateSocketStatus(uint16_t connectedSockets, uint16_t otherEndClosedSockets, int8_t p_rssi) noexcept;
 
+#if !SAME5x
+	void SpiInterrupt() noexcept;
+#endif
+
 protected:
 	DECLARE_OBJECT_MODEL
+
+	// TODO: implement TLS support for WiFi interface
+	bool LoadTlsCertificates(const StringRef& reply) noexcept override { return false; }
 
 	// Disable a network protocol that is enabled. If 'permanent' is true we will leave this protocol disables, otherwise we are about to re-enable it with different parameters.
 	void IfaceStartProtocol(NetworkProtocol protocol) noexcept override;
@@ -109,6 +115,11 @@ private:
 #if HAS_CLIENTS
 	void ConnectProtocol(NetworkProtocol protocol) noexcept
 		pre(protocol < NumSelectableProtocols);
+#endif
+
+#if SAME5x
+	void SpiInterrupt() noexcept;
+	static void CommonSpiInterrupt(void* param) noexcept;
 #endif
 
 	NetworkProtocol GetProtocolByLocalPort(TcpPort port) const noexcept;

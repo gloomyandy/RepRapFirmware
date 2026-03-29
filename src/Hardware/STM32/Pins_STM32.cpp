@@ -73,23 +73,21 @@ Pin SPIPins[NumSPIDevices][NumSPIPins];                 //GPIO pins for hardware
     Pin EspResetPin;
     Pin EspEnablePin = NoPin;
     Pin SamCsPin;
-    Pin APIN_SerialWiFi_TXD = NoPin;
-    Pin APIN_SerialWiFi_RXD = NoPin;
     SSPChannel WiFiSpiChannel;
     uint32_t WiFiClockReg;
     Pin APIN_ESP_SPI_MOSI = NoPin;
     Pin APIN_ESP_SPI_MISO = NoPin;
     Pin APIN_ESP_SPI_SCK = NoPin;
-    Pin WifiSerialRxTxPins[NumberSerialPins];
+    Pin SerialWiFiRxTxPins[NumberSerialPins];
 #endif
     
 //Aux Serial
 
-#if defined(SERIAL_AUX_DEVICE)
-    Pin AuxSerialRxTxPins[NumberSerialPins]; //Default to UART0
+#if NUM_ASYNC_PORTS != 0
+Pin Serial0RxTxPins[NumberSerialPins];
 #endif
-#if defined(SERIAL_AUX2_DEVICE)
-    Pin Aux2SerialRxTxPins[NumberSerialPins];
+#if NUM_ASYNC_PORTS > 1
+Pin Serial1RxTxPins[NumberSerialPins];
 #endif
 
 #if HAS_SBC_INTERFACE
