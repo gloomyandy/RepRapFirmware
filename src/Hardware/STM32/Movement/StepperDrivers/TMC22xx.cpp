@@ -70,7 +70,7 @@ constexpr uint32_t NominalTmcClockSpeed = 12000000;			// the nominal speed at wh
 constexpr uint32_t HighestTmcClockSpeed = 12600000;			// the highest speed at which the TMC driver is clocked internally
 constexpr uint32_t MaximumWaitTime = 10;					// Wait time for commands we need to complete
 constexpr uint16_t DriverNotPresentTimeouts = 10;			// Number of timeouts before we decide to ignore the driver
-constexpr size_t TmcTaskStackWords = 140;
+constexpr size_t TmcTaskStackWords = 175;
 
 #if HAS_STALL_DETECT
 const int DefaultStallDetectThreshold = 1;
