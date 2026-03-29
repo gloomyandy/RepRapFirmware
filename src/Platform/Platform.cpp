@@ -3469,6 +3469,8 @@ void Platform::DebugMessage(const char *_ecv_array fmt, va_list vargs) noexcept
 								usbDev->write(c);
 								return true;
 							}
+							else
+								delay(1);
 						}
 					}
 					return false;
