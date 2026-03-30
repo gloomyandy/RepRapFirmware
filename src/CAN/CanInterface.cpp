@@ -212,7 +212,7 @@ static TASKMEM Task<CanSenderTaskStackWords> canClockTask;
 constexpr size_t CanSenderTaskStackWords = 400;
 static Task<CanSenderTaskStackWords> canSenderTask;
 #if STM32H7
-constexpr size_t CanReceiverTaskStackWords = 500;
+constexpr size_t CanReceiverTaskStackWords = 550;
 #else
 constexpr size_t CanReceiverTaskStackWords = 400;
 #endif
