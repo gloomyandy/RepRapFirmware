@@ -41,6 +41,8 @@ constexpr uint32_t IAP_IMAGE_START = 0x20018000;	// IAP is loaded into the last 
 # define HAS_WIFI_NETWORKING	0
 # define HAS_W5500_NETWORKING	0
 # define HAS_SBC_INTERFACE		1
+# define SUPPORTS_SBC_OVER_SPI	1
+# define SUPPORTS_SBC_OVER_USB	0
 # define HAS_MASS_STORAGE		0
 #else
 # define HAS_WIFI_NETWORKING	1
@@ -171,7 +173,7 @@ constexpr Pin AdditionalIoExpansionStart = DueXnExpansionStart+16;		// Pin numbe
 // The numbers of entries in each array must correspond with the values of DRIVES, AXES, or HEATERS. Set values to NoPin to flag unavailability.
 
 // Drives
-constexpr Pin GlobalTmc2660EnablePin = PortCPin(6);	// The pin that drives ENN of all TMC2660 drivers on production boards (on pre-production boards they are grounded)
+constexpr Pin GlobalTmcEnablePin = PortCPin(6);		// The pin that drives ENN of all TMC2660 drivers on production boards (on pre-production boards they are grounded)
 constexpr Pin DriverEnablePins[NumDirectDrivers] =
 {
 	PortDPin(14), PortCPin(9), PortCPin(10), PortCPin(17), PortCPin(25),	// Duet

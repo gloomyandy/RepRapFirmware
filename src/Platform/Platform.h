@@ -146,6 +146,8 @@ enum class BoardType : uint8_t
 	Stm32F4 = 1
 #elif defined(__STM32H7__)
 	Stm32H7 = 1
+#elif defined(INDX)
+	Indx,
 #else
 # error Unknown board
 #endif
@@ -315,6 +317,8 @@ public:
 
   	// Communications and data storage
 	void AppendUsbReply(size_t usbNumber, const GCodeBuffer *_ecv_null gb, OutputBuffer *buffer, bool rawMessage) noexcept;
+	void ShutdownUsbDevice(unsigned int index) noexcept;
+	void ReinitUsbDevice(unsigned int index) noexcept;
 	void AppendAuxReply(size_t auxNumber, const GCodeBuffer *_ecv_null gb, OutputBuffer *buf, bool rawMessage) noexcept;
 	void AppendAuxReply(size_t auxNumber, const GCodeBuffer *_ecv_null gb, const char *_ecv_array msg, bool rawMessage) noexcept;
 

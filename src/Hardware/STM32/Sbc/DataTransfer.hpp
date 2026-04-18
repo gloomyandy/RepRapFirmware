@@ -25,7 +25,7 @@ static inline bool spi_dma_check_rx_complete() noexcept
     while (!digitalRead(SbcCsPin))			// transfer is complete if CS is high
     {
         RTOSIface::Yield();
-        if (millis() - startTime > SpiTransferTimeout)
+        if (millis() - startTime > SbcTransferTimeout)
         {
             return false;
         }

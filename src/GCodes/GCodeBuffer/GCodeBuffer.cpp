@@ -242,6 +242,14 @@ void GCodeBuffer::Diagnostics(const StringRef& reply) noexcept
 		reply.cat('"');
 		break;
 
+#if HAS_SBC_INTERFACE
+	case GCodeBufferState::executingOnSbc:
+		reply.cat("is doing \"");
+		AppendFullCommand(reply);
+		reply.cat("\" on the SBC");
+		break;
+#endif
+
 	default:
 		reply.cat("is assembling a command");
 		break;
@@ -1191,7 +1199,7 @@ bool GCodeBuffer::RequestMacroFile(const char *filename, bool fromCode) noexcept
 		// Wait for a response (but not forever)
 		isWaitingForMacro = true;
 		reprap.GetSbcInterface().EventOccurred(true);
-		if (!macroSemaphore.Take(SpiMaxRequestTime))
+		if (!macroSemaphore.Take(SbcMaxRequestTime))
 		{
 			isWaitingForMacro = false;
 			reprap.GetPlatform().MessageF(ErrorMessage, "Timeout while waiting for macro file %s (channel %s)\n", filename, GetChannel().ToString());
@@ -1320,7 +1328,12 @@ void GCodeBuffer::WaitForAcknowledgement(uint32_t seq) noexcept
 
 bool GCodeBuffer::OpenFileToWrite(const char *_ecv_array directory, const char *_ecv_array fileName, const FilePosition size, const bool binaryWrite, const uint32_t fileCRC32) noexcept
 {
-	return NOT_BINARY_AND(stringParser.OpenFileToWrite(directory, fileName, size, binaryWrite, fileCRC32));
+	if (NOT_BINARY_AND(stringParser.OpenFileToWrite(directory, fileName, size, binaryWrite, fileCRC32)))
+	{
+		normalInput->SetWritingFile(true);
+		return true;
+	}
+	return false;
 }
 
 bool GCodeBuffer::IsWritingFile() const noexcept
@@ -1331,6 +1344,10 @@ bool GCodeBuffer::IsWritingFile() const noexcept
 void GCodeBuffer::WriteToFile() noexcept
 {
 	IF_NOT_BINARY(stringParser.WriteToFile());
+	if (!IsWritingFile())
+	{
+		normalInput->SetWritingFile(false);
+	}
 }
 
 bool GCodeBuffer::IsWritingBinary() const noexcept
@@ -1346,6 +1363,7 @@ bool GCodeBuffer::WriteBinaryToFile(char b) noexcept
 void GCodeBuffer::FinishWritingBinary() noexcept
 {
 	IF_NOT_BINARY(stringParser.FinishWritingBinary());
+	normalInput->SetWritingFile(false);
 }
 
 #endif

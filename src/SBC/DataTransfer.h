@@ -18,6 +18,7 @@
 #include <RTOSIface/RTOSIface.h>
 
 class BinaryGCodeBuffer;
+class SerialCDC;
 class StringRef;
 class OutputBuffer;
 class GCodeMachineState;
@@ -43,6 +44,12 @@ public:
 	void Init() noexcept;
 	void InitFromTask() noexcept;
 	void Diagnostics(const StringRef& reply) noexcept;
+
+	SbcTransportType GetTransportType() const noexcept { return transportType; }
+#if SUPPORTS_SBC_OVER_USB
+	void SwitchToUsb(SerialCDC *dev, unsigned int devIndex) noexcept;						// Switch from SPI to USB transport
+	SerialCDC *GetUsbDevice() const noexcept { return usbDevice; }
+#endif
 
 	TransferState DoTransfer() noexcept;													// Try to finish the current transfer
 	void StartNextTransfer() noexcept;														// Kick off the next transfer
@@ -118,16 +125,16 @@ private:
 	// On the STM32H7 and SAME70 we need to ensure that the following are in memory that is not cached (see above). 
 	// On STM32F4 we need to ensure that memory used by the SBC interface is not in the top 32Kb of RAM as this is
 	// used for the SBC IAP. 
-	static __nocache TransferHeader rxHeader;
-	static __nocache TransferHeader txHeader;
+	static __nocache SpiTransferHeader rxHeader;
+	static __nocache SpiTransferHeader txHeader;
 	static __nocache uint32_t rxResponse;
 	static __nocache uint32_t txResponse;
 #else
 	// The other processors we support have write-through cache
 	// Allocate the buffers in the object so that we can delete the object and recycle the memory if the SBC interface is not being used
 	// Align the headers on 16-byte boundaries so that they span only one cache line
-	alignas(16) TransferHeader rxHeader;
-	alignas(16) TransferHeader txHeader;
+	alignas(16) SpiTransferHeader rxHeader;
+	alignas(16) SpiTransferHeader txHeader;
 	uint32_t rxResponse;
 	uint32_t txResponse;
 #endif
@@ -140,6 +147,19 @@ private:
 #endif
 	size_t rxPointer, txPointer;
 
+	// Transport type
+	SbcTransportType transportType;
+
+#if SUPPORTS_SBC_OVER_USB
+	// USB transport members
+	SerialCDC *usbDevice;
+	unsigned int usbDeviceIndex;
+	UsbTransferHeader usbRxHeader;
+	UsbTransferHeader usbTxHeader;
+
+	TransferState DoTransferUsb() noexcept;
+#endif
+
 	// Packet properties
 	uint16_t packetId;
 
@@ -151,10 +171,15 @@ private:
 	void RestartTransfer(bool ownRequest) noexcept;
 	uint32_t CalcCRC32(const char *buffer, size_t length) const noexcept;
 
+#if SUPPORTS_SBC_OVER_SPI
+	void ReinitSpi() noexcept;											// Re-initialize SPI hardware after USB mode
+#endif
+
 	template<typename T> const T *ReadDataHeader() noexcept;
 
 	// Always keep enough tx space to allow resend requests in case RRF runs out of resources and cannot process an incoming request right away
-	size_t FreeTxSpace() const noexcept { return SbcTransferBufferSize - AddPadding(txPointer) - rxHeader.numPackets * sizeof(PacketHeader); }
+	size_t FreeTxSpace() const noexcept;
+	uint8_t GetRxNumPackets() const noexcept;
 
 	bool CanWritePacket(size_t dataLength = 0) const noexcept;
 	PacketHeader *WritePacketHeader(FirmwareRequest request, size_t dataLength = 0, uint16_t resendPacktId = 0) noexcept;
@@ -170,9 +195,25 @@ inline bool DataTransfer::IsConnectionReset() const noexcept
 	return (rxHeader.formatCode == SbcFormatCode) && (rxHeader.sequenceNumber != nextTransferNumber);
 }
 
+inline uint8_t DataTransfer::GetRxNumPackets() const noexcept
+{
+#if SUPPORTS_SBC_OVER_USB
+	if (transportType == SbcTransportType::usb)
+	{
+		return usbRxHeader.numPackets;
+	}
+#endif
+	return rxHeader.numPackets;
+}
+
+inline size_t DataTransfer::FreeTxSpace() const noexcept
+{
+	return SbcTransferBufferSize - AddPadding(txPointer) - GetRxNumPackets() * sizeof(PacketHeader);
+}
+
 inline size_t DataTransfer::PacketsToRead() const noexcept
 {
-	return rxHeader.numPackets;
+	return GetRxNumPackets();
 }
 
 inline void DataTransfer::ResendPacket(const PacketHeader *packet) noexcept
