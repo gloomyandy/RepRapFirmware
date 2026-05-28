@@ -103,24 +103,25 @@ GCodes::GCodes(Platform& p) noexcept :
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Queue2)] = nullptr;
 #endif
 #if SUPPORT_HTTP || HAS_SBC_INTERFACE
-	httpInput = new NetworkGCodeInput();
+	httpInput = new NetworkGCodeInput(HttpMessage);
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::HTTP)] = new GCodeBuffer(GCodeChannel::HTTP, httpInput, fileInput, HttpMessage);
 #else
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::HTTP)] = nullptr;
 #endif // SUPPORT_HTTP || HAS_SBC_INTERFACE
 #if SUPPORT_TELNET || HAS_SBC_INTERFACE
-	telnetInput = new NetworkGCodeInput();
+	telnetInput = new NetworkGCodeInput(TelnetMessage);
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Telnet)] = new GCodeBuffer(GCodeChannel::Telnet, telnetInput, fileInput, TelnetMessage, Compatibility::Marlin);
 #else
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Telnet)] = nullptr;
 #endif // SUPPORT_TELNET || HAS_SBC_INTERFACE
 #if defined(SERIAL_MAIN_DEVICE)
 # if SAME5x && !CORE_USES_TINYUSB
-	// SAME5x USB driver already uses an efficient buffer for receiving data from USB
+	// SAME5x USB driver already uses an efficient buffer for receiving data from USB.
+	// Note: this path does not support out-of-band emergency command detection (M112)
 	StreamGCodeInput * const usbInput = new StreamGCodeInput(SERIAL_MAIN_DEVICE);
 # else
 	// Old USB driver and tinyusb drivers are inefficient when read in single-character mode
-	BufferedStreamGCodeInput * const usbInput = new BufferedStreamGCodeInput(SERIAL_MAIN_DEVICE);
+	usbInput = new BufferedStreamGCodeInput(SERIAL_MAIN_DEVICE, UsbMessage);
 # endif
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::USB)] = new GCodeBuffer(GCodeChannel::USB, usbInput, fileInput, UsbMessage, Compatibility::Marlin);
 #elif HAS_SBC_INTERFACE
@@ -435,6 +436,11 @@ void GCodes::Spin() noexcept
 	}
 #endif
 
+#if defined(SERIAL_MAIN_DEVICE) && (!SAME5x || CORE_USES_TINYUSB)
+	// Read from USB into the input buffer and check for out-of-band urgent commands (M112/M122/M108)
+	usbInput->Spin();
+#endif
+
 	CheckTriggers();
 
 	// The autoPause buffer has priority, so spin that one first. It may have to wait for other buffers to release locks etc.
@@ -543,7 +549,7 @@ bool GCodes::SpinGCodeBuffer(GCodeBuffer& gb) noexcept
 
 	if ((gb.IsExecuting()
 #if HAS_SBC_INTERFACE
-		 && !gb.IsSendRequested()
+			|| gb.IsSendRequested() || gb.IsExecutingOnSbc()
 #endif
 		) || (gb.IsWaitingForTemperatures())							// this is needed to get reports sent when the GB is waiting for temperatures to be reached
 	   )
@@ -609,7 +615,19 @@ bool GCodes::StartNextGCode(GCodeBuffer& gb, const StringRef& reply) noexcept
 	}
 	else
 	{
-		const bool gotCommand = (gb.GetNormalInput() != nullptr) && gb.GetNormalInput()->FillBuffer(&gb);
+		const bool gotCommand =
+#if HAS_SBC_INTERFACE
+			// Two SBC-mode guards on accepting input here:
+			// - IsExecutingOnSbc: a code has been handed to DSF for processing (see SendToSbc), so don't
+			//   feed the buffer another code until that one has been resolved
+			// - IsDoingFile: while DSF is serving a file/macro on this channel, accepting a text-based
+			//   code (e.g. from PanelDue) would clear lastCodeFromSbc on the file's stack level and
+			//   misroute that file's code replies to the analog channel instead of back to DSF. Waiting
+			//   for a message-box acknowledgement is the exception, as M292 must stay answerable from PanelDue
+			!gb.IsExecutingOnSbc() &&
+			(!reprap.UsingSbcInterface() || !gb.IsDoingFile() || gb.LatestMachineState().waitingForAcknowledgement) &&
+#endif
+			(gb.GetNormalInput() != nullptr) && gb.GetNormalInput()->FillBuffer(&gb);
 		if (gotCommand)
 		{
 			gb.DecodeCommand();
@@ -1712,6 +1730,7 @@ void GCodes::Diagnostics(const StringRef& reply) noexcept
 			gb->Diagnostics(reply);
 		}
 	}
+
 }
 
 #if SUPPORT_ASYNC_MOVES
@@ -2136,7 +2155,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 	// We need to check for moving unowned axes right at the start in case we need to fetch axis positions before processing the command
 	ParameterLettersBitmap axisLettersMentioned = gb.AllParameters() & allAxisLetters;
 	const bool meshCompensationInUse = (ms.moveType == 0) && IsUsingMeshCompensation(ms, axisLettersMentioned);
-	if (ms.moveType == 0 || !move.IsRawMotorMove(ms.moveType))
+	if (ms.moveType == 0)
 	{
 		if (meshCompensationInUse)
 		{
@@ -2150,6 +2169,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 	}
 	else
 	{
+		// Homing/raw-motor moves: tool axis mapping is not applied, so allocate axes by literal letter
 		AllocateLogicalDrivesFromLetters(gb, ms, axisLettersMentioned);
 	}
 #endif
@@ -3379,11 +3399,11 @@ bool GCodes::DoFileMacro(GCodeBuffer& gb, const char *_ecv_array fileName, bool 
 #if HAS_SBC_INTERFACE
 	if (reprap.UsingSbcInterface())
 	{
-		if (!gb.RequestMacroFile(fileName, gb.IsBinary() && codeRunning != AsyncSystemMacroCode))
+		if (!gb.RequestMacroFile(fileName, gb.LatestMachineState().lastCodeFromSbc && codeRunning != AsyncSystemMacroCode))
 		{
 			if (reportMissing)
 			{
-				MessageType mt = (gb.IsBinary() && codeRunning != SystemHelperMacroCode)
+				MessageType mt = (gb.LatestMachineState().lastCodeFromSbc && codeRunning != SystemHelperMacroCode)
 									? (MessageType)(gb.GetResponseMessageType() | WarningMessageFlag | PushFlag)
 										: WarningMessage;
 				platform.MessageF(mt, "Macro file %s not found\n", fileName);
@@ -4201,7 +4221,7 @@ void GCodes::HandleReplyPreserveResult(GCodeBuffer& gb, GCodeResult rslt, const 
 	case Compatibility::NanoDLP:				// nanoDLP is like Marlin except that G0 and G1 commands return "Z_move_comp<LF>" before "ok<LF>"
 	case Compatibility::Marlin:
 	default:
-		if (gb.IsLastCommand() && !gb.IsDoingFileMacro())
+		if (gb.IsLastCommand() && !gb.IsDoingFileMacro(true))
 		{
 			// Put "ok" at the end
 			const char *_ecv_array const response = (gb.GetCommandLetter() == 'M' && gb.GetCommandNumber() == 998) ? "rs " : "ok";
@@ -4244,7 +4264,7 @@ void GCodes::HandleReply(GCodeBuffer& gb, OutputBuffer *_ecv_null reply) noexcep
 
 #if HAS_SBC_INTERFACE
 	// Deal with replies to the SBC
-	if (gb.IsBinary())
+	if (gb.LatestMachineState().lastCodeFromSbc)
 	{
 		platform.Message(gb.GetResponseMessageType(), reply);
 		return;
@@ -5123,7 +5143,7 @@ void GCodes::CheckReportDue(GCodeBuffer& gb, const StringRef& reply) const noexc
 				OutputBuffer *_ecv_null statusBuf = GenerateJsonStatusResponse(0, -1, ResponseSource::AUX);		// older PanelDueFirmware using M408
 				if (statusBuf != nullptr)
 				{
-					platform.Message(gb.GetResponseMessageType(), statusBuf);
+					platform.Message(gb.GetNativeResponseMessageType(), statusBuf);
 				}
 			}
 			break;

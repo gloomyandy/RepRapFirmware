@@ -908,7 +908,7 @@ bool Move::SetKinematics(KinematicsType k) noexcept
 // Return true if this is a raw motor move
 bool Move::IsRawMotorMove(uint8_t moveType) const noexcept
 {
-	return moveType == 2 || ((moveType == 1 || moveType == 3) && kinematics->GetHomingMode() != HomingMode::homeCartesianAxes);
+	return moveType == 2 || (moveType != 0 && kinematics->GetHomingMode() != HomingMode::homeCartesianAxes);
 }
 
 // Return true if the specified point is accessible to the Z probe
@@ -3432,7 +3432,7 @@ void Move::PollOneDriver(size_t driver) noexcept
 	if (currentBrakePwm[driver] != 0.0 && reprap.GetPlatform().GetVinVoltage() > 10.0)
 	{
 		const float newBrakePwm = min<float>(brakeVoltages[driver]/reprap.GetPlatform().GetVinVoltage(), 1.0);
-		if (fabsf(newBrakePwm - currentBrakePwm[driver] >= 0.05))
+		if (fabsf(newBrakePwm - currentBrakePwm[driver]) >= 0.05)
 		{
 			brakePorts[driver].WriteAnalog(newBrakePwm);
 			currentBrakePwm[driver] = newBrakePwm;
