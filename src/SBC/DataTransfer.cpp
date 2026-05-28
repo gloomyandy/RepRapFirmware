@@ -574,7 +574,9 @@ void DataTransfer::Init() noexcept
 // Re-initialize SPI hardware after it was disabled for USB mode
 void DataTransfer::ReinitSpi() noexcept
 {
-#if SAME5x
+#if STM32
+    InitSpi();
+#elif SAME5x
 	for (Pin p : SbcSpiSercomPins)
 	{
 		SetPinFunction(p, SbcSpiSercomPinsMode);

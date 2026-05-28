@@ -109,6 +109,8 @@ constexpr size_t NumFirmwareUpdateModules = 5;        // 3 modules, plus one for
 #define HAS_MASS_STORAGE                 1
 #define SUPPORT_TELNET                   0
 #define HAS_SBC_INTERFACE                1
+#define SUPPORTS_SBC_OVER_SPI            1
+#define SUPPORTS_SBC_OVER_USB            CORE_USES_TINYUSB
 #define SUPPORT_MQTT                     1
 #define SUPPORT_FTP                      1
 #define SUPPORT_ACCELEROMETERS           1
