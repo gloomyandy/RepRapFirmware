@@ -1395,7 +1395,6 @@ void HttpResponder::DoUpload() noexcept
 	size_t len;
 	if (skt->ReadBuffer(buffer, len))
 	{
-		size_t bytesWritten = 0;		// don't write than one FS buffer at once, else we may get stuck here with slow cards
 		do
 		{
 			(void)CheckAuthenticated();						// uploading may take a long time, so make sure the requester IP is not timed out
