@@ -25,14 +25,14 @@ V=@
 $(info Building RepRapFirmware for STM32F4 based boards:)
 
 ## Cross-compilation commands
-CC      = $(GCC_PATH)arm-none-eabi-gcc
-CXX     = $(GCC_PATH)arm-none-eabi-g++
-LD      = $(GCC_PATH)arm-none-eabi-gcc
-AR      = $(GCC_PATH)arm-none-eabi-ar
-AS      = $(GCC_PATH)arm-none-eabi-as
-OBJCOPY = $(GCC_PATH)arm-none-eabi-objcopy
-OBJDUMP = $(GCC_PATH)arm-none-eabi-objdump
-SIZE    = $(GCC_PATH)arm-none-eabi-size
+CC      = "$(GCC_PATH)"arm-none-eabi-gcc
+CXX     = "$(GCC_PATH)"arm-none-eabi-g++
+LD      = "$(GCC_PATH)"arm-none-eabi-gcc
+AR      = "$(GCC_PATH)"arm-none-eabi-ar
+AS      = "$(GCC_PATH)"arm-none-eabi-as
+OBJCOPY = "$(GCC_PATH)"arm-none-eabi-objcopy
+OBJDUMP = "$(GCC_PATH)"arm-none-eabi-objdump
+SIZE    = "$(GCC_PATH)"arm-none-eabi-size
 
 MKDIR = mkdir -p
 
