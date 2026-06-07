@@ -954,7 +954,15 @@ __attribute__((noinline)) void RepRap::GenerateDeferredDiagnostics(MessageType d
 
 void RepRap::Timing(const StringRef& reply) noexcept
 {
-	reply.lcatf("Slowest loop: %.2fms; fastest: %.2fms", (double)(slowLoop * StepClocksToMillis), (double)(fastLoop * StepClocksToMillis));
+	// See Network.cpp Diagnostics() - sentinel handling to avoid printing a ~5.7M ms phantom value
+	if (fastLoop == UINT32_MAX)
+	{
+		reply.lcat("Slowest loop: n/a; fastest: n/a");
+	}
+	else
+	{
+		reply.lcatf("Slowest loop: %.2fms; fastest: %.2fms", (double)(slowLoop * StepClocksToMillis), (double)(fastLoop * StepClocksToMillis));
+	}
 	fastLoop = UINT32_MAX;
 	slowLoop = 0;
 }
@@ -2055,7 +2063,8 @@ size_t RepRap::GetStatusIndex() const noexcept
 			  	  	)
 			: (gCodes->IsDoingToolChange())								? 10	// Changing tool
 			: (gCodes->DoingFileMacro() || !move->NoLiveMovement() ||
-			   gCodes->WaitingForAcknowledgement()) 					? 11	// Busy
+			   gCodes->WaitingForAcknowledgement() ||
+			   heat->IsTuningHeater())									? 11	// Busy
 			:															  12;	// Idle
 
 }
@@ -2492,7 +2501,7 @@ uint32_t RepRap::SendAlert(MessageType mt, c_string msg, c_string title, int sPa
 
 	platform->MessageF(MessageType::LogInfo, "M291: - %s - %s", (strlen(title) > 0 ? title : "[no title]"), msg);
 
-	mt = (MessageType)((uint32_t)mt & ((uint32_t)UsbMessage | (uint32_t)TelnetMessage | (uint32_t)Aux2Message));
+	mt = (MessageType)((uint32_t)mt & ((uint32_t)UsbMessage | (uint32_t)Usb2Message | (uint32_t)TelnetMessage | (uint32_t)AuxMessage | (uint32_t)Aux2Message));
 	if (mt != NoDestinationMessage)
 	{
 		// Source was USB, Telnet or serial so also send the message back to the sending channel

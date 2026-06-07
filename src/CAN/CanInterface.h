@@ -35,6 +35,8 @@ namespace CanInterface
 	bool IsCanEnabled() noexcept;
 #endif
 
+	void ReportCanTiming(const StringRef& reply) noexcept;
+
 #if SUPPORT_REMOTE_COMMANDS
 	bool InExpansionMode() noexcept;
 	bool InTestMode() noexcept;
@@ -44,6 +46,7 @@ namespace CanInterface
 	void RaiseEvent(EventType type, uint16_t param, uint8_t device, const char *_ecv_array format, va_list vargs) noexcept;
 	void MainBoardAcknowledgedAnnounce() noexcept;
 	void LogIgnoredMovementMessage() noexcept;
+	void CheckBrs(const CanMessageTimeSync& msg) noexcept;
 #endif
 
 	CanRequestId AllocateRequestId(CanAddress destination, CanMessageBuffer *buf) noexcept;
@@ -122,7 +125,7 @@ namespace CanInterface
 	// Misc functions
 	GCodeResult WriteGpio(CanAddress boardAddress, uint8_t portNumber, float pwm, bool isServo, const GCodeBuffer *gb, const StringRef& reply) noexcept;
 	GCodeResult ChangeAddressAndNormalTiming(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
-	GCodeResult ChangeFastTiming(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
+	GCodeResult EnableCan(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 #if SUPPORT_ACCELEROMETERS
 	GCodeResult StartAccelerometer(DriverId device, uint8_t axes, uint16_t numSamples, uint8_t mode, const GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 #endif

@@ -1164,7 +1164,8 @@ pre(!driversPowered)
 	hadStepFailure = false;
 #endif
 	registersToUpdate = 0;
-	specialReadRegisterNumber = specialWriteRegisterNumber = 0xFF;
+	specialWriteRegisterNumber = 0xFF;
+	specialReadRegisterNumber = 0xFF;
 	motorCurrent = 0.0;
 	standstillCurrentFraction = (uint8_t)min<uint32_t>((DefaultStandstillCurrentPercent * 256)/100, 255);
 	UpdateRegister(WriteGConf,

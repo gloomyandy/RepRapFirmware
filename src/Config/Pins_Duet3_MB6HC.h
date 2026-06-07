@@ -57,6 +57,7 @@ constexpr uint32_t IAP_IMAGE_START = 0x20458000;		// last 32kb of RAM
 #define HAS_VREF_MONITOR		1
 
 #define SUPPORT_CAN_EXPANSION	1
+#define SUPPORT_BRS				1
 #define DUAL_CAN				1					// support the second CAN interface as simple CAN (not FD)
 #define SUPPORT_LED_STRIPS		1
 #define SUPPORT_DMA_DOTSTAR		1
@@ -67,7 +68,6 @@ constexpr uint32_t IAP_IMAGE_START = 0x20458000;		// last 32kb of RAM
 #define SUPPORT_BME280			1
 #define SUPPORT_BME68X			1
 #define SUPPORT_ADS131A02		1
-#define SUPPORT_OBJECT_MODEL	1
 
 #ifdef USE_EMBEDDED_FILES
 #define SUPPORT_ACCELEROMETERS	0

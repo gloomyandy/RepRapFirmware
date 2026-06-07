@@ -637,7 +637,15 @@ bool GCodes::StartNextGCode(GCodeBuffer& gb, const StringRef& reply) noexcept
 	{
 		const bool gotCommand =
 #if HAS_SBC_INTERFACE
+			// Two SBC-mode guards on accepting input here:
+			// - IsExecutingOnSbc: a code has been handed to DSF for processing (see SendToSbc), so don't
+			//   feed the buffer another code until that one has been resolved
+			// - IsDoingFile: while DSF is serving a file/macro on this channel, accepting a text-based
+			//   code (e.g. from PanelDue) would clear lastCodeFromSbc on the file's stack level and
+			//   misroute that file's code replies to the analog channel instead of back to DSF. Waiting
+			//   for a message-box acknowledgement is the exception, as M292 must stay answerable from PanelDue
 			!gb.IsExecutingOnSbc() &&
+			(!reprap.UsingSbcInterface() || !gb.IsDoingFile() || gb.LatestMachineState().waitingForAcknowledgement) &&
 #endif
 			(gb.GetNormalInput() != nullptr) && gb.GetNormalInput()->FillBuffer(&gb);
 		if (gotCommand)
@@ -1033,6 +1041,15 @@ bool GCodes::DoAsynchronousPause(GCodeBuffer& gb, PrintPausedReason reason, GCod
 		return false;
 	}
 
+#if HAS_SBC_INTERFACE
+	// Collect each motion system's pause file offset so the SBC gets one notification carrying both
+	FilePosition pausePositions[NumMovementSystems];
+	for (size_t i = 0; i < NumMovementSystems; ++i)
+	{
+		pausePositions[i] = noFilePosition;
+	}
+#endif
+
 	for (MovementState& ms : moveStates)
 	{
 		ms.pausedInMacro = false;
@@ -1131,12 +1148,9 @@ bool GCodes::DoAsynchronousPause(GCodeBuffer& gb, PrintPausedReason reason, GCod
 		ms.GetPauseRestorePoint().fanSpeed = ms.virtualFanSpeed;
 
 #if HAS_SBC_INTERFACE
-		if (reprap.UsingSbcInterface() && ms.GetNumber() == 0)
-		{
-			// Prepare notification for the SBC
-			// FIXME This should pass the file position of the first and second file, or noFilePosition if not applicable
-			reprap.GetSbcInterface().SetPauseReason(ms.GetPauseRestorePoint().filePos, noFilePosition, reason);
-		}
+		// Capture the per-MS pause offset before the noFilePosition normalization below so the SBC sees
+		// the real "unknown" marker (noFilePosition) rather than a fabricated zero
+		pausePositions[ms.GetNumber()] = ms.GetPauseRestorePoint().filePos;
 #endif
 
 		if (ms.GetPauseRestorePoint().filePos == noFilePosition)
@@ -1145,6 +1159,13 @@ bool GCodes::DoAsynchronousPause(GCodeBuffer& gb, PrintPausedReason reason, GCod
 			ms.GetPauseRestorePoint().filePos = 0;
 		}
 	}
+
+#if HAS_SBC_INTERFACE
+	if (reprap.UsingSbcInterface())
+	{
+		reprap.GetSbcInterface().SetPauseReason(pausePositions[0], (NumMovementSystems > 1) ? pausePositions[1] : noFilePosition, reason);
+	}
+#endif
 
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE
 	if (!IsSimulating())
@@ -1862,11 +1883,11 @@ bool GCodes::LockMovementSystemAndWaitForStandstill(GCodeBuffer& gb, MovementSys
 		}
 	}
 #endif
-	ms.ForceLiveCoordinatesUpdate();							// make sure that immediately after e.g. M400 the machine position is fetched correctly (issue 921)
 	return true;
 }
 
 // Save (some of) the state of the machine for recovery in the future.
+// If the passed filename is non-null then we are executing a new macro. If is is null then we are saving the state but staying in the same file.
 bool GCodes::Push(GCodeBuffer& gb, bool withinSameFile) noexcept
 {
 	const bool ok = gb.PushState(withinSameFile);
@@ -2172,7 +2193,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 	// We need to check for moving unowned axes right at the start in case we need to fetch axis positions before processing the command
 	ParameterLettersBitmap axisLettersMentioned = gb.AllParameters() & allAxisLetters;
 	const bool meshCompensationInUse = (ms.raw.moveType == 0) && IsUsingMeshCompensation(ms, axisLettersMentioned);
-	if (ms.raw.moveType == 0 || !move.IsRawMotorMove(ms.raw.moveType))
+	if (ms.raw.moveType == 0)
 	{
 		if (meshCompensationInUse)
 		{
@@ -2186,6 +2207,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 	}
 	else
 	{
+		// Homing/raw-motor moves: tool axis mapping is not applied, so allocate axes by literal letter
 		AllocateLogicalDrivesFromLetters(gb, ms, axisLettersMentioned);
 	}
 #endif
@@ -3433,7 +3455,7 @@ bool GCodes::DoFileMacro(GCodeBuffer& gb, const char *_ecv_array fileName, bool 
 			return true;
 		}
 		gb.GetVariables().AssignFrom(initialVariables);
-		gb.StartNewFile();
+		gb.StartNewFile(fileName);
 		if (gb.IsMacroEmpty())
 		{
 			gb.SetFileFinished();
@@ -3461,7 +3483,7 @@ bool GCodes::DoFileMacro(GCodeBuffer& gb, const char *_ecv_array fileName, bool 
 		}
 		gb.GetVariables().AssignFrom(initialVariables);
 		gb.LatestMachineState().fileState.Set(f);
-		gb.StartNewFile();
+		gb.StartNewFile(fileName);
 		gb.GetFileInput()->Reset(gb.LatestMachineState().fileState);
 #else
 		if (reportMissing)
@@ -3707,12 +3729,10 @@ void GCodes::StartPrinting(bool fromStart) noexcept
 #endif
 	}
 
-	FileGCode()->StartNewFile();
-
 	reprap.GetPrintMonitor().StartedPrint();
-	platform.MessageF(LogWarn,
-						(IsSimulating()) ? "Started simulating printing file %s\n" : "Started printing file %s\n",
-							reprap.GetPrintMonitor().GetPrintingFilename());
+	const char *_ecv_array _ecv_null const printingFilename = reprap.GetPrintMonitor().GetPrintingFilename();
+	FileGCode()->StartNewFile(printingFilename);
+	platform.MessageF(LogWarn, (IsSimulating()) ? "Started simulating printing file %s\n" : "Started printing file %s\n", printingFilename);
 	if (fromStart)
 	{
 		DoFileMacro(*FileGCode(), START_G, false, AsyncSystemMacroCode);		// get fileGCode to execute the start macro so that any M82/M83 codes will be executed in the correct context
@@ -3857,7 +3877,7 @@ GCodeResult GCodes::SetOrReportOffsets(GCodeBuffer &gb, const StringRef& reply, 
 				settingOther = true;
 				if (!IsSimulating())
 				{
-					tool->SetSpindleRpm(gb.GetUIValue(), GetMovementState(gb).currentTool == tool.Ptr());
+					tool->SetSpindleRpm(gb, gb.GetUIValue(), GetMovementState(gb).currentTool == tool.Ptr());
 				}
 			}
 		}
@@ -4278,7 +4298,7 @@ void GCodes::HandleReply(GCodeBuffer& gb, OutputBuffer *_ecv_null reply) noexcep
 
 #if HAS_SBC_INTERFACE
 	// Deal with replies to the SBC
-	if (gb.IsBinary())
+	if (gb.LatestMachineState().lastCodeFromSbc)
 	{
 		platform.Message(gb.GetResponseMessageType(), reply);
 		return;
@@ -5164,7 +5184,9 @@ void GCodes::CheckReportDue(GCodeBuffer& gb, const StringRef& reply) const noexc
 				{
 					MutexLocker lock(reprap.GetObjectModelReportMutex());
 					if (OutputBuffer::GetFreeBuffers() < MinimumBuffersForObjectModel) { break; }
-					statusBuf = reprap.GetModelResponse(&gb, "", "d99fi");				// may throw
+					// In the following, pass nullptr instead of &gb so that no line number is included with the JSON response.
+					// DuetScreen relies on this so that it knows the response was generated automatically.
+					statusBuf = reprap.GetModelResponse(nullptr, "", "d99fi");									// may throw
 				}
 				if (statusBuf != nullptr)
 				{

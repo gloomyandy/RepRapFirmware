@@ -113,10 +113,7 @@ Heater::HeaterParameters Heater::fanOffParams, Heater::fanOnParams;
 }
 
 Heater::Heater(unsigned int num) noexcept
-	: tuned(false), heaterNumber(num), sensorNumber(-1), activeTemperature(0.0), standbyTemperature(0.0),
-	  maxTempExcursion(DefaultMaxTempExcursion), maxHeatingFaultTime(DefaultMaxHeatingFaultTime), maxBadTemperatureCount(DefaultMaxBadTemperatureCount),
-	  function(HeaterFunction::tool),
-	  active(false), usingFeedForward(false), modelSetByUser(false), monitorsSetByUser(false)
+	: heaterNumber(num)
 {
 	Heater::ResetHeater();
 }
@@ -131,13 +128,17 @@ Heater::~Heater() noexcept
 
 void Heater::ResetHeater() noexcept
 {
-	previousExtrusionPwmBoost = extrusionTemperatureBoost = extrusionPwmBoost = 0.0;
+	extrusionPwmBoost = 0.0;
+	extrusionTemperatureBoost = 0.0;
+	previousExtrusionPwmBoost = 0.0;
 	lastFanPwm = 0.0;
 }
 
 void Heater::SwitchOff() noexcept
 {
-	previousExtrusionPwmBoost = extrusionTemperatureBoost = extrusionPwmBoost = 0.0;
+	extrusionPwmBoost = 0.0;
+	extrusionTemperatureBoost = 0.0;
+	previousExtrusionPwmBoost = 0.0;
 }
 
 void Heater::SetSensorNumber(int sn) noexcept
