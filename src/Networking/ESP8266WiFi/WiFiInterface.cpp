@@ -1180,6 +1180,10 @@ bool WiFiInterface::SendPemFile(const char *_ecv_array filename, NetworkCommand 
 // `reply` carries the user-facing message on both success and failure
 bool WiFiInterface::ImportTlsFromSd(const StringRef& reply) noexcept
 {
+#if STM32
+// TODO
+	return false;
+#else
 	if (!SendPemFile(TlsCertFile, NetworkCommand::networkSetTlsCert, reply))
 	{
 		return false;
@@ -1208,12 +1212,14 @@ bool WiFiInterface::ImportTlsFromSd(const StringRef& reply) noexcept
 
 	reply.copy("TLS cert/key imported to WiFi module flash; SD copies wiped and deleted");
 	return true;
+#endif
 }
 
 // Probe the WiFi firmware for TLS support and (if needed and possible) import cert/key from /sys/
 // Called from Spin() once the ESP is up. Returns ok on success, warning on unsupported / failed-import
 GCodeResult WiFiInterface::TryEnableTls(const StringRef& reply) noexcept
 {
+#if !STM32
 	const int32_t initialRc = SendCommand(NetworkCommand::networkEnableTls, 0, 0, 0, nullptr, 0, nullptr, 0);
 
 	if (initialRc == ResponseUnknownCommand)
@@ -1249,6 +1255,7 @@ GCodeResult WiFiInterface::TryEnableTls(const StringRef& reply) noexcept
 	}
 
 	// initialRc == ResponseNoTlsCert, and SD files not (both) present
+#endif
 	supportsTls = false;
 	reply.copy("no TLS cert/key on WiFi module flash and none in /sys/ to import");
 	return GCodeResult::warning;
@@ -1272,6 +1279,7 @@ bool WiFiInterface::LoadTlsCertificates(const StringRef& reply) noexcept
 // no-op once the flags are clear. The ESP must be responsive to SPI commands at the point of call
 void WiFiInterface::HandlePendingTlsRequest() noexcept
 {
+#if !STM32
 	// Handle the TLS T-1 path first: wipe stored material on the WiFi module, then come up plain
 	if (tlsClearRequested)
 	{
@@ -1303,6 +1311,7 @@ void WiFiInterface::HandlePendingTlsRequest() noexcept
 	// If a config.g M586 T1 ran while supportsTls was still false (the common case - M552 T1 latches
 	// the probe and returns before this function runs), the listener bind was deferred. Apply it now
 	ApplyPendingTlsProtocols();
+#endif
 }
 
 int WiFiInterface::EnableState() const noexcept
@@ -2483,8 +2492,12 @@ int32_t WiFiInterface::SendCommand(NetworkCommand cmd, SocketNumber socketNum, u
 	const uint32_t timeout = (cmd == NetworkCommand::networkFactoryReset) ? WiFiStartupMillis :
 		(cmd == NetworkCommand::networkAddSsid || cmd == NetworkCommand::networkAddEnterpriseSsid || cmd == NetworkCommand::networkDeleteSsid ||
 		 cmd == NetworkCommand::networkConfigureAccessPoint || cmd == NetworkCommand::networkRetrieveSsidData ||
+#if STM32
+0
+#else
 		 cmd == NetworkCommand::networkSetTlsCert || cmd == NetworkCommand::networkSetTlsKey ||
 		 cmd == NetworkCommand::networkEnableTls || cmd == NetworkCommand::networkClearTls
+#endif
 			? WiFiSlowResponseTimeoutMillis : WiFiFastResponseTimeoutMillis);
 	do
 	{
@@ -2624,7 +2637,11 @@ void WiFiInterface::SendListenCommand(TcpPort port, NetworkProtocol protocol, un
 	lcb.protocol = protocol;
 	lcb.remoteIp = AnyIp;
 	lcb.maxConnections = maxConnections;
+#if STM32
+	SendCommand(NetworkCommand::networkListen, 0, 0, 0, &lcb, sizeof(lcb), nullptr, 0);
+#else
 	SendCommand(NetworkCommand::networkListen, 0, tls ? MessageHeaderSamToEsp::FlagTls : 0, 0, &lcb, sizeof(lcb), nullptr, 0);
+#endif
 }
 
 void WiFiInterface::SendConnectCommand(TcpPort remotePort, NetworkProtocol protocol, uint32_t remoteIp) noexcept

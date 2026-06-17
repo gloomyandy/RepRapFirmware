@@ -153,7 +153,7 @@ GCodeResult NeoPixelLedStrip::SpiSendData(const LedParams& params) noexcept
 		*p++ = (uint8_t)params.firstColour;
 		*p++ = (uint8_t)params.secondColour;
 		*p++ = (uint8_t)params.thirdColour;
-		if (isRGBW)
+		if (IsRGBW())
 		{
 			*p++ = (uint8_t)params.white;
 		}

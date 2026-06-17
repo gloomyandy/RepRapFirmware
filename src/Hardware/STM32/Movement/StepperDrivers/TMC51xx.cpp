@@ -575,7 +575,8 @@ pre(!driversPowered)
 	enabled = false;
 	registersToUpdate.store(0);
 	newRegistersToUpdate.store(0);
-	specialReadRegisterNumber = specialWriteRegisterNumber = 0xFF;
+	specialReadRegisterNumber = 0xFF;
+	specialWriteRegisterNumber = 0xFF;
 	motorCurrent = 0;
 	senseResistor = Default5160SenseResistor;
 	maxCurrent = DefaultMaxTmc5160Current;

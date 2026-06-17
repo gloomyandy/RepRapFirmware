@@ -6,7 +6,7 @@
 static HardwareSPI *spiDevice;
 
 volatile bool dataReceived = false, transferReadyHigh = false;
-volatile unsigned int spiTxUnderruns = 0, spiRxOverruns = 0;
+std::atomic<unsigned int> spiTxUnderruns = 0, spiRxOverruns = 0;
 enum SpiState {Uninitialised, Disabled, Ready, Busy};
 static volatile enum SpiState status = Uninitialised;
 void InitSpi() noexcept;

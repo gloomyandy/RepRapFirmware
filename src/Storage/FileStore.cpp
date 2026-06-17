@@ -858,7 +858,8 @@ void FileWriteBuffer::InitWriterTask() noexcept
 	WriterTask.Create(WriterLoop, "FSWRITE", nullptr, TaskPriority::SpinPriority+1);
 	for(uint32_t i = 0; i < NumFileWriteBuffers; i++)
 		WriteQueue[i] = nullptr;
-	CurrentWrite = AddWrite = 0;
+	CurrentWrite = 0;
+	AddWrite = 0;
 }
 
 void FileWriteBuffer::Spin() noexcept
