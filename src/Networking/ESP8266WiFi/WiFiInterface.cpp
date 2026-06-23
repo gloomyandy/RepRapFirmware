@@ -2493,6 +2493,7 @@ int32_t WiFiInterface::SendCommand(NetworkCommand cmd, SocketNumber socketNum, u
 		(cmd == NetworkCommand::networkAddSsid || cmd == NetworkCommand::networkAddEnterpriseSsid || cmd == NetworkCommand::networkDeleteSsid ||
 		 cmd == NetworkCommand::networkConfigureAccessPoint || cmd == NetworkCommand::networkRetrieveSsidData ||
 #if STM32
+// FIXME!
 0
 #else
 		 cmd == NetworkCommand::networkSetTlsCert || cmd == NetworkCommand::networkSetTlsKey ||
