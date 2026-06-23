@@ -21,6 +21,7 @@
 #include "HardwareSPI.h"
 #include "HardwareSDIO.h"
 #include "Platform/Platform.h"
+#include "StepTimer.h"
 
 #include "HybridPWM.h"
 #include "ff.h"
@@ -738,6 +739,9 @@ void BoardConfig::Init() noexcept
     Cache::FlushBeforeDMAReceive(BoardName, 256);
     Cache::InvalidateAfterDMAReceive(BoardName, 256);
 #endif
+    uint32_t STime = StepTimer::GetTimerTicks();
+    delay(1000);
+    debugPrintf("Timer test elapsed: %u\n", StepTimer::GetTimerTicks() - STime);
 #endif
     if (!LoadBoardDefaults())
     {
