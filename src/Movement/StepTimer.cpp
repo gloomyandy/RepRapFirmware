@@ -21,6 +21,9 @@
 #include <HardwareTimer.h>
 HardwareTimer STimer(STEP_TC);
 TIM_HandleTypeDef *STHandle;
+#if STM32H7
+static volatile uint32_t STimerExtension = 0;
+#endif
 #elif SAME5x
 # include <CoreIO.h>
 # include <hri_tc_e54.h>
@@ -99,6 +102,9 @@ void StepTimer::Init() noexcept
 	STHandle = STimer.getHandle();
 	NVIC_SetPriority(STEP_TC_IRQN, NvicPriorityStep);			    // Set the priority for this IRQ
 	NVIC_EnableIRQ(STEP_TC_IRQN);
+#if STM32H7
+	__HAL_TIM_ENABLE_IT(STHandle, TIM_IT_UPDATE);
+#endif
 	STimer.resume();
 	__HAL_TIM_DISABLE_IT(STHandle, TIM_IT_CC1);
 	
@@ -200,6 +206,70 @@ void StepTimer::Init() noexcept
 
 #endif
 
+#if STM32H7
+// Get the step timer clock count
+/*static*/ uint32_t StepTimer::GetTimerTicks() noexcept
+{
+	// We use TIM3 as the step clock this is only 16 bits so we extend it to 32
+	uint32_t high1, high2;
+	uint32_t low;
+
+	// Loop ensures atomicity without locking or disabling interrupts
+	do
+	{
+		high1 = STimerExtension;
+		low   = __HAL_TIM_GET_COUNTER(STHandle);
+		high2 = STimerExtension;
+	} while (high1 != high2);
+
+	// Edge case handling: If an overflow occurred but the ISR hasn't
+	//executed yet (e.g., if this function is called with interrupts disabled),
+	// the hardware flag will be pending, but high_words hasn't ticked up.
+	if (__HAL_TIM_GET_FLAG(STHandle, TIM_SR_UIF) != RESET)
+	{
+		// Double-check the low counter to ensure it didn't just rollover
+		// right before we checked the flag.
+		low = __HAL_TIM_GET_COUNTER(STHandle);
+		if (low < 0x8000) {
+			high1 += 0x10000;
+		}
+	}
+
+	return (high1 | low);
+}
+
+// Get the step timer clock count
+/*static*/ uint32_t StepTimer::GetTimerTicksWhenInterruptsDisabled() noexcept
+{
+	// We use TIM3 as the step clock this is only 16 bits so we extend it to 32
+	uint32_t high1, high2;
+	uint32_t low;
+
+	// Loop ensures atomicity without locking or disabling interrupts
+	do
+	{
+		high1 = STimerExtension;
+		low   = __HAL_TIM_GET_COUNTER(STHandle);
+		high2 = STimerExtension;
+	} while (high1 != high2);
+
+	// Edge case handling: If an overflow occurred but the ISR hasn't
+	//executed yet (e.g., if this function is called with interrupts disabled),
+	// the hardware flag will be pending, but high_words hasn't ticked up.
+	if (__HAL_TIM_GET_FLAG(STHandle, TIM_SR_UIF) != RESET)
+	{
+		// Double-check the low counter to ensure it didn't just rollover
+		// right before we checked the flag.
+		low = __HAL_TIM_GET_COUNTER(STHandle);
+		if (low < 0x8000) {
+			high1 += 0x10000;
+		}
+	}
+
+	return (high1 | low);
+}
+#endif
+
 #if SAME5x
 
 // Get the step timer clock count
@@ -296,7 +366,7 @@ void StepTimer::DisableTimerInterrupt() noexcept
 {
 	static uint32_t originalOffset = 0;
 
-#if SAME70
+#if SAME70 || STM32H7
 	// On the SAME70 the timestamp counter is the lower 16 bits of the step counter
 	const uint32_t localTimeNow = StepTimer::GetTimerTicks();
 	const uint32_t timeStampDelay = (uint32_t)((localTimeNow - timeStamp) & 0xFFFF);
@@ -457,9 +527,25 @@ void STEP_TC_HANDLER() noexcept
 	{
 		StepTc->INTENCLR.reg = TC_INTFLAG_MC0;						// disable the interrupt (no need to clear it, we do that before we re-enable it)
 #elif STM32
-	__HAL_TIM_CLEAR_IT(STHandle, TIM_IT_CC1);
-	__HAL_TIM_DISABLE_IT(STHandle, TIM_IT_CC1);
+	uint32_t tcsr = STHandle->Instance->SR;
+	tcsr &= STHandle->Instance->DIER;
+#if STM32H7
+    // Check if the update interrupt flag is set
+	if ((tcsr & TIM_SR_UIF) != 0)
 	{
+		// we need to be sure that a higher priority interrupt does not split the following
+		AtomicCriticalSectionLocker lock;
+		__HAL_TIM_CLEAR_IT(STHandle, TIM_IT_UPDATE);
+		// Increment the high 16-bits (scaled to upper half of 32-bit space)
+		STimerExtension += 0x10000;
+	}
+#endif
+
+	if ((tcsr & TIM_SR_CC1IF) != 0)
+	{
+		__HAL_TIM_CLEAR_IT(STHandle, TIM_IT_CC1);
+		__HAL_TIM_DISABLE_IT(STHandle, TIM_IT_CC1);
+
 #else
 	// ATSAM processor code
 	uint32_t tcsr = STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_SR;		// read the status register, which clears the status bits

@@ -155,7 +155,7 @@ extern TIM_HandleTypeDef *STHandle;
 #endif
 
 // Function GetTimerTicks() is very short on SAM4E processors so we inline it
-#if SAM4E || STM32
+#if SAM4E
 
 inline __attribute__((always_inline)) StepTimer::Ticks StepTimer::GetTimerTicks() noexcept
 {
