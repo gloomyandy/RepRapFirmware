@@ -648,7 +648,7 @@ extern "C" [[noreturn]] void CanClockLoop(void *) noexcept
 	uint32_t lastWakeTime = xTaskGetTickCount();
 	uint32_t lastTimeSent = 0;
 	uint32_t lastRealTimeSent = 0;
-#if !SAME70
+#if !SAME70 && !STM32H7
 	uint16_t lastTimeSyncTxPreparedStamp = 0;
 #endif
 
@@ -667,7 +667,7 @@ extern "C" [[noreturn]] void CanClockLoop(void *) noexcept
 		if (gotTimeSyncTxTimeStamp)
 		{
 			// Calculate the delay in sending the last time sync message, in step clocks
-# if SAME70
+# if SAME70 || STM32H7
 			// On the SAME70 the step clock is also the external time stamp counter
 			const uint32_t timeSyncTxDelay = (timeSyncTxTimeStamp - (uint16_t)lastTimeSent) & 0xFFFF;
 # else
@@ -709,7 +709,7 @@ extern "C" [[noreturn]] void CanClockLoop(void *) noexcept
 		{
 			buf.dataLength = CanMessageTimeSync::SizeWithoutRealTime;		// send a short message to save CAN bandwidth
 		}
-#if SAME70
+#if SAME70 || STM32H7
 		lastTimeSent = StepTimer::GetTimerTicks();
 #elif USE_SPICAN
 		{
