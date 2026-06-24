@@ -410,14 +410,14 @@ void Heater::SetAndReportModelAfterTuning(bool usingFans) noexcept
 	const float deadTime = (usingFans) ? (fanOffParams.deadTime + fanOnParams.deadTime) * 0.5 : fanOffParams.deadTime;
 	const float coolingRateExponent = model.GetCoolingRateExponent();					// we don't attempt to tune this
 	const float averageTemperatureRiseCooling = tuningTargetTemp - TuningPeakTempDrop - 0.5 * tuningHysteresis - tuningStartTemp.GetMean();
-	const float basicCoolingRate = fanOffParams.coolingRate/powf(averageTemperatureRiseCooling * 0.01, coolingRateExponent);
+	const float basicCoolingRate = model.CalculateBasicCoolingRate(averageTemperatureRiseCooling, fanOffParams.coolingRate);
 	float fanOnCoolingRate = 0.0;
 	if (usingFans)
 	{
 		// Sometimes the print cooling fan makes no difference to the cooling rate. The SetModel call will fail if the rate with fan on is lower than the rate with fan off.
 		if (fanOnParams.coolingRate > fanOffParams.coolingRate)
 		{
-			fanOnCoolingRate = ((fanOnParams.coolingRate - fanOffParams.coolingRate) * 100.0)/(averageTemperatureRiseCooling * tuningFanPwm);
+			fanOnCoolingRate = model.CalculateFanCoolingRate(averageTemperatureRiseCooling,  fanOnParams.coolingRate - fanOffParams.coolingRate, tuningFanPwm);
 		}
 		else
 		{
@@ -684,6 +684,16 @@ void Heater::SetFunction(HeaterFunction func) noexcept
 		}
 		monitors[0].Set(sensorNumber, tempLimit, HeaterMonitorAction::GenerateFault, HeaterMonitorTrigger::TemperatureExceeded);
 	}
+}
+
+float Heater::GetMaxPwmFaultTime() const noexcept
+{
+	return max<float>(DefaultToolHeaterPwmFaultTime, 5 * model.GetDeadTime());
+}
+
+float Heater::GetPwmFaultLevel() const noexcept
+{
+	return DefaultToolHeaterPwmFaultLevel;
 }
 
 #if SUPPORT_REMOTE_COMMANDS

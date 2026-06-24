@@ -4203,7 +4203,7 @@ void GCodes::HandleReplyPreserveResult(GCodeBuffer& gb, GCodeResult rslt, const 
 			type = AddError(type);
 			if (reprap.IsProcessingConfig())
 			{
-				reprap.SaveConfigError((gb.LatestMachineState().GetPrevious() == nullptr) ? "config.g" : "macro", gb.GetLineNumber(), reply);
+				reprap.SaveConfigError(gb.LatestMachineState().fname, gb.GetLineNumber(), reply);
 			}
 		}
 
@@ -4233,7 +4233,7 @@ void GCodes::HandleReplyPreserveResult(GCodeBuffer& gb, GCodeResult rslt, const 
 
 	if (rslt == GCodeResult::error && reprap.IsProcessingConfig())
 	{
-		reprap.SaveConfigError((gb.LatestMachineState().GetPrevious() == nullptr) ? "config.g" : "macro", gb.GetLineNumber(), reply);
+		reprap.SaveConfigError(gb.LatestMachineState().fname, gb.GetLineNumber(), reply);
 	}
 
 	const MessageType initialMt = gb.GetResponseMessageType();

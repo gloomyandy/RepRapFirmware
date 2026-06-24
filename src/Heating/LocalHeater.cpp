@@ -91,7 +91,10 @@ void LocalHeater::ResetHeater() noexcept
 	iAccumulator = 0.0;
 	badTemperatureCount = 0;
 	averagePWM = lastPwm = 0.0;
-	heaterExcursionFaultCount = heaterPwmFaultCount = 0;
+	heaterExcursionFaultCount = 0;
+#if CHECK_HEATER_PWM
+	heaterPwmFaultCount = 0;
+#endif
 	temperature = BadErrorTemperature;
 }
 
@@ -211,7 +214,10 @@ void LocalHeater::UpdateHeaterMode(float targetTemperature) noexcept
 			lastTemperatureValue = temperature;
 			lastTemperatureMillis = timeSetHeating = millis();
 		}
-		heaterExcursionFaultCount = heaterPwmFaultCount = 0;
+		heaterExcursionFaultCount = 0;
+#if CHECK_HEATER_PWM
+		heaterPwmFaultCount = 0;
+#endif
 		mode = newMode;
 	}
 }
@@ -334,7 +340,10 @@ void LocalHeater::Spin() noexcept
 				if (error <= TemperatureCloseEnough)
 				{
 					mode = HeaterMode::stable;
-					heaterExcursionFaultCount = heaterPwmFaultCount = 0;
+					heaterExcursionFaultCount = 0;
+#if CHECK_HEATER_PWM
+					heaterPwmFaultCount = 0;
+#endif
 				}
 				else
 				{
@@ -407,7 +416,10 @@ void LocalHeater::Spin() noexcept
 				{
 					// We have cooled to close to the target temperature, so we should now maintain that temperature
 					mode = HeaterMode::stable;
-					heaterExcursionFaultCount = heaterPwmFaultCount = 0;
+					heaterExcursionFaultCount = 0;
+#if CHECK_HEATER_PWM
+					heaterPwmFaultCount = 0;
+#endif
 				}
 				else
 				{
@@ -464,10 +476,14 @@ void LocalHeater::Spin() noexcept
 						lastPwm = constrain<float>(pPlusD + iAccumulator, 0.0, GetModel().GetMaxPwm());
 					}
 
-					if (mode == HeaterMode::stable && GetFunction() != HeaterFunction::chamber)
+					// The following safety check is no good for bed heaters that have a large thermal reservoir loosely coupled to the heater,
+					// because the required PWM is higher than the expected value from tuning until the reservoir has heated up.
+					// So we apply it to tool heaters only.
+#if CHECK_HEATER_PWM
+					if (mode == HeaterMode::stable && GetFunction() == HeaterFunction::tool)
 					{
 						const float limitedAccumulator = min<float>(iAccumulator, GetModel().GetMaxPwm());
-						if (limitedAccumulator > expectedPwm * PwmFaultLevel)
+						if (limitedAccumulator > expectedPwm * GetPwmFaultLevel())
 						{
 							++heaterPwmFaultCount;
 							if (heaterPwmFaultCount * HeatSampleIntervalMillis > GetMaxPwmFaultTime() * SecondsToMillis)
@@ -482,6 +498,7 @@ void LocalHeater::Spin() noexcept
 							--heaterPwmFaultCount;
 						}
 					}
+#endif
 				}
 				else
 				{
