@@ -741,7 +741,7 @@ void BoardConfig::Init() noexcept
 #endif
     uint32_t STime = StepTimer::GetTimerTicks();
     delay(1000);
-    debugPrintf("Timer test elapsed: %u\n", StepTimer::GetTimerTicks() - STime);
+    debugPrintf("Timer test elapsed: %u\n", (unsigned)(StepTimer::GetTimerTicks() - STime));
 #endif
     if (!LoadBoardDefaults())
     {
@@ -1444,6 +1444,12 @@ bool BoardConfig::LoadBoardConfigFromSBC() noexcept
         FlushMessages();
         reprap.EmergencyStop();
         delay(1000);
+        serialUSB.end();
+#ifdef SERIAL_USB2_DEVICE
+        serialUSB2.end();
+#endif
+        // Provide time for DCS to notice we have closed down.
+        delay(5000);
         SoftwareReset(SoftwareResetReason::erase); // Reboot
     }
     return true;

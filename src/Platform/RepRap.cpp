@@ -693,6 +693,10 @@ void RepRap::Init() noexcept
 			// At this point we may only have very limited hardware configuration loaded so avoid
 			// using the main Spin loop.
 			platform->FlushMessages();
+#if SUPPORTS_SBC_OVER_USB
+			// we need to check for gcode input to allow the SBC to enable USB mode
+			gCodes->Spin();
+#endif
 			ticksInSpinState = 0;
 #else
 			Spin();
