@@ -778,30 +778,6 @@ void Platform::SendPanelDueMessage(size_t chan, const char *_ecv_array msg) noex
 #endif
 }
 
-void Platform::Exit() noexcept
-{
-	StopLogging();
-#if HAS_MASS_STORAGE || HAS_EMBEDDED_FILES
-	MassStorage::CloseAllFiles();
-#endif
-
-	// Stop processing data. Don't try to send a message because it will probably never get there.
-	active = false;
-
-	// Close down USB and serial ports and release output buffers
-	for (UsbDeviceRrf& dev : usbDevices)
-	{
-		dev.Shutdown();
-	}
-
-#if NUM_ASYNC_CHANNELS != 0
-	for (AuxDevice& dev : auxDevices)
-	{
-		dev.Disable();
-	}
-#endif
-}
-
 #if HAS_NETWORKING
 
 void Platform::SetIPAddress(IPAddress ip) noexcept
@@ -2379,6 +2355,27 @@ void Platform::ReinitUsbDevice(unsigned int index) noexcept
 	{
 		usbDevices[index].Reinit();
 	}
+}
+
+// Disconnect the USB device from the host by ending every CDC interface. Callers do this before a
+// reset or firmware update so the host frees all interfaces together and the board re-enumerates on
+// the same ttyACM minors instead of shifting them. On builds with several CDC interfaces sharing one
+// device the detach only fires once the last interface ends, so end them all. If the SBC protocol
+// runs over this USB link, freeze the SBC task first: otherwise it treats the disconnect as a lost
+// connection and re-attaches the device (EndDirectMode + ReinitUsbDevice) before the reset lands
+void Platform::DisconnectUsb() noexcept
+{
+#if HAS_SBC_INTERFACE && SUPPORTS_SBC_OVER_USB
+	if (reprap.UsingSbcInterface() && reprap.GetSbcInterface().GetDataTransfer().GetTransportType() == SbcTransportType::usb)
+	{
+		reprap.GetSbcInterface().Suspend();
+	}
+#endif
+	for (UsbDeviceRrf& dev : usbDevices)
+	{
+		dev.End();
+	}
+	delay(50);								// allow the host to process the disconnect before the bus goes away
 }
 
 // Aux port functions
