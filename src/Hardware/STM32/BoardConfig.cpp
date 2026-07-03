@@ -715,6 +715,8 @@ void BoardConfig::Init() noexcept
 #error "Invalid board configuration HAS_MASS_STORAGE is required"
 #endif
 
+#undef STARTUP_DELAY
+#define STARTUP_DELAY 0
 #if STARTUP_DELAY
     for(int i = 0; i < STARTUP_DELAY; i++)
     {
@@ -1442,15 +1444,12 @@ bool BoardConfig::LoadBoardConfigFromSBC() noexcept
         newConfig.saveToBackupRAM();
         MessageF(UsbMessage, "Configurations do not match rebooting to load new settings\n");
         FlushMessages();
-        reprap.EmergencyStop();
         delay(1000);
-        serialUSB.end();
-#ifdef SERIAL_USB2_DEVICE
-        serialUSB2.end();
-#endif
-        // Provide time for DCS to notice we have closed down.
-        delay(5000);
-        SoftwareReset(SoftwareResetReason::erase); // Reboot
+        reprap.GetSbcInterface().RequestRestart();
+        delay(10000);
+        // we should never get here!
+        reprap.EmergencyStop();
+        SoftwareReset(SoftwareResetReason::deliberate); // Reboot
     }
     return true;
 }

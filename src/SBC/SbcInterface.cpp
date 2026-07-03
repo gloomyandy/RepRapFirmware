@@ -89,6 +89,11 @@ void SbcInterface::FreeMemory() noexcept
 	delete sbcTask;
 	transfer.FreeMemory();
 }
+
+void SbcInterface::RequestRestart() noexcept
+{
+	restartRequested = true;
+}
 #endif
 
 void SbcInterface::Init() noexcept
@@ -97,6 +102,7 @@ void SbcInterface::Init() noexcept
 	// We have already allocated memory in the constructor so just start things here
 	transfer.Init();
 	sbcTask->Create(SBCTaskStart, "SBC", nullptr, TaskPriority::SbcPriority);
+	restartRequested = false;
 #else
 	fileMutex.Create("SBCFile");
 	gcodeReplyMutex.Create("SBCReply");
@@ -1531,6 +1537,13 @@ void SbcInterface::ExchangeData() noexcept
 			}
 		}
 	}
+#if STM32
+	if (restartRequested)
+	{
+		if (transfer.WriteDoCode(GCodeChannel::USB, "M999", 4))
+			restartRequested = false;
+	}
+#endif
 
 	// Send pause notification on demand
 	if (reportPause && transfer.WritePrintPaused(pauseFilePosition, pauseFilePosition2, pauseReason))

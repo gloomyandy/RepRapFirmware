@@ -682,12 +682,21 @@ void RepRap::Init() noexcept
 		sbcInterface->Init();
 		// Keep spinning until the SBC connects
 		uint32_t start = millis();
+		uint32_t seconds = 0;
 		while (!sbcInterface->IsConnected())
 		{
-			if (millis() - start > 1000)
+			if (millis() - start >= 1000)
 			{
 				platform->MessageF(UsbMessage, "Waiting for SBC connect\n");
 				start = millis();
+				if (++seconds > 20)
+				{
+					// Force a reboot if we have not connected after 20 seconds
+					debugPrintf("Rebooting due to timeout\n");
+					delay(1000);
+					//reprap.GetPlatform().DisconnectUsb();
+					SoftwareReset(SoftwareResetReason::erase); // Reboot
+				}
 			}
 #if STM32
 			// At this point we may only have very limited hardware configuration loaded so avoid

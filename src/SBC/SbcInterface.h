@@ -41,6 +41,7 @@ public:
 	void Init() noexcept;
 #if STM32
 	void FreeMemory() noexcept;
+	void RequestRestart() noexcept;
 #endif
 	[[noreturn]] void TaskLoop() noexcept;
 	void Diagnostics(const StringRef& reply) noexcept;
@@ -100,6 +101,9 @@ private:
 	char *codeBuffer;
 	volatile uint16_t rxPointer, txPointer, txEnd;
 	volatile bool sendBufferUpdate;
+#if STM32
+	volatile bool restartRequested;
+#endif
 
 	uint32_t iapRamAvailable;											// must be at least 32Kb otherwise the SPI IAP can't work
 
