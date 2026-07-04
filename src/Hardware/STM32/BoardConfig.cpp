@@ -153,15 +153,6 @@ static const boardConfigEntry_t boardConfigs[]=
 #endif
     
 #if HAS_WIFI_NETWORKING
-    {"8266wifi.espDataReadyPin", &EspDataReadyPin, 1, cvPinType},
-    {"8266wifi.TfrReadyPin", &SamTfrReadyPin, 1, cvPinType},
-    {"8266wifi.lpcTfrReadyPin", &SamTfrReadyPin, 1, cvPinType},
-    {"8266wifi.espResetPin", &EspResetPin, 1, cvPinType},
-    {"8266wifi.csPin", &SamCsPin, 1, cvPinType},
-    {"8266wifi.serialRxTxPins", &SerialWiFiRxTxPins, NumberSerialPins, cvPinType},
-    {"8266wifi.spiChannel", &WiFiSpiChannel, 1, cvUint8Type},    
-    {"8266wifi.clockReg", &WiFiClockReg, 1, cvUint32Type},
-    {"8266wifi.moduleType", &NetworkModule, 1, cvModuleType},
     {"wifi.espDataReadyPin", &EspDataReadyPin, 1, cvPinType},
     {"wifi.TfrReadyPin", &SamTfrReadyPin, 1, cvPinType},
     {"wifi.espResetPin", &EspResetPin, 1, cvPinType},
@@ -715,8 +706,6 @@ void BoardConfig::Init() noexcept
 #error "Invalid board configuration HAS_MASS_STORAGE is required"
 #endif
 
-#undef STARTUP_DELAY
-#define STARTUP_DELAY 0
 #if STARTUP_DELAY
     for(int i = 0; i < STARTUP_DELAY; i++)
     {
