@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Version 3.7.0-alpha.1
 =====================
 * Duet3d 3.7 (S-Curve not enabled)
@@ -12,6 +13,24 @@ Version 3.7.0-alpha.1
 * Added support for TMC2240 drivers using SPI on expansion boards (thanks Nine Mile).
 
 Vsrsion 3.6.2-beta.1
+=======
+
+Version 3.6.2+1
+====================
+* Duet3d 3.6.2+1
+
+Version 3.6.2
+====================
+* Duet3d 3.6.2
+
+Version 3.6.2-rc.1
+====================
+* Duet3d 3.6.2-rc.1
+* Added support for Fly C8 pro
+* Added support for Longboi
+
+Version 3.6.2-beta.1
+>>>>>>> v3.6-dev
 ====================
 * Duet3d 3.6.2-beta.1
 * Back port esp32C5 support

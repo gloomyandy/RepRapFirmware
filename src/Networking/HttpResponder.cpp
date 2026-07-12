@@ -1421,8 +1421,8 @@ void HttpResponder::DoUpload() noexcept
 	{
 		do
 		{
-			(void)CheckAuthenticated();							// uploading may take a long time, so make sure the requester IP is not timed out
-			timer = millis();									// reset the timer
+			(void)CheckAuthenticated();						// uploading may take a long time, so make sure the requester IP is not timed out
+			timer = millis();								// reset the timer
 			if (!dummyUpload)
 			{
 				// Check to see how much we can write, this avaoid blocking when using a 
