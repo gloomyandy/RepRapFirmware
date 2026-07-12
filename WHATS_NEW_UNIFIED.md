@@ -1,3 +1,11 @@
+Version 3.7.0-beta.1
+=====================
+* Duet3d V3.7.0-beta.1
+* Improved ESP32C5 support (support for releaed chips)
+* Switched to esp-idf v6.0.2
+* Added TLS support
+* Reworked timer allocation to allow TIM3 to be used for CAN-FD
+
 Version 3.7.0-alpha.1
 =====================
 * Duet3d 3.7 (S-Curve not enabled)
@@ -11,6 +19,9 @@ Version 3.7.0-alpha.1
 * Improved current control for TMC2240 drivers
 * Added support for TMC2240 drivers using SPI on expansion boards (thanks Nine Mile).
 
+Version 3.6.3
+====================
+* Duet3d 3.6.3
 
 Version 3.6.2+1
 ====================
