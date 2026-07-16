@@ -5,6 +5,7 @@ Version 3.7.0-beta.1
 * Switched to esp-idf v6.0.2
 * Added TLS support
 * Reworked timer allocation to allow TIM3 to be used for CAN-FD
+* Removed board.txt entries that begin 8266WiFi
 
 Version 3.7.0-alpha.1
 =====================
