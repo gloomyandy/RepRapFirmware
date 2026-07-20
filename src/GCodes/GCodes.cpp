@@ -455,9 +455,9 @@ void GCodes::Spin() noexcept
 
 #if defined(SERIAL_USB_DEVICE) && (!SAME5x || CORE_USES_TINYUSB)
 	// Read from USB into the input buffer and check for out-of-band urgent commands (M112/M122/M108)
-	usbInput->Spin();
+	usbInput->Spin(*UsbGCode());
 # if defined(SERIAL_USB2_DEVICE)
-	usb2Input->Spin();
+	usb2Input->Spin(*Usb2GCode());
 # endif
 #endif
 
@@ -1102,6 +1102,10 @@ bool GCodes::DoAsynchronousPause(GCodeBuffer& gb, PrintPausedReason reason, GCod
 #endif
 		}
 
+		// The user position may no longer match where the machine actually stops if a queued or read-ahead move was discarded above,
+		// so make sure it is re-read from the motors at the next standstill before the pause macro can run
+		ms.positionMayBeInaccurate = true;
+
 		// Replace the paused machine coordinates by user coordinates, which we updated earlier if they were returned by Move::PausePrint
 		for (size_t axis = 0; axis < numVisibleAxes; ++axis)
 		{
@@ -1312,6 +1316,8 @@ bool GCodes::DoEmergencyPause() noexcept
 #endif
 		}
 
+		// The aborted move may have been stopped partway through, so make sure the position is re-read from the motors at the next standstill
+		ms.positionMayBeInaccurate = true;
 
 #if HAS_SBC_INTERFACE
 		if (reprap.UsingSbcInterface() && ms.GetNumber() == 0)
@@ -2326,6 +2332,15 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 	float initialUserPosition[MaxAxes];
 	memcpyf(initialUserPosition, ms.currentUserPosition, numVisibleAxes);
 
+	// Restore the state we have already changed, called before throwing to abandon the move.
+	// Only safe to call after LoadExtrusionFromGCode has set up moveStartVirtualExtruderPosition for this move
+	const auto abandonMove = [this, &ms, &initialUserPosition]() noexcept
+	{
+		memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);
+		memcpyf(ms.raw.coords, ms.initialCoords, numVisibleAxes);
+		ms.latestVirtualExtruderPosition = ms.raw.moveStartVirtualExtruderPosition;
+	};
+
 	AxesBitmap axesMentioned;
 	for (size_t axis = 0; axis < numVisibleAxes; axis++)
 	{
@@ -2427,6 +2442,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 
 		if (!doingManualBedProbe && CheckEnoughAxesHomed(realAxesMoving))
 		{
+			memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);	// undo the user position update because this move will not be executed
 			gb.ThrowGCodeException("insufficient axes homed");
 		}
 	}
@@ -2560,6 +2576,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 #if SUPPORT_KEEPOUT_ZONES
 			if (keepoutZone.DoesLineIntrude(ms.initialCoords, ms.raw.coords))
 			{
+				abandonMove();
 				gb.ThrowGCodeException("straight move would enter keepout zone");
 			}
 #endif
@@ -2567,6 +2584,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 #if SUPPORT_ASYNC_MOVES
 			if (!collisionChecker.UpdatePositions(ms.raw.coords, axesHomed))
 			{
+				abandonMove();
 				gb.ThrowGCodeException("potential collision detected");
 			}
 #endif
@@ -2590,7 +2608,11 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 			{
 			case LimitPositionResult::adjusted:
 			case LimitPositionResult::adjustedAndIntermediateUnreachable:
-				gb.ThrowGCodeException(TargetUnreachableText);
+				if (machineType != MachineType::fff)
+				{
+					abandonMove();
+					gb.ThrowGCodeException(TargetUnreachableText);				// it's a laser or CNC so this is a definite error
+				}
 				ToolOffsetInverseTransform(ms);									// make sure the limits are reflected in the user position
 				if (lp == LimitPositionResult::adjusted)
 				{
@@ -2615,6 +2637,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 						break;
 					}
 				}
+				abandonMove();
 				gb.ThrowGCodeException("target position not reachable from current position");		// we can't bring the move within limits, so this is a definite error
 				[[fallthrough]];
 
@@ -2900,6 +2923,10 @@ bool GCodes::DoArcMove(GCodeBuffer& gb, bool clockwise) THROWS(GCodeException)
 
 	memcpyf(ms.initialCoords, ms.raw.coords, numVisibleAxes);
 
+	// Save the current position in case we have to abandon the move
+	float initialUserPosition[MaxAxes];
+	memcpyf(initialUserPosition, ms.currentUserPosition, numVisibleAxes);
+
 	// Set the new user position
 	ms.currentUserPosition[axis0] = newAxis0Pos;
 	ms.currentUserPosition[axis1] = newAxis1Pos;
@@ -2973,6 +3000,7 @@ bool GCodes::DoArcMove(GCodeBuffer& gb, bool clockwise) THROWS(GCodeException)
 
 	if (CheckEnoughAxesHomed(realAxesMoving))
 	{
+		memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);	// undo the user position update because this move will not be executed
 		gb.ThrowGCodeException("insufficient axes homed");
 	}
 
@@ -3012,6 +3040,8 @@ bool GCodes::DoArcMove(GCodeBuffer& gb, bool clockwise) THROWS(GCodeException)
 
 	if (reprap.GetMove().GetKinematics().LimitPosition(ms.raw.coords, nullptr, numVisibleAxes, axesVirtuallyHomed, true, limitAxes) != LimitPositionResult::ok)
 	{
+		memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);
+		memcpyf(ms.raw.coords, ms.initialCoords, numVisibleAxes);
 		gb.ThrowGCodeException(TargetUnreachableText);							// abandon the move
 	}
 
@@ -3035,6 +3065,8 @@ bool GCodes::DoArcMove(GCodeBuffer& gb, bool clockwise) THROWS(GCodeException)
 #if SUPPORT_KEEPOUT_ZONES
 	if (keepoutZone.DoesArcIntrude(ms.initialCoords, ms.raw.coords, ms.arcCurrentAngle, finalTheta, ms.arcCentre, ms.arcRadius, axis0Mapping, axis1Mapping, clockwise, wholeCircle))
 	{
+		memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);
+		memcpyf(ms.raw.coords, ms.initialCoords, numVisibleAxes);
 		gb.ThrowGCodeException("arc move would enter keepout zone");
 	}
 #endif
@@ -3406,6 +3438,7 @@ void GCodes::NewMoveAvailable(MovementState& ms) noexcept
 // Cancel any macro or print in progress
 void GCodes::AbortPrint(GCodeBuffer& gb) noexcept
 {
+	PauseSequenceAborted(gb);					// if we are aborting a pause sequence before it committed, settle the pause first
 	AbortStateMachine(gb);						// clean up state machine side effects at all stack levels before unwinding
 	(void)gb.AbortFile(true);					// stop executing any files or macros that this GCodeBuffer is running
 	if (gb.IsFileChannel())						// if the current command came from a file being printed
@@ -3419,6 +3452,29 @@ void GCodes::AbortPrint(GCodeBuffer& gb) noexcept
 #endif
 		StopPrint(nullptr, StopPrintReason::abort);
 		gb.Init();								// invalidate the file channel here as the other one may be still busy (possibly in a macro)
+	}
+}
+
+// When a pause sequence (pause.g / filament-change.g) is aborted, the stack frame that would have advanced pauseState from
+// pausing to paused is discarded with the rest of the aborted frames, leaving the machine stuck reporting "pausing" forever.
+// If this GCodeBuffer still holds such a frame while pauseState is pausing, commit the pause now so it settles to paused (resumable)
+// instead of hanging. The file-channel path in AbortPrint runs StopPrint afterwards, which resets to notPaused as before
+void GCodes::PauseSequenceAborted(GCodeBuffer& gb) noexcept
+{
+	if (pauseState != PauseState::pausing)
+	{
+		return;
+	}
+
+	for (const GCodeMachineState *_ecv_null ms = &gb.LatestMachineState(); ms != nullptr; ms = ms->GetPrevious())
+	{
+		const GCodeState state = ms->GetState();
+		if (state == GCodeState::pausing2 || state == GCodeState::eventPausing2 || state == GCodeState::filamentChangePause2)
+		{
+			pauseState = PauseState::paused;
+			reprap.StateUpdated();
+			return;
+		}
 	}
 }
 
@@ -4647,6 +4703,7 @@ void GCodes::StopPrint(GCodeBuffer *_ecv_null gbp, StopPrintReason reason) noexc
 
 	for (MovementState& ms : moveStates)
 	{
+		ms.positionMayBeInaccurate = true;		// the discarded move (if any) may have already updated the user position, so re-read it at the next standstill
 		ms.segmentsLeft = 0;
 		ms.codeQueue->Clear();
 #if SUPPORT_LASER

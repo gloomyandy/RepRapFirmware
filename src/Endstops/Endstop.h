@@ -37,7 +37,7 @@ public:
 	virtual EndstopHitDetails CheckTriggered() noexcept = 0;
 	virtual bool Acknowledge(EndstopHitDetails what) noexcept = 0;
 #if SUPPORT_CAN_EXPANSION
-	virtual void HandleStalledRemoteDrivers(CanAddress boardAddress, LocalDriversBitmap driversReportedStalled) noexcept { }		// overridden for stall endstops
+	virtual void HandleStalledRemoteDrivers(CanAddress boardAddress, LocalDriversBitmap driversReportedStalled, uint16_t when) noexcept { }		// overridden for stall endstops
 #endif
 	EndstopOrZProbe *_ecv_from _ecv_null GetNext() const noexcept { return next; }
 	void SetNext(EndstopOrZProbe *_ecv_from _ecv_null e) noexcept { next = e; }
@@ -53,6 +53,11 @@ protected:
 
 #if HAS_STALL_DETECT
 	static LocalDriversBitmap GetStalledDrivers(LocalDriversBitmap driversOfInterest) noexcept;
+#endif
+
+#if SUPPORT_CAN_EXPANSION
+	uint16_t whenTriggered;
+	bool haveTriggerTime = false;
 #endif
 
 private:
@@ -113,7 +118,7 @@ public:
 
 #if SUPPORT_CAN_EXPANSION
 	// Process a remote endstop input change that relates to this endstop
-	virtual void HandleRemoteInputChange(CanAddress src, uint8_t handleMinor, bool state) noexcept { }
+	virtual void HandleRemoteInputChange(CanAddress src, uint8_t handleMinor, uint16_t when, bool state) noexcept { }
 	virtual void DeleteRemoteStallEndstops() noexcept { }		// overridden in class StallEndtop
 #endif
 
