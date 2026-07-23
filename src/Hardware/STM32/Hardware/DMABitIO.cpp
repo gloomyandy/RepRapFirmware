@@ -49,7 +49,7 @@ enum SUStates
     error
 };
 static volatile SUStates SUState = SUStates::idle;
-static HardwareTimer SUTimer(TIM1);
+static HardwareTimer SUTimer(TIM6);
 static Pin SUPin;
 static volatile uint32_t *SUPinSetClrPtr;
 static volatile uint32_t *SUPinReadPtr;
@@ -336,7 +336,7 @@ void DMABitIOInit() noexcept
     __HAL_RCC_DMA2_CLK_ENABLE();    
     SUDma.Instance                 = DMA2_Stream5;
 #if STM32H7
-    SUDma.Init.Request             = DMA_REQUEST_TIM1_UP;
+    SUDma.Init.Request             = DMA_REQUEST_TIM6_UP;
 #else
     SUDma.Init.Channel             = DMA_CHANNEL_6;
 #endif
