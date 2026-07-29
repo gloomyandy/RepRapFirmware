@@ -703,7 +703,7 @@ void StepTimer::CancelCallback() noexcept
 # elif SAME70 || SAM4S
 		if (STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_RB != (uint16_t)pst->whenDue)
 # elif STM32
-		if (__HAL_TIM_GET_COMPARE(STHandle, TIM_CHANNEL_1) != pst->whenDue)
+		if (__HAL_TIM_GET_COMPARE(STHandle, TIM_CHANNEL_1) != (uint16_t)pst->whenDue)
 # endif
 		{
 			reply.cat(", CC0 mismatch!!");
