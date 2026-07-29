@@ -1987,7 +1987,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #if defined(DUET3_ATE)
 				reply.lcatf("ATE firmware version %s date %s %s", Duet3Ate::GetFirmwareVersionString(), Duet3Ate::GetFirmwareDateString(), Duet3Ate::GetFirmwareTimeString());
 #else
-				reply.catf(" FIRMWARE_DATE: %s%s", DateText, TimeSuffix);
+				reply.catf(" FIRMWARE_DATE: %s", DateTimeText);
 #endif
 				break;
 
@@ -2563,7 +2563,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						}
 					}
 
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 					if (frac < 1 && gb.Seen('T'))
 					{
 						if (!LockAllMovementSystemsAndWaitForStandstill(gb))
@@ -2576,7 +2576,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #endif
 					if (seen)
 					{
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 						if (frac < 1)
 						{
 							move.UpdateSCurveFlagAndJerk();
@@ -2598,7 +2598,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 							reply.catf("%c%.1f", sep, (double)InverseConvertAcceleration(move.Acceleration(ExtruderToLogicalDrive(extruder), frac == 1)));
 							sep = ':';
 						}
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 						if (frac < 1)
 						{
 							reply.catf(", acceleration time %.2f sec", (double)(move.AccelerationTime() * (1.0/StepClockRate)));
@@ -2606,7 +2606,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 #endif
 					}
 
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 					if (frac < 1 && move.AccelerationTime() != 0.0 && !move.IsUsingSCurve())
 					{
 						reply.lcat("Acceleration time (S-curve acceleration) is disabled because phase stepping is not enabled");

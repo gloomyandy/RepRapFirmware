@@ -126,7 +126,7 @@ void PrepParams::SetFromDDA(DDA& dda) noexcept
 	totalDistance = dda.totalDistance;
 	// Due to rounding error, for an accelerate-decelerate move we may have accelDistance+decelDistance slightly greater than totalDistance.
 	// We need to make sure that accelDistance <= decelStartDistance for subsequent calculations to work.
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 	jerk = 0.0;							// this signals that we are not using S-curve acceleration
 	peakAcceleration = initialAcceleration = dda.maxAcceleration;
 	peakDeceleration = initialDeceleration = -dda.maxAcceleration;
@@ -157,7 +157,7 @@ void PrepParams::SetFromDDA(DDA& dda) noexcept
 	endSpeed = dda.endSpeed;
 }
 
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 
 void PrepParams::EnsureSpeedsSet() const noexcept
 {
@@ -176,14 +176,14 @@ void PrepParams::EnsureSpeedsSet() const noexcept
 void PrepParams::DebugPrint() const noexcept
 {
 	debugPrintf("pp: td=%.3g ss=%.4g ts=%.4g es=%.4g"
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 				" ad=[%.4g %.4g %.4g] sd=%.4g dd=[%.4g %.4g %.4g] a=[%.4g %.4g] d=[%.4g %.4g] ac=[%" PRIu32 " %" PRIu32 " %" PRIu32 "] sc=%" PRIu32 " dc=[%" PRIu32 " %" PRIu32 " %" PRIu32 "]"
 #else
 				" ad=%.4g dsd=%.4g a=%.4g d=%.4g ac=%" PRIu32 " sc=%" PRIu32 " dc=%" PRIu32
 #endif
 				"\n",
 					(double)totalDistance, (double)startSpeed, (double)topSpeed, (double)endSpeed,
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 					(double)distances[0], (double)distances[1], (double)distances[2],
 					(double)distances[3],
 					(double)distances[4], (double)distances[5], (double)distances[6],
@@ -262,13 +262,13 @@ void DDA::DebugPrint(const char *_ecv_array tag) const noexcept
 	debugPrintf("%s %u ts=%" PRIu32 " DDA: s=%.4g", tag, (unsigned int)GetState(), afterPrepare.moveStartTime, (double)totalDistance);
 	DebugPrintVector(" vec", directionVector, MaxAxesPlusExtruders);
 	debugPrintf("\n"
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 				"a=[%.4e, %.4e, 0.0] j=%.4e"
 #else
 				"a=%.4e"
 #endif
 				" reqv=%.4e startv=%.4e topv=%.4e endv=%.4e cks=%" PRIu32 " fp=%" PRIu32 " fl=0x%06" PRIx32 "\n",
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 				(double)startAcceleration, (double)maxAcceleration, (double)jerk,
 #else
 				(double)maxAcceleration,
@@ -512,7 +512,7 @@ MovementError DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool
 		// First do the bed tilt compensation for deltas.
 		directionVector[Z_AXIS] += (directionVector[X_AXIS] * k.GetTiltCorrection(X_AXIS)) + (directionVector[Y_AXIS] * k.GetTiltCorrection(Y_AXIS));
 		totalDistance = NormaliseLinearMotion(move.GetLinearAxes());
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 		movementRatio = (extrudersMoving) ? totalExtrusion/totalDistance : 1.0;
 #endif
 	}
@@ -520,7 +520,7 @@ MovementError DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool
 	{
 		// Some axes are moving, but not linear axes. Normalise the movement to the vector sum of the axes that are moving.
 		totalDistance = Normalise(directionVector, move.GetRotationalAxes());
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 		movementRatio = (extrudersMoving) ? totalExtrusion/totalDistance : 1.0;
 #endif
 	}
@@ -532,7 +532,7 @@ MovementError DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool
 		{
 			Scale(directionVector, 1.0/totalDistance);
 		}
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 		movementRatio = 1.0;
 #endif
 	}
@@ -547,7 +547,7 @@ MovementError DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool
 		maxAcceleration = min<float>(maxAcceleration, (flags.isPrintingMove) ? nextMove.maxPrintingAcceleration : nextMove.maxTravelAcceleration);
 	}
 
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 	if (move.IsUsingSCurve())
 	{
 		flags.useScurve = true;
@@ -594,7 +594,7 @@ MovementError DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool
 	}
 
 	// 7. Calculate the provisional accelerate and decelerate distances and the top speed
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 	if (   prev->IsProvisional()													// if previous move is queued but has not started yet
 		&& flags.useScurve == prev->flags.useScurve
 		&& flags.isPrintingMove == prev->flags.isPrintingMove
@@ -625,7 +625,7 @@ MovementError DDA::InitStandardMove(DDARing& ring, const RawMove &nextMove, bool
 	MovementError rslt;																// this will hold the return value
 
 	// See if we can meld this with the end of the previous one (which must currently have the end speed set to zero)
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 	if (flags.useScurve)
 	{
 		startSpeed = startAcceleration = 0.0;										// in case there is no previous move
@@ -1149,13 +1149,13 @@ void DDA::GetEndCoordinates(float returnedCoords[MaxAxes]) noexcept
 // Dispatch this DDA to the move segment queue for execution.
 // This must not be called with interrupts disabled, because it calls Platform::EnableDrive.
 void DDA::Prepare(DDARing& ring,
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 					MovementProfile& plannedProfile,
 #endif
 					uint32_t prepareAdvanceTime, SimulationMode simMode) noexcept
 {
 	PrepParams params;
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 	if (flags.useScurve)
 	{
 		AllocateMoveFromPlan(plannedProfile, params);
@@ -1179,6 +1179,68 @@ void DDA::Prepare(DDARing& ring,
 	// Avoid setting the move start time in the past or with very little time before it starts, because this can lead to us trying to modify a segment that is already executing
 	Move& move = reprap.GetMove();
 	const uint32_t now = StepTimer::GetMovementTimerTicks();
+
+	// 'prepareAdvanceTime' includes lead time for CAN-connected drivers to receive and queue their movement commands before the deadline.
+	// If this move doesn't touch any CAN-connected driver, that lead time is wasted latency (causes M400/G4 stalls under fast host-driven pipelines like OpenPnP);
+	// we still need enough of a margin to avoid the Move task modifying a segment list that the step ISR is already executing, so fall back to
+	// MoveTiming::AbsoluteMinimumPreparedTime, the same value already trusted elsewhere in this function for that exact purpose.
+	// A move that chains directly onto this one (see the 'start this move directly after the previous one' case below) inherits whatever margin
+	// we gave this move, so if this move is short and a CAN-connected move is queued close behind it in the ring, that move could end up with
+	// less than the CAN lead time it needs. So before shortening our own margin, check the ring for a CAN-connected move that's due within
+	// the window we would otherwise be cutting (prepareAdvanceTime - AbsoluteMinimumPreparedTime) and keep the full margin if one is found.
+#if SUPPORT_CAN_EXPANSION
+	auto touchesRemoteDriver = [&move](const DDA& dda) noexcept -> bool
+	{
+		const size_t numTotalAxes = reprap.GetGCodes().GetTotalAxes();
+		for (size_t drive = 0; drive < numTotalAxes; ++drive)
+		{
+			if (dda.directionVector[drive] != 0.0)
+			{
+				const AxisDriversConfig& config = move.GetAxisDriversConfig(drive);
+				for (size_t i = 0; i < config.numDrivers; ++i)
+				{
+					if (config.driverNumbers[i].IsRemote())
+					{
+						return true;
+					}
+				}
+			}
+		}
+		const size_t numExtruders = reprap.GetGCodes().GetNumExtruders();
+		for (size_t extruder = 0; extruder < numExtruders; ++extruder)
+		{
+			if (dda.directionVector[ExtruderToLogicalDrive(extruder)] != 0.0 && move.GetExtruderDriver(extruder).IsRemote())
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	bool involvesRemoteDriver = touchesRemoteDriver(*this);
+	if (!involvesRemoteDriver)
+	{
+		// Walk forward through the moves currently queued behind this one. Anything beyond the window we are about to cut
+		// (prepareAdvanceTime - AbsoluteMinimumPreparedTime) will get its own fresh margin decision when it's prepared, so we
+		// only need to worry about moves that could inherit a start time within that window via direct chaining.
+		uint32_t clocksScanned = 0;
+		const uint32_t dangerWindow = prepareAdvanceTime - MoveTiming::AbsoluteMinimumPreparedTime;
+		for (const DDA *dda = GetNext(); dda != this && dda->GetState() != DDA::empty && clocksScanned < dangerWindow; dda = dda->GetNext())
+		{
+			if (touchesRemoteDriver(*dda))
+			{
+				involvesRemoteDriver = true;
+				break;
+			}
+			// Underestimate this move's duration (ignore acceleration/deceleration ramps) so that we err on the side of not reducing the margin
+			clocksScanned += (dda->topSpeed > 0.0) ? (uint32_t)(dda->totalDistance / dda->topSpeed) : 0;
+		}
+	}
+	const uint32_t localPrepareAdvanceTime = (involvesRemoteDriver) ? prepareAdvanceTime : min<uint32_t>(prepareAdvanceTime, MoveTiming::AbsoluteMinimumPreparedTime);
+#else
+	const uint32_t localPrepareAdvanceTime = prepareAdvanceTime;
+#endif
+
 	if (prev->GetState() == committed)
 	{
 		uint32_t prevEndTime = prev->afterPrepare.moveStartTime + prev->clocksNeeded;
@@ -1193,7 +1255,7 @@ void DDA::Prepare(DDARing& ring,
 		}
 		else if (startSpeed == 0.0)
 		{
-			afterPrepare.moveStartTime = now + prepareAdvanceTime;
+			afterPrepare.moveStartTime = now + localPrepareAdvanceTime;
 		}
 		else
 		{
@@ -1203,7 +1265,7 @@ void DDA::Prepare(DDARing& ring,
 	}
 	else
 	{
-		afterPrepare.moveStartTime = now + prepareAdvanceTime;
+		afterPrepare.moveStartTime = now + localPrepareAdvanceTime;
 	}
 
 	if (simMode < SimulationMode::normal)

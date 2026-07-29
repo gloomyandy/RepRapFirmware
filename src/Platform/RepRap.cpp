@@ -993,7 +993,7 @@ void RepRap::GetDiagnosticsPart(unsigned int partNumber, const StringRef& reply)
 #if STM32
 				" (%s)"											// lpcBoardName
 #endif
-				" version %s (%s%s) running on %s"				// firmware version, date, time, electronics
+				" version %s (%s) running on %s"				// firmware version, date, time, electronics
 #ifdef DUET_NG
 				"%s%s"											// optional DueX expansion board
 #endif
@@ -1007,7 +1007,7 @@ void RepRap::GetDiagnosticsPart(unsigned int partNumber, const StringRef& reply)
 #if STM32
 				BoardName,
 #endif
-				VERSION, DateText, TimeSuffix, platform->GetElectronicsString()
+				VERSION, DateTimeText, platform->GetElectronicsString()
 #ifdef DUET_NG
 				, ((expansionName == nullptr) ? "" : " + ")
 				, ((expansionName == nullptr) ? "" : expansionName)
@@ -2240,7 +2240,7 @@ void RepRap::PrepareToLoadIap() noexcept
 	}
 
 	// Allow time for the firmware update message to be sent
-	// When the SBC is on USB, keep this short -- DSF is waiting for the next transfer response
+	// When the SBC is on USB, keep this short - DSF is waiting for the next transfer response
 	const uint32_t flushTime =
 #if HAS_SBC_INTERFACE && SUPPORTS_SBC_OVER_USB
 		(usingSbcInterface && sbcInterface->GetDataTransfer().GetTransportType() == SbcTransportType::usb) ? 100 :
@@ -2278,8 +2278,7 @@ void RepRap::PrepareToLoadIap() noexcept
 	BoardConfig::InvalidateBoardConfiguration();
 #endif
 #if HAS_SBC_INTERFACE && SUPPORTS_SBC_OVER_USB
-	// Don't shut down USB yet if the SBC is connected via USB --
-	// ReceiveAndStartIap() still needs it to receive the remaining IAP chunks
+	// Don't shut down USB yet if the SBC is connected via USB - ReceiveAndStartIap() still needs it to receive the remaining IAP chunks
 	if (!usingSbcInterface || sbcInterface->GetDataTransfer().GetTransportType() != SbcTransportType::usb)
 #endif
 	{

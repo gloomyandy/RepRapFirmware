@@ -165,7 +165,7 @@ public:
 	float Acceleration(size_t axisOrExtruder, bool reduced) const noexcept;
 	const float *_ecv_array Accelerations(bool reduced) const noexcept { return (reduced) ? reducedAccelerations : normalAccelerations; }
 	void SetAcceleration(size_t axisOrExtruder, float value, bool reduced) noexcept;
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 	const float *_ecv_array Jerks() const noexcept { return jerks; }
 	void SetAccelerationTime(float value) noexcept;
 	float AccelerationTime() const noexcept { return accelerationTime; }
@@ -421,6 +421,7 @@ public:
 	float GetDecelerationMmPerSecSquared(size_t msNumber) const noexcept { return rings[msNumber].GetDecelerationMmPerSecSquared(); }		// Get the (peak) deceleration for reporting in the object model
 	float GetCurrentMoveDistance(size_t msNumber) const noexcept { return rings[msNumber].GetCurrentMoveDistance(); }
 	float GetCurrentMoveDuration(size_t msNumber) const noexcept { return rings[msNumber].GetCurrentMoveDuration(); }
+	FilePosition GetCurrentMoveFilePosition(size_t msNumber) const noexcept { return rings[msNumber].GetCurrentMoveFilePosition(); }		// Get the file position of the move being executed, or noFilePosition if there is none
 	float GetTotalExtrusionRate(size_t msNumber) const noexcept { return rings[msNumber].GetTotalExtrusionRate(); }
 
 	void UpdateLiveMachineCoordinates(float coords[MaxAxes], const Tool *_ecv_null tool) const noexcept;		// Force an update of the live machine coordinates
@@ -539,7 +540,7 @@ private:
 #endif
 
 	MoveSegment *AddSegment(MoveSegment *list, uint32_t startTime, uint32_t duration, motioncalc_t distance, motioncalc_t a,
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 	 	 	 	 	 	 	 motioncalc_t j, MovementFlags moveFlags, motioncalc_t pressureAdvanceClocks
 #else
 							 	 	 	 	 MovementFlags moveFlags, motioncalc_t pressureAdvanceClocksTimesDuration
@@ -563,12 +564,12 @@ private:
 	void PrepareForNextSteps(DriveMovement *stopDm, MovementFlags flags, uint32_t now) noexcept SPEED_CRITICAL;
 	void SimulateSteppingDrivers(Platform& p) noexcept;								// For debugging use
 	bool ScheduleNextStepInterrupt() noexcept SPEED_CRITICAL;						// Schedule the next interrupt, returning true if we can't because it is already due
-	bool StopAxisOrExtruder(bool executingMove, size_t logicalDrive) noexcept;		// stop movement of a drive and recalculate the endpoint
+	bool StopAxisOrExtruder(bool executingMove, size_t logicalDrive, uint32_t when) noexcept;		// stop movement of a drive and recalculate the endpoint
 #if SUPPORT_REMOTE_COMMANDS
 	void StopDriveFromRemote(size_t drive) noexcept;
 	int32_t GetLastMoveStepsTaken(size_t drive) const noexcept;						// get the number of steps taken by the last move, if it was an isolated move
 #endif
-	bool StopAllDrivers(bool executingMove) noexcept;								// cancel the current isolated move
+	bool StopAllDrivers(bool executingMove, uint32_t when) noexcept;				// cancel the current isolated move
 	void InsertDM(DriveMovement *dm) noexcept;										// insert a DM into the active list, keeping it in step time order
 	void SetDirection(size_t axisOrExtruder, bool direction) noexcept;				// set the direction of a driver, observing timing requirements
 
@@ -581,7 +582,7 @@ private:
 	void IterateLocalDrivers(size_t axisOrExtruder, function_ref_noexcept<void(uint8_t) noexcept> func) noexcept { IterateDrivers(axisOrExtruder, func); }
 #endif
 
-#if SUPPORT_S_CURVE && SUPPORT_CAN_EXPANSION
+#if SUPPORT_3RD_ORDER && SUPPORT_CAN_EXPANSION
 	bool AxisHasLocalDriver(size_t axis) const noexcept;
 	bool ExtruderHasLocalDriver(size_t extruder) const noexcept;
 #endif
@@ -735,7 +736,7 @@ private:
 	float printingInstantDvs[MaxAxesPlusExtruders];			// current max jerk in mm per step clock (changed by M205 and M206)
 	float maxInstantDvs[MaxAxesPlusExtruders];				// max instant velocity change in mm per step clock (changed by M206 only)
 
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 	float accelerationTime;									// time taken to each max acceleration in step clocks, single value used for all axes.
 	float jerks[MaxAxesPlusExtruders];						// max rate of change of acceleration, calculated from accelerationTime and normalAccelerations. Only used if accelerationTime > 0.0.
 	bool usingSCurve = false;
@@ -998,7 +999,7 @@ inline void Move::InvertCurrentMotorSteps(size_t driver) noexcept
 
 #endif
 
-#if SUPPORT_S_CURVE
+#if SUPPORT_3RD_ORDER
 
 // Set the acceleration time
 inline void Move::SetAccelerationTime(float value) noexcept
