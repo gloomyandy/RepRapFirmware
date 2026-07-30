@@ -1176,10 +1176,11 @@ extern AsyncSerial *serialWiFiDevice;
 //Information printed by M122 P200
 void BoardConfig::Diagnostics(MessageType mtype) noexcept
 {
+    String<StringLength256> status;
     MessageF(mtype, "=== Diagnostics ===\n");
 #if HAS_SBC_INTERFACE
-	MessageF(mtype, "%s version %s running on %s (%s mode) at %dMhz\n", FIRMWARE_NAME, VERSION, reprap.GetPlatform().GetElectronicsString(),
-						(reprap.UsingSbcInterface()) ? "SBC" : "standalone", (int)SystemCoreClock/1000000);
+    MessageF(mtype, "%s version %s running on %s (%s mode) at %dMhz\n", FIRMWARE_NAME, VERSION, reprap.GetPlatform().GetElectronicsString(),
+                    (reprap.UsingSbcInterface()) ? "SBC" : "standalone", (int)SystemCoreClock/1000000);
 #else
 	MessageF(mtype, "%s (%s) version %s running on %s at %dMhz\n", FIRMWARE_NAME, BoardName, VERSION, reprap.GetPlatform().GetElectronicsString(), (int)SystemCoreClock/1000000);
 #endif
@@ -1258,10 +1259,11 @@ void BoardConfig::Diagnostics(MessageType mtype) noexcept
     MessageF(mtype, "\n== PWM ==\n");
     for(uint8_t i=0; i<MaxPWMChannels; i++)
     {
-		String<StringLength256> status;
-		PWMPins[i].appendStatus(status.GetRef());
+		PWMPins[i].getStatus(status.GetRef());
 		MessageF(mtype, "%u: %s\n", i, status.c_str());
 	}
+    SPWMDiagnostics(status.GetRef());
+	MessageF(mtype, "%s\n", status.c_str());
 
     MessageF(mtype, "\n== Attached interrupt pins ==\n");
     for(uint32_t i = 0; i < 16; i++)

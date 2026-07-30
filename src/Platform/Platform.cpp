@@ -1381,7 +1381,6 @@ void Platform::InitialiseInterrupts() noexcept
 // Debugging variables
 //extern "C" uint32_t longestWriteWaitTime, shortestWriteWaitTime, longestReadWaitTime, shortestReadWaitTime;
 //extern uint32_t maxRead, maxWrite;
-extern void SPWMDiagnostics();
 
 /*static*/ const char *_ecv_array Platform::GetResetReasonText() noexcept
 {
