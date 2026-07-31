@@ -1,7 +1,15 @@
+Version 3.7.0-beta.2
+=====================
+* Duet3d V3.7.0-beta.2
+* Reworked hardware timer allocation to allow more pins to use hardware PWM
+* TIM1 is now used for hardware PWM
+* Reworked software PWM to reduce jitter and reduce overhead
+* Added support for MNBN17R1_5 including closed loop mode
+
 Version 3.7.0-beta.1
 =====================
 * Duet3d V3.7.0-beta.1
-* Improved ESP32C5 support (support for releaed chips)
+* Improved ESP32C5 support (support for released chips)
 * Switched to esp-idf v6.0.2
 * Added TLS support
 * Reworked timer allocation to allow TIM3 to be used for CAN-FD
