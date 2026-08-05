@@ -17,7 +17,7 @@
 // Default board type
 #if STM32H7
 # define FIRMWARE_NAME "RepRapFirmware for STM32H7 based Boards"
-# define DEFAULT_BOARD_TYPE BoardType::Stm32H7
+# define DEFAULT_BOARD_TYPE BoardType::TeamGloomy_BTC
 # define SUPPORT_CAN_EXPANSION       1
 # define DUAL_CAN                    0
 # define SUPPORT_BRS                 1
@@ -26,17 +26,16 @@
 # define SUPPORT_S_CURVE             1
 # define SUPPORT_BRAKE_PWM           1
 # if STM32H743xx
-#  define STM_ELECTRONICS_STRING "STM32H743"
-#  define STM_BOARD_STRING "STM32H743"
+#  define TGBTC_ELECTRONICS_STRING "STM32H743"
+#  define TGBTC_BOARD_STRING "STM32H743"
 #  define IAP_UPDATE_FILE         "stm32h743_iap_SD.bin"
 #  define IAP_UPDATE_FILE_SBC     "stm32h743_iap_SBC.bin"
 #  define IAP_CAN_LOADER_FILE     "stm32h743_iap_CAN.bin"
 
 #  define IAP_IMAGE_START         0x24060000
 # elif STM32H723xx
-  // For now we use the generic stm32h7 name for stm32h743 based systems, this is compatible with released versions
-#  define STM_ELECTRONICS_STRING "STM32H723"
-#  define STM_BOARD_STRING "STM32H723"
+#  define TGBTC_ELECTRONICS_STRING "STM32H723"
+#  define TGBTC_BOARD_STRING "STM32H723"
 #  define IAP_UPDATE_FILE         "stm32h723_iap_SD.bin"
 #  define IAP_UPDATE_FILE_SBC     "stm32h723_iap_SBC.bin"
 #  define IAP_CAN_LOADER_FILE     "stm32h723_iap_CAN.bin"
@@ -46,20 +45,7 @@
 #  error "Processor undefined"
 # endif
 #else
-# define FIRMWARE_NAME "RepRapFirmware for STM32F4 based Boards"
-# define DEFAULT_BOARD_TYPE BoardType::Stm32F4
-# define SUPPORT_CAN_EXPANSION       1
-# define DUAL_CAN                    0
-# define SUPPORT_PHASE_STEPPING      1
-# define FLASH_DATA_LENGTH (16*1024) //size of the Software Reset Data in Flash
-
-# define STM_ELECTRONICS_STRING "STM32F4"
-# define STM_BOARD_STRING "STM32F4"
-# define IAP_UPDATE_FILE         "stm32f4_iap_SD.bin"
-# define IAP_UPDATE_FILE_SBC     "stm32f4_iap_SBC.bin"
-# define IAP_CAN_LOADER_FILE     "stm32f4_iap_CAN.bin"
-# define IAP_IMAGE_START         0x20018000
-
+# error "unsuported configuration"
 #endif
 // The name of the file used by the board bootloader, boot file is renamed to this
 #define FIRMWARE_FILE       "0:/firmware.bin"

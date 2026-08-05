@@ -52,7 +52,7 @@
 # include <CAN/ExpansionManager.h>
 #endif
 
-#if STM32
+#if TGBTC
 #include "BoardConfig.h"
 #endif
 #if SUPPORT_ACCELEROMETERS
@@ -2256,7 +2256,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						reprap.Diagnostics(mt, reply);
 						reply.Clear();
 					}
-#if STM32
+#if TGBTC
 					else if (type == (unsigned int)DiagnosticTestType::PrintBoardConfiguration)
 						BoardConfig::Diagnostics(mt);
 #endif

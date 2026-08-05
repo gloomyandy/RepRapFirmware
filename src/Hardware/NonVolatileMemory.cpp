@@ -24,7 +24,7 @@ void NonVolatileMemory::EnsureRead() noexcept
 	{
 #if SAME5x
 		memcpyu32(reinterpret_cast<uint32_t*>(&buffer), reinterpret_cast<const uint32_t *>(SEEPROM_ADDR), sizeof(buffer)/sizeof(uint32_t));
-#elif STM32
+#elif TGBTC
 		NVMEmulationRead(&buffer, sizeof(buffer));
 #elif SAM4E || SAM4S || SAME70
 		Flash::ReadUserSignature(reinterpret_cast<uint32_t*>(&buffer), sizeof(buffer)/sizeof(uint32_t));
@@ -63,7 +63,7 @@ void NonVolatileMemory::EnsureWritten() noexcept
 		// Erase the page
 # if SAM4E || SAM4S || SAME70
 		Flash::EraseUserSignature();
-# elif STM32
+# elif TGBTC
 		NVMEmulationErase();
 # endif
 		state = NvmState::writeNeeded;
@@ -78,7 +78,7 @@ void NonVolatileMemory::EnsureWritten() noexcept
 		{
 			Cache::Enable();
 		}
-# elif STM32
+# elif TGBTC
 		NVMEmulationWrite(&buffer, sizeof(buffer));
 # else
 #  error Unsupported processor
@@ -176,7 +176,7 @@ void NonVolatileMemory::SetThermistorCalibration(unsigned int inputNumber, int8_
 	}
 }
 
-#if STM32 && SUPPORT_REMOTE_COMMANDS
+#if TGBTC && SUPPORT_REMOTE_COMMANDS
 void NonVolatileMemory::SetCanExpansionAddress(CanAddress addr) noexcept
 {
 	EnsureRead();

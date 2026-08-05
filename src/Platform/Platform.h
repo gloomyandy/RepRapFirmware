@@ -76,7 +76,7 @@ constexpr size_t NumAdcFilters = NumThermistorInputs + 3;
 # else
 constexpr size_t NumAdcFilters = NumThermistorInputs + 2;
 # endif
-#elif HAS_CPU_TEMP_SENSOR && STM32
+#elif HAS_CPU_TEMP_SENSOR && TGBTC
 constexpr size_t VrefFilterIndex = NumThermistorInputs;
 constexpr size_t CpuTempFilterIndex = NumThermistorInputs + 1;
 constexpr size_t NumAdcFilters = NumThermistorInputs + 2;
@@ -143,10 +143,8 @@ enum class BoardType : uint8_t
 	DuetM_10 = 1,
 #elif defined(PCCB_10)
 	PCCB_v10 = 1
-#elif defined (__STM32F4__)
-	Stm32F4 = 1
-#elif defined(__STM32H7__)
-	Stm32H7 = 1
+#elif defined (TGBTC)
+	TeamGloomy_BTC = 1
 #elif defined(INDX)
 	Indx,
 #else
@@ -178,7 +176,7 @@ enum class DiagnosticTestType : unsigned int
 	TimeQuarticSolver = 111,
 #endif
 
-#if STM32
+#if TGBTC
 	PrintBoardConfiguration = 200,	// Prints out all pin/values loaded from SDCard to configure board
 #endif
 
@@ -253,7 +251,7 @@ public:
 
 	void Diagnostics(unsigned int part, const StringRef& reply) noexcept;
 	static constexpr unsigned int NumPlatformDiagnosticParts = 7;
-#if STM32
+#if TGBTC
 	static SharedSpiDevice& GetSharedSpiDevice(SSPChannel chan) noexcept { return *_ecv_not_null(SharedSpiDevices[chan]); }
 	static void SetSharedSpiDevice(SSPChannel chan, SharedSpiDevice& device) { SharedSpiDevices[chan] = &device; }
 #else
@@ -550,7 +548,7 @@ protected:
 	DECLARE_OBJECT_MODEL_WITH_ARRAYS
 
 private:
-#if STM32
+#if TGBTC
 	static SharedSpiDevice *_ecv_null SharedSpiDevices[NumSPIDevices];
 #else
 	static SharedSpiDevice *_ecv_null mainSharedSpiDevice;
@@ -693,7 +691,7 @@ private:
 #endif
 
 	bool autoSaveEnabled;
-# if STM32
+# if TGBTC
 	uint16_t dummyVoltageAdcReading;
 # endif
 
@@ -743,7 +741,7 @@ private:
 
 	// Misc
 	static bool deliberateError;						// true if we deliberately caused an exception for testing purposes. Must be static in case of exception during startup.
-#if STM32
+#if TGBTC
 	uint32_t vRefCorrection;
 #endif
 };

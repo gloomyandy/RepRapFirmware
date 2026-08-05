@@ -158,7 +158,7 @@ GCodeResult AdditionalOutputSensor::ConfigurePort(const char *_ecv_array portNam
 		if (outputNumber == 0)
 		{
 			// we allow a output number of 0 on stm32 to allow access to tmc2240 temperature readings
-#if !STM32
+#if !TGBTC
 			reply.copy("Additional output numbers start at 1");
 			return GCodeResult::error;
 #endif

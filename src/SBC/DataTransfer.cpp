@@ -39,7 +39,7 @@
 # define USE_DMAC_MANAGER	1		// use SAME5x DmacManager module
 constexpr IRQn SBC_SPI_IRQn = SbcSpiSercomIRQn;
 
-#elif STM32
+#elif TGBTC
 # define USE_DMAC			0
 # define USE_XDMAC			0
 uint32_t HeaderCRCErrors, DataCRCErrors;
@@ -92,7 +92,7 @@ extern void ESP_SPI_HANDLER() noexcept;
 
 static TaskHandle sbcTaskHandle = nullptr;
 
-#if !STM32
+#if !TGBTC
 
 #if USE_DMAC
 
@@ -414,8 +414,8 @@ extern "C" void SBC_SPI_HANDLER() noexcept
 }
 
 #else
-#if STM32
-# include "STM32/Sbc/DataTransfer.hpp"
+#if TGBTC
+# include "TGBTC/Sbc/DataTransfer.hpp"
 #endif
 #endif
 /*-----------------------------------------------------------------------------------*/
@@ -424,9 +424,6 @@ extern "C" void SBC_SPI_HANDLER() noexcept
 
 #if SAME70 || STM32H7
 // On the STM32H7 and SAME70 we need to ensure that the following are in memory that is not cached (see above). 
-// On STM32F4 we need to ensure that memory used by the SBC interface is not in the top 32Kb of RAM as this is
-// used for the SBC IAP. Since we have a separate build for SBC on STM configurations we simply force the buffers
-// to be statically alloacted rather than mallocing them.
 __nocache SpiTransferHeader DataTransfer::rxHeader;
 __nocache SpiTransferHeader DataTransfer::txHeader;
 __nocache uint32_t DataTransfer::rxResponse;
@@ -469,7 +466,7 @@ DataTransfer::DataTransfer() noexcept : state(InternalTransferState::ExchangingD
 #endif
 }
 
-#if STM32
+#if TGBTC
 void DataTransfer::FreeMemory() noexcept
 {
 #if STM32F4
@@ -504,7 +501,7 @@ void DataTransfer::Init() noexcept
 		txBuffer = (mem != nullptr) ? (char *)mem : (char *)new uint32_t[(SbcTransferBufferSize + 3)/4];
 # endif
 	}
-#elif STM32
+#elif TGBTC
 	// Nothing to do, we have already allocated memory
 #elif SAME70
 # error Must allocate buffers from non-cached RAM
@@ -513,7 +510,7 @@ void DataTransfer::Init() noexcept
 	txBuffer = (char *)new uint32_t[(SbcTransferBufferSize + 3)/4];
 #endif
 
-#if STM32
+#if TGBTC
     InitSpi();
 #elif SAME5x
 	// Initialize SPI
@@ -580,7 +577,7 @@ void DataTransfer::Init() noexcept
 // Re-initialize SPI hardware after it was disabled for USB mode
 void DataTransfer::ReinitSpi() noexcept
 {
-#if STM32
+#if TGBTC
     InitSpi();
 #elif SAME5x
 	for (Pin p : SbcSpiSercomPins)
@@ -631,7 +628,7 @@ void DataTransfer::Diagnostics(const StringRef& reply) noexcept
 		reply.lcatf("Transfer state: %d, failed transfers: %u, checksum errors: %u", (int)state, failedTransfers, checksumErrors);
 		reply.lcatf("RX/TX seq numbers: %d/%d", (int)rxHeader.sequenceNumber, (int)txHeader.sequenceNumber);
 		reply.lcatf("SPI underruns %u, overruns %u", spiTxUnderruns.load(), spiRxOverruns.load());
-#if STM32
+#if TGBTC
 		reply.lcatf("CRC errors header %u, data %u", (unsigned)HeaderCRCErrors, (unsigned)DataCRCErrors);
 #endif
 	}
@@ -942,7 +939,7 @@ TransferState DataTransfer::DoTransfer() noexcept
 			const uint32_t checksum = CalcCRC32(reinterpret_cast<const char *>(&rxHeader), sizeof(SpiTransferHeader) - sizeof(uint32_t));
 			if (rxHeader.crcHeader != checksum)
 			{
-#if STM32
+#if TGBTC
 				HeaderCRCErrors++;
 #endif
 				if (reprap.Debug(Module::SbcInterface))
@@ -1018,7 +1015,7 @@ TransferState DataTransfer::DoTransfer() noexcept
 			const uint32_t checksum = CalcCRC32(rxBuffer, rxHeader.dataLength);
 			if (rxHeader.crcData != checksum)
 			{
-#if STM32
+#if TGBTC
 				DataCRCErrors++;
 #endif
 				if (reprap.Debug(Module::SbcInterface))

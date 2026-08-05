@@ -7,9 +7,9 @@
 
 #ifndef SRC_MOVEMENT_STEPPERDRIVERS_SMARTDRIVERS_H_
 #define SRC_MOVEMENT_STEPPERDRIVERS_SMARTDRIVERS_H_
-// Ugly hack to make sure we use the STM32 version
-#if STM32
-#include "Hardware/STM32/Movement/StepperDrivers/SmartDrivers.h"
+// Ugly hack to make sure we use the TGBTC version
+#if TGBTC
+#include "Hardware/TGBTC/Movement/StepperDrivers/SmartDrivers.h"
 #else
 #if SUPPORT_TMC2660
 # include "TMC2660.h"

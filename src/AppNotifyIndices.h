@@ -33,7 +33,7 @@ namespace NotifyIndices
 	constexpr uint32_t Tmc = FirstAvailableApp + 2;
 	constexpr uint32_t Move = FirstAvailableApp + 2;
 	constexpr uint32_t DueX = FirstAvailableApp + 2;
-#if STM32
+#if TGBTC
 	constexpr uint32_t BitIO = FirstAvailableApp + 2;
 #endif
 	constexpr uint32_t CanMessageQueue = FirstAvailableApp + 3;

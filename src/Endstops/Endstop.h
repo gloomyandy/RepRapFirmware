@@ -15,7 +15,7 @@
 #include <General/FreelistManager.h>
 
 #if SUPPORT_TMC22xx && HAS_STALL_DETECT
-# if STM32
+# if TGBTC
 #  include <TMC22xx.h>
 # else
 #  include <Movement/StepperDrivers/TMC22xx.h>

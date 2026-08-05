@@ -150,7 +150,7 @@ private:
 	static constexpr unsigned int MaxSyncCount = 10;
 #endif
 };
-#if STM32
+#if STM32 && TGBTC
 extern TIM_HandleTypeDef *STHandle;
 #endif
 
@@ -159,7 +159,7 @@ extern TIM_HandleTypeDef *STHandle;
 
 inline __attribute__((always_inline)) StepTimer::Ticks StepTimer::GetTimerTicks() noexcept
 {
-# if STM32
+# if STM32 && TGBTC
 	return __HAL_TIM_GET_COUNTER(STHandle);
 # else
 	return STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_CV;
@@ -168,7 +168,7 @@ inline __attribute__((always_inline)) StepTimer::Ticks StepTimer::GetTimerTicks(
 
 inline __attribute__((always_inline)) StepTimer::Ticks StepTimer::GetTimerTicksWhenInterruptsDisabled() noexcept
 {
-# if STM32
+# if STM32 && TGBTC
 	return __HAL_TIM_GET_COUNTER(STHandle);
 # else
 	return STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_CV;
@@ -182,7 +182,7 @@ inline __attribute__((always_inline)) uint16_t StepTimer::GetTimerTicks16() noex
 {
 #if SAME70 || SAM4S
 	return (uint16_t)STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_CV;
-#elif STM32
+#elif STM32 && TGBTC
 	return (uint16_t)__HAL_TIM_GET_COUNTER(STHandle);
 #else
 	return (uint16_t)GetTimerTicks();

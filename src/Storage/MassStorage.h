@@ -131,7 +131,7 @@ namespace MassStorage
 #endif
 
 #if HAS_MASS_STORAGE
-#if STM32
+#if TGBTC
 	void Init2() noexcept;
 #endif
 	bool EnsurePath(const char *_ecv_array filePath, bool messageIfFailed) noexcept;

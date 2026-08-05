@@ -22,7 +22,7 @@ public:
 	bool IsReady() const noexcept;
 	void SendUpdateFile(const char *_ecv_array file, uint32_t address) noexcept;
 	void Spin() noexcept;
-#if STM32
+#if TGBTC
 	void DetectWiFiModuleType() noexcept;
 #endif
 	// Offsets in flash memory

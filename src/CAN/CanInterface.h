@@ -58,7 +58,7 @@ namespace CanInterface
 	void Diagnostics(const StringRef& reply) noexcept;
 	CanMessageBuffer *AllocateBuffer(const GCodeBuffer *_ecv_null gb) THROWS(GCodeException);
 	void CheckCanAddress(uint32_t address, const GCodeBuffer& gb) THROWS(GCodeException);
-#if STM32
+#if TGBTC
 	void SendFirmwareUpdateRequest(CanMessageBuffer *buf) noexcept;
 	bool GetFirmwareUpdateResponse(CanMessageBuffer *buf) noexcept;
 #endif

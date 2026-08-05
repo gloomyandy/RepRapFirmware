@@ -684,7 +684,7 @@ void WifiFirmwareUploader::Spin() noexcept
 			{
 				// Successful connection
 				Identify();
-#if STM32
+#if TGBTC
 				if (uploadFile == nullptr)
 				{
 					MessageF("WiFi Module found: %s\n", ESP_NAMES[espType]);
@@ -806,7 +806,7 @@ void WifiFirmwareUploader::Spin() noexcept
 	case UploadState::done:
 		uploadPort.end();					// disable the port, it has a high interrupt priority
 
-#if STM32
+#if TGBTC
 		if (uploadFile == nullptr)
 		{
 			// we have completed trying to detect the module type. If we failed mark it as not present
@@ -851,7 +851,7 @@ void WifiFirmwareUploader::Spin() noexcept
 // Try to upload the given file at the given address
 void WifiFirmwareUploader::SendUpdateFile(const char *_ecv_array file, uint32_t address) noexcept
 {
-#if STM32
+#if TGBTC
 	// check to see if we have a valid filename, if auto discovery has failed we may not
 	if (file == nullptr || !file[0])
 	{
@@ -880,7 +880,7 @@ void WifiFirmwareUploader::SendUpdateFile(const char *_ecv_array file, uint32_t 
 		return;
 	}
 #if STM32
-	// we need a buffer that is DMA capable
+	// we need a buffer that is DMA capable, the stack may not be
 	const uint32_t blkSize = EspFlashBlockSize;
 
 	// Allocate a data buffer for the combined header and block data
@@ -904,7 +904,7 @@ void WifiFirmwareUploader::SendUpdateFile(const char *_ecv_array file, uint32_t 
 	state = UploadState::resetting;
 }
 
-#if STM32
+#if TGBTC
 // Try to detect the type of WiFi module attached to the board. Should only be called
 // if the module is inactive
 void WifiFirmwareUploader::DetectWiFiModuleType() noexcept

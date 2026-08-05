@@ -1051,7 +1051,7 @@ GCodeResult Move::ConfigureLocalDriver(GCodeBuffer& gb, const StringRef& reply, 
 
 	case 7:			// configure brake
 		return ConfigureDriverBrakePort(gb, reply, drive);
-#if STM32 && HAS_SMART_DRIVERS
+#if TGBTC && HAS_SMART_DRIVERS
 	case 9:
 		{
 			bool seen = false;
@@ -1292,7 +1292,7 @@ void Move::ReportM569Parameters(size_t drive, const StringRef& reply) noexcept
 #if HAS_SMART_DRIVERS
 	if (drive < GetNumSmartDrivers())
 	{
-# if defined(DUET3MINI) || STM32
+# if defined(DUET3MINI) || TGBTC
 		// The 2-driver expansion board may or may not be present
 		const StandardDriverStatus status = SmartDrivers::GetStatus(drive, false, false);
 		if (status.notPresent)
@@ -1315,7 +1315,7 @@ void Move::ReportM569Parameters(size_t drive, const StringRef& reply) noexcept
 				const uint32_t thigh = SmartDrivers::GetRegister(drive, SmartDriverRegister::thigh);
 				const uint32_t axis = SmartDrivers::GetAxisNumber(drive);
 				bool bdummy;
-#if STM32
+#if TGBTC
 				const float mmPerSec = (SmartDrivers::GetDriverNominalClockFrequency(drive) * SmartDrivers::GetMicrostepping(drive, bdummy))/(256 * thigh * DriveStepsPerMm(axis));
 #else
 				const float mmPerSec = (SmartDrivers::GetDriverNominalClockFrequency() * SmartDrivers::GetMicrostepping(drive, bdummy))/(256 * thigh * DriveStepsPerMm(axis));
@@ -1346,7 +1346,7 @@ void Move::ReportM569Parameters(size_t drive, const StringRef& reply) noexcept
 				const uint32_t tpwmthrs = SmartDrivers::GetRegister(drive, SmartDriverRegister::tpwmthrs);
 				bool bdummy;
 				const unsigned int ms = SmartDrivers::GetMicrostepping(drive, bdummy);
-#if STM32
+#if TGBTC
 				const float tcoolMmPerSec = (ms * SmartDrivers::GetDriverMaxClockFrequency(drive))/(256 * tcoolthrs * DriveStepsPerMm(axis));
 				const float tpwmMmPerSec = (ms * SmartDrivers::GetDriverMinClockFrequency(drive))/(256 * tpwmthrs * DriveStepsPerMm(axis));
 #else

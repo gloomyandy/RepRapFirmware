@@ -772,6 +772,7 @@ const NvicPriority NvicPrioritySpi = 7;				// SPI is used for network transfers 
 #elif __NVIC_PRIO_BITS >= 4
 // We have at least 16 priority levels
 #if STM32
+#if TGBTC
 // Use priority 4 or lower for interrupts where low latency is critical and FreeRTOS calls are not needed.
 const NvicPriority NvicPriorityWatchdog = 0;		// the secondary watchdog has the highest priority
 const NvicPriority NvicPriorityTimerPWM = 1;		// Run PWM timing as high as we can to avoid jitter
@@ -786,6 +787,9 @@ const NvicPriority NvicPriorityUSB = 9;				// USB interrupt
 const NvicPriority NvicPriorityHSMCI = 9;			// HSMCI command complete interrupt
 const NvicPriority NvicPrioritySpi = 9;				// SPI is used for network transfers on Duet WiFi/Duet vEthernet
 const NvicPriority NvicPriorityTwi = 10;			// TWI is used to read endstop and other inputs on the DueXn
+#else
+# error "Invalid configuration"
+#endif
 #else
 // Use priority 2 or lower for interrupts where low latency is critical and FreeRTOS calls are not needed.
 # if SAM4E

@@ -73,7 +73,7 @@ constexpr unsigned int MainTaskStackWords = max<unsigned int>(4000, (MaxAxes * M
 
 static TASKMEM Task<MainTaskStackWords> mainTask;
 extern "C" [[noreturn]] void MainTask(void * pvParameters) noexcept;
-#if !STM32
+#if !TGBTC
 extern DeviceVectors exception_table;
 #endif
 
@@ -181,7 +181,7 @@ void *Tasks::GetNVMBuffer(const uint32_t *_ecv_array _ecv_null stk) noexcept
 #ifdef INDX
 	SetPinMode(CanBufferDisablePin, OUTPUT_HIGH);							// turn the CAN buffer off, it may interfere with USB on v0.1 boards
 #endif
-#if !defined(DEBUG) && !STM32	// don't check the CRC of a debug build because debugger breakpoints mess up the CRC
+#if !defined(DEBUG) && !TGBTC	// don't check the CRC of a debug build because debugger breakpoints mess up the CRC
 	// Check the integrity of the firmware by checking the firmware CRC
 	// If we have embedded files then the CRC is stored after those files, so we need to fetch the CRC address from the vector table
 	{
@@ -208,7 +208,7 @@ void *Tasks::GetNVMBuffer(const uint32_t *_ecv_array _ecv_null stk) noexcept
 			}
 		}
 	}
-#endif	// !defined(DEBUG) && !STM32
+#endif	// !defined(DEBUG) && !TGBTC
 
 	// Fill the free memory with a pattern so that we can check for stack usage and memory corruption
 	char *_ecv_array heapend = heapTop;

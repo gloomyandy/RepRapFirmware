@@ -106,7 +106,7 @@ public:
 #if SUPPORT_REMOTE_COMMANDS
  	void ScheduleReset() noexcept { whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::reboot; }
  	void ScheduleFirmwareUpdateOverCan() noexcept { whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::updateFirmware; }
-#if STM32
+#if TGBTC
 	bool CheckFirmwareUpdatePossible() noexcept;
 	void ScheduleChangeCanExpansionAddress(CanAddress addr) noexcept { CanExpansionAddress = addr; whenDeferredCommandScheduled = millis(); deferredCommand = DeferredCommand::setAddress; }
 #if STM32H7
@@ -146,7 +146,7 @@ public:
 	void UpdateFirmware(c_string iapFilename, c_string iapParam) noexcept;
 #endif
 	void PrepareToLoadIap() noexcept;
-#if STM32
+#if TGBTC
 	void RunSdIap(c_string _ecv_null  filename) noexcept;
 	void RunCanIap(c_string _ecv_null  filename) noexcept;
 #if STM32H7
@@ -274,7 +274,7 @@ private:
 #endif
 
 #if SUPPORT_REMOTE_COMMANDS
-#if STM32
+#if TGBTC
 	enum class DeferredCommand : uint8_t { none, reboot, updateFirmware, updateBootloader, setAddress };
 #else
 	enum class DeferredCommand : uint8_t { none, reboot, updateFirmware };

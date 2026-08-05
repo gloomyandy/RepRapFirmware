@@ -262,7 +262,7 @@ constexpr uint32_t I2cClockFreq = 100000;				// clock frequency in Hz. 100kHz is
 constexpr size_t MaxI2cOrModbusValues = 34;						// max bytes in M260 or M261 command. Increased to 34 for NeoDriver.
 
 // File handling
-#if defined(DUET3) || defined(DUET3MINI) || STM32
+#if defined(DUET3) || defined(DUET3MINI) || TGBTC
 constexpr size_t MAX_FILES = 20;						// Must be large enough to handle the max number of concurrent web requests + file being printed + macros being executed + log file
 # if SAME70
 constexpr unsigned int NumLruBuffers = 10;				// Number of disk buffers to allocate if FF_LRU is enabled in ff_config.h

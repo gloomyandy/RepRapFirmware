@@ -2740,8 +2740,8 @@ void Move::StepDrivers(uint32_t now) noexcept
 		flags |= dm->segmentFlags;
 		dm = dm->nextDM;
 	}
-#if SUPPORT_REMOTE_COMMANDS && STM32
-	// We don't have interrupt driven stall detection on the STM32, so poll it here.
+#if SUPPORT_REMOTE_COMMANDS && TGBTC
+	// We don't have interrupt driven stall detection on TG boards, so poll it here.
 	if (SmartDrivers::stallEndstopsEnabled.IsNonEmpty())
 	{
 		SmartDrivers::NotifyStalls();
@@ -3707,7 +3707,7 @@ float Move::GetTmcDriversTemperature(unsigned int boardNumber) const noexcept
 	const LocalDriversBitmap mask = (boardNumber == 0)
 							? LocalDriversBitmap::MakeLowestNBits(2)							// drivers 0,1 are on-board
 								: LocalDriversBitmap::MakeLowestNBits(5).ShiftUp(2);			// drivers 2-7 are on the DueX5
-#elif STM32
+#elif TGBTC
 	const LocalDriversBitmap mask = LocalDriversBitmap::MakeLowestNBits(MaxSmartDrivers);		// All drivers
 #else
 # error Undefined board

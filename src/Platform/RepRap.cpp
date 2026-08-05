@@ -41,8 +41,8 @@
 #endif
 
 #if HAS_SBC_INTERFACE
-# if STM32
-#  include "STM32/BoardConfig.h"
+# if TGBTC
+#  include "TGBTC/BoardConfig.h"
 # endif
 # include <SBC/SbcInterface.h>
 #endif
@@ -86,7 +86,7 @@ static_assert(CONF_HSMCI_XDMAC_CHANNEL == DmacChanHsmci, "mismatched DMA channel
 # include <wdt/wdt.h>
 #endif
 
-#if STM32 && HAS_SBC_INTERFACE
+#if TGBTC && HAS_SBC_INTERFACE
 # include <iapparams.h>
 # endif
 // We call vTaskNotifyGiveFromISR from various interrupts, so the following must be true
@@ -572,8 +572,8 @@ void RepRap::Init() noexcept
 
 	platform->MessageF(UsbMessage, "%s\n", VersionText);
 
-#if (STM32 && HAS_SBC_INTERFACE && HAS_MASS_STORAGE)
-	// Modified startup code for STM32 port. Unlike the Duet we do not use the presence of the SD card
+#if (TGBTC && HAS_SBC_INTERFACE && HAS_MASS_STORAGE)
+	// Modified startup code for TG port. Unlike the Duet we do not use the presence of the SD card
 	// to control SBC mode (as we may need the card for board.txt). Instead we check for config.g and
 	// use that to decide on the mode.
 	// Are we forcing sbc mode
@@ -650,7 +650,7 @@ void RepRap::Init() noexcept
 	// It's the SBC build of Duet 2 firmware. Enable the PanelDue port so that the ATE can test it.
 	platform->EnablePanelDuePort();
 # endif
-# if STM32
+# if TGBTC
 	if (usingSbcInterface)
 	{
 		if (SbcCsPinConfig == NoPin || SbcTfrReadyPinConfig == NoPin || SbcSpiChannel == SSPNONE)
@@ -698,7 +698,7 @@ void RepRap::Init() noexcept
 					SoftwareReset(SoftwareResetReason::erase); // Reboot
 				}
 			}
-#if STM32
+#if TGBTC
 			// At this point we may only have very limited hardware configuration loaded so avoid
 			// using the main Spin loop.
 			platform->FlushMessages();
@@ -857,7 +857,7 @@ void RepRap::Spin() noexcept
 		case DeferredCommand::reboot:
 			SoftwareReset(SoftwareResetReason::user);
 			break;
-#if STM32
+#if TGBTC
 		case DeferredCommand::updateFirmware:
 			RunCanIap("");
 			break;
@@ -990,7 +990,7 @@ void RepRap::GetDiagnosticsPart(unsigned int partNumber, const StringRef& reply)
 			reply.lcatf(
 				// Format string
 				"%s"											// firmware name
-#if STM32
+#if TGBTC
 				" (%s)"											// lpcBoardName
 #endif
 				" version %s (%s) running on %s"				// firmware version, date, time, electronics
@@ -1004,7 +1004,7 @@ void RepRap::GetDiagnosticsPart(unsigned int partNumber, const StringRef& reply)
 
 				// Parameters to match format string
 				FIRMWARE_NAME,
-#if STM32
+#if TGBTC
 				BoardName,
 #endif
 				VERSION, DateTimeText, platform->GetElectronicsString()
@@ -1029,7 +1029,7 @@ void RepRap::GetDiagnosticsPart(unsigned int partNumber, const StringRef& reply)
 		reply.lcat("Board ID: ");
 		platform->GetUniqueId().AppendCharsToString(reply);
 #endif
-#if STM32
+#if TGBTC
 		if (BoardConfig::GetBootloaderString() != nullptr)
 		{
 			reply.lcatf("Bootloader: %s", BoardConfig::GetBootloaderString());
@@ -2035,7 +2035,7 @@ void RepRap::SetMessage(c_string msg) noexcept
 size_t RepRap::GetStatusIndex() const noexcept
 {
 	return    (processingConfig)										? 0		// Reading the configuration file
-#if (HAS_SBC_INTERFACE || STM32) && SUPPORT_CAN_EXPANSION
+#if (HAS_SBC_INTERFACE || TGBTC) && SUPPORT_CAN_EXPANSION
 			: (gCodes->IsFlashing() || expansion->IsFlashing())			? 1		// Flashing a new firmware binary
 #else
 			: (gCodes->IsFlashing())									? 1		// Flashing a new firmware binary
@@ -2122,9 +2122,9 @@ void RepRap::SetName(c_string nm) noexcept
 
 // Firmware update operations
 
-#if STM32
+#if TGBTC
 	// include code for built in loaders
-    #include "STM32/FirmwareUpdate.hpp"
+    #include "TGBTC/FirmwareUpdate.hpp"
 #endif
 
 // Check the prerequisites for updating the main firmware. Return True if satisfied, else print a message to 'reply' and return false.
@@ -2176,7 +2176,7 @@ bool RepRap::CheckFirmwareUpdatePrerequisites(const StringRef& reply, const Stri
 		reply.printf("Firmware binary \"%s/%s\" is not valid for this electronics", FIRMWARE_DIRECTORY, IAP_FIRMWARE_FILE);
 		return false;
 	}
-#if !STM32
+#if !TGBTC
 	if (!platform->FileExists(FIRMWARE_DIRECTORY, IAP_UPDATE_FILE) && !platform->FileExists(DEFAULT_SYS_DIR, IAP_UPDATE_FILE))
 	{
 		reply.printf("In-application programming binary \"%s\" not found", FIRMWARE_DIRECTORY IAP_UPDATE_FILE);
@@ -2193,7 +2193,7 @@ bool RepRap::CheckFirmwareUpdatePrerequisites(const StringRef& reply, const Stri
 // Update the firmware. Prerequisites should be checked before calling this.
 void RepRap::UpdateFirmware(c_string iapFilename, c_string iapParam) noexcept
 {
-#if STM32
+#if TGBTC
 	// Check to see if we should use a built in IAP
 	if (!strcmp(iapFilename, IAP_UPDATE_FILE))
 	{
@@ -2274,7 +2274,7 @@ void RepRap::PrepareToLoadIap() noexcept
 	DuetExpansion::Exit();					// stop the DueX polling task
 #endif
 	StopAnalogTask();
-#if STM32 && HAS_SBC_INTERFACE
+#if TGBTC && HAS_SBC_INTERFACE
 	BoardConfig::InvalidateBoardConfiguration();
 #endif
 #if HAS_SBC_INTERFACE && SUPPORTS_SBC_OVER_USB
@@ -2337,7 +2337,7 @@ void RepRap::StartIap(c_string _ecv_null filename) noexcept
 # endif
 #endif
 
-#if STM32 && HAS_SBC_INTERFACE
+#if TGBTC && HAS_SBC_INTERFACE
 	{
 		// TODO: handle SBC in USB mode
 		// We need to pass details of how to talk to the SBC to the IAP

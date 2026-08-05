@@ -17,7 +17,7 @@
 # include <CAN/CanInterface.h>
 #endif
 
-#if STM32
+#if STM32 && TGBTC
 #include <HardwareTimer.h>
 HardwareTimer STimer(STEP_TC);
 TIM_HandleTypeDef *STHandle;
@@ -94,7 +94,7 @@ void StepTimer::Init() noexcept
 	NVIC_SetPriority(StepTcIRQn, NvicPriorityStep);			    // Set the priority for this IRQ
 	NVIC_ClearPendingIRQ(StepTcIRQn);
 	NVIC_EnableIRQ(StepTcIRQn);
-#elif STM32
+#elif STM32 && TGBTC
 	uint32_t preScale = STimer.getTimerClkFreq()/StepClockRate;
 	//debugPrintf("ST clock rate %d ST base freq %d setting presacle %d\n", StepClockRate, static_cast<int>(STimer.getTimerClkFreq()), static_cast<int>(preScale));
 	STimer.setPrescaleFactor(preScale);
@@ -313,7 +313,7 @@ bool StepTimer::ScheduleTimerInterrupt(uint32_t tim) noexcept
 	while (StepTc->SYNCBUSY.reg & TC_SYNCBUSY_CC0) { }
 	StepTc->INTFLAG.reg = TC_INTFLAG_MC0;							// clear any existing compare match
 	StepTc->INTENSET.reg = TC_INTFLAG_MC0;
-#elif STM32
+#elif STM32 && TGBTC
 	__HAL_TIM_CLEAR_IT(STHandle, TIM_IT_CC1);
 	__HAL_TIM_SET_COMPARE(STHandle, TIM_CHANNEL_1, tim);
 	__HAL_TIM_ENABLE_IT(STHandle, TIM_IT_CC1);
@@ -330,7 +330,7 @@ void StepTimer::DisableTimerInterrupt() noexcept
 {
 #if SAME5x
 	StepTc->INTENCLR.reg = TC_INTFLAG_MC0;
-#elif STM32
+#elif STM32 && TGBTC
 	__HAL_TIM_DISABLE_IT(STHandle, TIM_IT_CC1);
 #else
 	STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IDR = TC_IER_CPBS;
@@ -526,7 +526,7 @@ void STEP_TC_HANDLER() noexcept
 	if (likely((tcsr & TC_INTFLAG_MC0) != 0))						// the step interrupt uses MC0 compare
 	{
 		StepTc->INTENCLR.reg = TC_INTFLAG_MC0;						// disable the interrupt (no need to clear it, we do that before we re-enable it)
-#elif STM32
+#elif STM32 && TGBTC
 	uint32_t tcsr = STHandle->Instance->SR;
 	tcsr &= STHandle->Instance->DIER;
 #if STM32H7
@@ -692,7 +692,7 @@ void StepTimer::CancelCallback() noexcept
 					((StepTc->INTENSET.reg & TC_INTFLAG_MC0) == 0)
 # elif SAME70 || SAM4E || SAM4S
 					((STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IER & TC_IER_CPBS) == 0)
-# elif STM32
+# elif STM32 && TGBTC
 					(__HAL_TIM_GET_IT_SOURCE(STHandle, TIM_IT_CC1) == 0)
 # endif
 						? "disabled" : "enabled");
@@ -702,7 +702,7 @@ void StepTimer::CancelCallback() noexcept
 		if (STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_RB != pst->whenDue)
 # elif SAME70 || SAM4S
 		if (STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_RB != (uint16_t)pst->whenDue)
-# elif STM32
+# elif STM32 && TGBTC
 		if (__HAL_TIM_GET_COMPARE(STHandle, TIM_CHANNEL_1) != (uint16_t)pst->whenDue)
 # endif
 		{

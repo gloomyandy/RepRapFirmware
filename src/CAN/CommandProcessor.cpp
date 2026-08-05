@@ -31,7 +31,7 @@
 #endif
 
 #if SUPPORT_REMOTE_COMMANDS
-#if STM32
+#if TGBTC
 #  include <CanMessageGenericTables.h>
 #  include <CanMessageGenericParser.h>
 #endif
@@ -63,7 +63,7 @@ pre(buf->id.MsgType() == CanMessageType::firmwareBlockRequest)
 	   )																	// we only understand bootloader version 0 and files requests for main firmware and bootloader
 	{
 		String<MaxFilenameLength> fname;
-#if STM32
+#if TGBTC
 		// allow use of non Duet firmware
 		if (IsSTM32Firmware(msg.boardType, Strnlen(msg.boardType, msg.GetBoardTypeLength(buf->dataLength))))
 		{
@@ -315,8 +315,8 @@ static GCodeResult InitiateFirmwareUpdate(const CanMessageUpdateYourFirmware& ms
 
 	if (msg.module == 0)
 	{
-// We use a built in IAP on STM32
-#if STM32
+// We use a built in IAP on TGBTC
+#if TGBTC
 		if (!reprap.CheckFirmwareUpdatePossible())
 		{
 			reply.printf("Fimware update unavailable, no SD or CAN bootloader\n");
@@ -345,7 +345,7 @@ static GCodeResult InitiateFirmwareUpdate(const CanMessageUpdateYourFirmware& ms
 	return GCodeResult::error;
 }
 
-#if STM32
+#if TGBTC
 static GCodeResult ChangeAddressAndDataRate(const CanMessageSetAddressAndNormalTiming &msg, const StringRef &reply) noexcept
 {
 	if (msg.oldAddress == CanInterface::GetCanAddress())
@@ -655,7 +655,7 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				InputMonitor::ReadInputs(buf);
 				CanInterface::SendResponseNoFree(buf);
 				return;
-#if STM32
+#if TGBTC
 			case CanMessageType::setAddressAndNormalTiming:
 				requestId = buf->msg.setAddressAndNormalTiming.requestId;
 				rslt = ChangeAddressAndDataRate(buf->msg.setAddressAndNormalTiming, replyRef);
@@ -680,7 +680,7 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 
 			case CanMessageType::m655:
 				requestId = buf->msg.generic.requestId;
-#if STM32
+#if TGBTC
 				// temporary until we have a custom can message for M569.9
 				{
 					CanMessageGenericParser parser(buf->msg.generic, M655Params);

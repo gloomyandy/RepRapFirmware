@@ -328,7 +328,7 @@ void TxCallback(uint8_t marker, CanId id, uint16_t timeStamp) noexcept
 
 void CanInterface::Init() noexcept
 {
-#if !STM32
+#if !(STM32 && TGBTC)
 	CanMessageBuffer::Init(NumCanBuffers);
 #endif
 	pendingMotionBuffers = nullptr;
@@ -345,7 +345,7 @@ void CanInterface::Init() noexcept
 #elif SAME5x
 	SetPinFunction(CanRxPin, CanPinsMode);
 	SetPinFunction(CanTxPin, CanPinsMode);
-#elif STM32
+#elif STM32 && TGBTC
 	// pin initialisation is handled in CoreN2G
 #else
 # error Unsupported MCU
@@ -354,7 +354,7 @@ void CanInterface::Init() noexcept
 	// Initialise the CAN hardware
 	CanTiming timing;
 	timing.SetDefaults(CanTiming::DefaultCanBitRate);
-#if STM32
+#if STM32 && TGBTC
 #if STM32H7
 	can0dev = CanDevice::Init(0, CanDeviceNumber, Can0Config, nullptr, timing, nullptr, CanReadPin, CanWritePin);
 #else
@@ -566,7 +566,7 @@ static void SendCanMessage(CanDevice::TxBufferNumber whichBuffer, uint32_t timeo
 	const uint32_t cancelledId = can0dev->SendMessage(whichBuffer, timeout, buffer);
 	if (cancelledId != 0)
 	{
-#if STM32
+#if USE_SPI_CAN
 		++txTimeouts[(unsigned int)whichBuffer - (unsigned int)CanDevice::TxBufferNumber::fifo];
 #else
 		++txTimeouts[(unsigned int)whichBuffer];
@@ -1023,7 +1023,7 @@ void CanInterface::SendMessageNoReplyNoFree(CanMessageBuffer *buf) noexcept
 	}
 }
 
-#if STM32
+#if TGBTC
 void CanInterface::SendFirmwareUpdateRequest(CanMessageBuffer *buf) noexcept
 {
 	if (can0dev != nullptr)
@@ -1296,7 +1296,7 @@ GCodeResult CanInterface::ConfigureRemoteDriver(DriverId driver, GCodeBuffer& gb
 		}
 		return GCodeResult::errorNotSupported;
 #endif
-#if STM32
+#if TGBTC
 	case 9:			// set driver type (needs expanding to allow max current and sense resistor settings)
 		{
 			// temporary until we have a custom can message for M569.9

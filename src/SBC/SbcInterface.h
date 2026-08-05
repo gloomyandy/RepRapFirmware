@@ -39,7 +39,7 @@ public:
 	// The Init method must be called prior to calling any of the other methods. Use reprap.UsingSbcInterface() to guard calls to other members.
 	// OTOH, calling Init when we don't have a SBC connected may cause problems due to noise pickup on the SPI CS and clock inputs
 	void Init() noexcept;
-#if STM32
+#if TGBTC
 	void FreeMemory() noexcept;
 	void RequestRestart() noexcept;
 #endif
@@ -101,7 +101,7 @@ private:
 	char *codeBuffer;
 	volatile uint16_t rxPointer, txPointer, txEnd;
 	volatile bool sendBufferUpdate;
-#if STM32
+#if TGBTC
 	volatile bool restartRequested;
 #endif
 

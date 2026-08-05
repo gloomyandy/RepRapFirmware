@@ -11,7 +11,7 @@
 
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <Movement/StepTimer.h>
-#if SUPPORT_DMA_NEOPIXEL && STM32
+#if SUPPORT_DMA_NEOPIXEL && TGBTC
 #include <DMABitIO.h>
 #endif
 
@@ -366,7 +366,7 @@ void LocalLedStrip::DmaSendChunkBuffer(size_t numBytes) noexcept
 	p_cfg.mbr_da = reinterpret_cast<uint32_t>(&(QSPI->QSPI_TDR));
 	xdmac_configure_transfer(XDMAC, DmacChanLedTx, &p_cfg);
 	xdmac_channel_enable(XDMAC, DmacChanLedTx);
-# elif STM32
+# elif TGBTC
 	NeopixelDMAWrite(port.GetPin(), frequency, chunkBuffer, numBytes, 350, 801, 100);
 # else
 #  error Unsupported processor

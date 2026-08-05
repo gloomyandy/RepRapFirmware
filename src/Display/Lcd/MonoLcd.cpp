@@ -13,7 +13,7 @@
 
 MonoLcd::MonoLcd(PixelNumber nr, PixelNumber nc, const LcdFont * const fnts[], size_t nFonts, SpiMode mode) noexcept
 	: Lcd(nr, nc, fnts, nFonts),
-#if STM32
+#if TGBTC
  	device(Platform::GetSharedSpiDevice(LcdSpiChannel), LcdSpiClockFrequency, mode, NoPin, true)
 #else
  	device(Platform::GetSharedSpiDevice(), LcdSpiClockFrequency, mode, NoPin, true)

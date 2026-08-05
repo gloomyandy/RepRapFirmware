@@ -54,9 +54,9 @@
 # include <Comms/PanelDueUpdater.h>
 #endif
 
-#if STM32
+#if TGBTC
 using LegacyAnalogIn::AdcBits;
-# include "STM32/BoardConfig.h"
+# include "TGBTC/BoardConfig.h"
 # include <sd_mmc.h>
 # include "ResetCause.h"
 #else
@@ -170,7 +170,7 @@ constexpr uint16_t driverV12OffAdcReading = V12VoltageToAdcReading(9.5);				// v
 
 #endif
 
-#if STM32
+#if TGBTC
 constexpr uint32_t VRefCorrectionScale = 1 << 8;
 #endif
 // Global variable for debugging in tricky situations e.g. within ISRs
@@ -248,7 +248,7 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 #ifdef DUET_NG
 	{ "name",				OBJECT_MODEL_FUNC(self->GetBoardName()),															ObjectModelEntryFlags::none },
 	{ "shortName",			OBJECT_MODEL_FUNC(self->GetBoardShortName()),														ObjectModelEntryFlags::none },
-#elif STM32
+#elif TGBTC
     { "name",               OBJECT_MODEL_FUNC_NOSELF(BOARD_NAME),                                                             ObjectModelEntryFlags::none },
     { "shortName",          OBJECT_MODEL_FUNC_NOSELF(BOARD_SHORT_NAME),                                                         ObjectModelEntryFlags::none },
 #else
@@ -350,7 +350,7 @@ bool Platform::deliberateError = false;						// true if we deliberately caused a
 String<StringLength256> Platform::genericDebugBuffer;
 bool Platform::hasGenericDebug = false;
 bool Platform::shouldTurnOffHeaters = false;
-#if STM32
+#if TGBTC
 SharedSpiDevice *_ecv_null Platform::SharedSpiDevices[NumSPIDevices];
 #else
 SharedSpiDevice *_ecv_null Platform::mainSharedSpiDevice = nullptr;
@@ -427,7 +427,7 @@ void Platform::Init() noexcept
 
 	// Do any board-specific initialisation that needs to be done early and does not depend on the board revision
 
-#if HAS_SMART_DRIVERS && !STM32
+#if HAS_SMART_DRIVERS && !TGBTC
 	// Make sure the on-board drivers are disabled
 	SetPinMode(GlobalTmcEnablePin, OUTPUT_HIGH);
 #endif
@@ -503,7 +503,7 @@ void Platform::Init() noexcept
 
 	// Initialise the IO port subsystem
 	IoPort::Init();
-#if STM32
+#if TGBTC
 	// We initialise the Shared SPI devices in BoardConfig.cpp
 #else
 	// Shared SPI subsystem
@@ -522,13 +522,13 @@ void Platform::Init() noexcept
 	MassStorage::Init();
 #endif
 
-#if STM32
+#if TGBTC
 	// Load HW pin assignments from sdcard, note this also sorts out the pson pin state for LPC/STM boards, so they will
 	// not usually have HAS_DEFAULT_PSON_PIN set
 	BoardConfig::Init();
 #endif
 
-#if STM32
+#if TGBTC
 #if HAS_WIFI_NETWORKING
 	SetPinMode(EspResetPin, OUTPUT_LOW);						// reset the WiFi module
 	SetPinMode(EspEnablePin, OUTPUT_LOW);
@@ -582,7 +582,7 @@ void Platform::Init() noexcept
 		numSmartDrivers = MaxSmartDrivers;
 # elif defined(DUET3)
 		numSmartDrivers = MaxSmartDrivers;
-# elif STM32
+# elif TGBTC
 		numSmartDrivers = totalSmartDrivers;
 # elif defined(DUET3MINI)
 		numSmartDrivers = MaxSmartDrivers;							// support the expansion board, but don't mind if it's missing
@@ -632,14 +632,14 @@ void Platform::Init() noexcept
 
 	for (size_t thermistor = 0; thermistor < NumThermistorInputs; thermistor++)
 	{
-#if STM32
+#if TGBTC
 		if (TEMP_SENSE_PINS[thermistor] != NoPin)
 		{
 #endif
 		// TODO use ports for these?
 		SetPinMode(TEMP_SENSE_PINS[thermistor], AIN);
 		filteredAdcChannels[thermistor] = PinToAdcChannel(TEMP_SENSE_PINS[thermistor]);	// translate the pin number to the SAM ADC channel number;
-#if STM32
+#if TGBTC
 		}
 		else
 			filteredAdcChannels[thermistor] = NO_ADC;
@@ -661,7 +661,7 @@ void Platform::Init() noexcept
 	tcFilter.Init(0);
 	AnalogIn::EnableTemperatureSensor(1, tcFilter.CallbackFeedIntoFilter, CallbackParameter(&tcFilter), 1, 0);
 	TemperatureCalibrationInit();
-# elif STM32
+# elif TGBTC
 	filteredAdcChannels[VrefFilterIndex] = LegacyAnalogIn::GetVREFAdcChannel();
 	filteredAdcChannels[CpuTempFilterIndex] = LegacyAnalogIn::GetTemperatureAdcChannel();
 	vRefCorrection = 1*VRefCorrectionScale;
@@ -699,7 +699,7 @@ void Platform::Init() noexcept
 	currentVin = 0;
 	highestVin = 0;
 	lowestVin = 9999;
-# if STM32
+# if TGBTC
 	dummyVoltageAdcReading = PowerVoltageToAdcReading(VInDummyReading);
 # endif
 	numVinUnderVoltageEvents = 0;
@@ -725,7 +725,7 @@ void Platform::Init() noexcept
 #ifdef DUET_NG
 	DuetExpansion::DueXnTaskInit();								// must initialise interrupt priorities before calling this
 #endif
-#if STM32
+#if TGBTC
 	// Give ADC readings time to settle
 	delay(500);
 #endif
@@ -896,14 +896,18 @@ void Platform::Spin() noexcept
 	// Try to flush messages to serial ports
 	(void)FlushMessages();
 
-#if STM32
+#if TGBTC
 	// Update the VRef reference correction
 	// See: http://www.efton.sk/STM32/STM32_VREF.pdf and https://www.st.com/resource/en/datasheet/dm00037051.pdf
 	// We get current VRef to compensate reading.
 	// VRef = (3.3*VREFIN_CAL)/VREFINT
 	if (adcFilters[VrefFilterIndex].IsValid())
 	{
+#if STM32
 		vRefCorrection = (GET_ADC_CAL(VREFINT_CAL_ADDR, VREFINT_CAL_DEF)*VRefCorrectionScale)/((adcFilters[VrefFilterIndex].GetSum() >> (AdcBits - 12))/ThermistorAverageReadings);
+#else
+#error "invalid configuration"
+#endif
 	}
 #endif
 
@@ -1284,7 +1288,7 @@ void Platform::InitialiseInterrupts() noexcept
 	// WiFi UART interrupt priority is now set in module WiFiInterface
 
 #if SUPPORT_TMC22xx && !SAME5x											// SAME5x uses a DMA interrupt instead of the UART interrupt
-# if STM32
+# if TGBTC && STM32
 	NVIC_SetPriority(DMA2_Stream5_IRQn, NvicPriorityDriversSerialTMC); // Software serial
 # elif TMC22xx_HAS_MUX
 	NVIC_SetPriority(TMC22xx_UART_IRQn, NvicPriorityDriversSerialTMC);	// set priority for TMC2660 SPI interrupt
@@ -1313,7 +1317,7 @@ void Platform::InitialiseInterrupts() noexcept
 	NVIC_SetPriority(XDMAC_IRQn, NvicPriorityDMA);
 #endif
 
-#if STM32
+#if TGBTC && STM32
     NVIC_SetPriority(EXTI0_IRQn, NvicPriorityPins);
     NVIC_SetPriority(EXTI1_IRQn, NvicPriorityPins);
     NVIC_SetPriority(EXTI2_IRQn, NvicPriorityPins);
@@ -2286,18 +2290,6 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 	case (unsigned int)DiagnosticTestType::PrintExpanderStatus:
 		reply.printf("Expander status %04X\n", DuetExpansion::DiagnosticRead());
 		break;
-#endif
-
-#if STM32
-	// This code is now called directly from the gcode module to allow it to have access to the
-	// I/O stream with a push modifier (used for standard M122). Without this the output in DSF
-	// is split into multiple responses. 
-#if 0
-	// Diagnostic for LPC board configuration
-	case (unsigned int)DiagnosticTestType::PrintBoardConfiguration:
-		BoardConfig::Diagnostics(gb.GetResponseMessageType());
-		break;
-#endif
 #endif
 
 	default:
@@ -3618,7 +3610,7 @@ void Platform::StopBeep() noexcept
 
 bool Platform::GetAtxPowerState() const noexcept
 {
-#if STM32
+#if TGBTC
 	return ATX_POWER_STATE;
 #else
 	const bool val = PsOnPort.ReadDigital();
@@ -3629,7 +3621,7 @@ bool Platform::GetAtxPowerState() const noexcept
 
 GCodeResult Platform::HandleM80(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {
-#if STM32
+#if TGBTC
 	ATX_POWER_STATE = true;
 	IoPort::WriteDigital(StepperPowerEnablePin, true);
 #endif
@@ -3647,8 +3639,8 @@ GCodeResult Platform::HandleM80(GCodeBuffer& gb, const StringRef& reply) THROWS(
 	}
 	else
 	{
-// on STM/LPC port we allow use of M80/M81 to control "virtual power", so it is not an error to have no pin defined
-#if STM32
+// on TG port we allow use of M80/M81 to control "virtual power", so it is not an error to have no pin defined
+#if TGBTC
 		rslt = GCodeResult::ok;
 #else
 		reply.copy("No PS_ON port defined");
@@ -3667,8 +3659,8 @@ GCodeResult Platform::HandleM81(GCodeBuffer& gb, const StringRef& reply) THROWS(
 	{
 		rslt = GetGCodeResultFromSuccess(PsOnPort.AssignPort(gb, reply, PinUsedBy::gpout, PinAccess::write0));
 	}
-// on STM port we allow use of M80/M81 to control "virtual power", so it is not an error to have no pin defined
-#if STM32
+// on TG port we allow use of M80/M81 to control "virtual power", so it is not an error to have no pin defined
+#if TGBTC
 	else if (1)
 #else
 	else if (PsOnPort.IsValid())
@@ -3706,7 +3698,7 @@ void Platform::AtxPowerOff() noexcept
 		// We don't call logger->Stop() here because we don't know whether turning off the power will work
 	}
 #endif
-#if STM32
+#if TGBTC
 	ATX_POWER_STATE = false;
 	IoPort::WriteDigital(StepperPowerEnablePin, false);
 #endif
@@ -3717,7 +3709,7 @@ void Platform::AtxPowerOff() noexcept
 		PsOnPort.WriteDigital(false);
 		reprap.StateUpdated();
 	}
-#if STM32
+#if TGBTC
 	else
 		reprap.StateUpdated();
 #endif
@@ -3881,10 +3873,8 @@ void Platform::SetBoardType() noexcept
 	board = BoardType::DuetM_10;
 #elif defined(PCCB_10)
 	board = BoardType::PCCB_v10;
-#elif defined(__STM32F4__)
-	board = BoardType::Stm32F4;
-#elif defined(__STM32H7__)
-	board = BoardType::Stm32H7;
+#elif defined(TGBTC)
+	board = BoardType::TeamGloomy_BTC;
 #elif defined INDX
 	board = BoardType::Indx;
 #else
@@ -3927,10 +3917,8 @@ const char *_ecv_array Platform::GetElectronicsString() const noexcept
 	case BoardType::DuetM_10:				return "Duet Maestro 1.0";
 #elif defined(PCCB_10)
 	case BoardType::PCCB_v10:				return "PC001373";
-#elif defined(__STM32F4__)
-	case BoardType::Stm32F4:				return STM_ELECTRONICS_STRING;
-#elif defined(__STM32H7__)
-	case BoardType::Stm32H7:				return STM_ELECTRONICS_STRING;
+#elif defined(TGBTC)
+	case BoardType::TeamGloomy_BTC:				return TGBTC_ELECTRONICS_STRING;
 #elif defined(INDX)
 	case BoardType::Indx:					return "INDX";
 #else
@@ -3973,10 +3961,8 @@ const char *_ecv_array Platform::GetBoardString() const noexcept
 	case BoardType::DuetM_10:				return "duetmaestro100";
 #elif defined(PCCB_10)
 	case BoardType::PCCB_v10:				return "pc001373";
-#elif defined(__STM32F4__)
-	case BoardType::Stm32F4:				return STM_BOARD_STRING;
-#elif defined(__STM32H7__)
-	case BoardType::Stm32H7:				return STM_BOARD_STRING;
+#elif defined(TGBTC)
+	case BoardType::TeamGloomy_BTC:					return TGBTC_BOARD_STRING;
 #elif defined(INDX)
 	case BoardType::Indx:					return "indx";
 #else
@@ -4530,7 +4516,7 @@ void Platform::Tick() noexcept
 	{
 # if HAS_VOLTAGE_MONITOR
 		// Read the power input voltage
-#  if STM32
+#  if TGBTC
 		if (PowerMonitorVinDetectPin != NoPin)
 		{
 			// we can read the Vin value
@@ -4635,7 +4621,7 @@ void Platform::Tick() noexcept
 	case 3:
 		{
 #if !SAME70
-#if STM32
+#if TGBTC
 			if(filteredAdcChannels[currentFilterNumber] != NO_ADC)
 			{
 #endif
@@ -4643,7 +4629,7 @@ void Platform::Tick() noexcept
 			// Because we are in the tick ISR and no other ISR reads the averaging filter, we can cast away 'volatile' here.
 			ThermistorAveragingFilter& currentFilter = const_cast<ThermistorAveragingFilter&>(adcFilters[currentFilterNumber]);		// cast away 'volatile'
 			currentFilter.ProcessReading(AnalogInReadChannel(filteredAdcChannels[currentFilterNumber]));
-#if STM32
+#if TGBTC
 			}
 #endif
 			++currentFilterNumber;

@@ -5,8 +5,8 @@
  *      Author: David
  */
 #include "TMC22xx.h"
-// On the STM32 platform we have a replacement for this
-#if !STM32
+// On the TG platform we have a replacement for this
+#if !TGBTC
 
 #if SUPPORT_TMC22xx
 

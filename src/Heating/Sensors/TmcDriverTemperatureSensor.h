@@ -26,7 +26,7 @@ public:
 	static constexpr const char *_ecv_array DuexTypeName = "drivers-duex";
 	static constexpr const char *_ecv_array DuexTypeShortName = "driversduex";
 #endif
-#if STM32
+#if TGBTC
 	const uint8_t GetNumAdditionalOutputs() const noexcept override { return totalSmartDrivers; }
 #endif
 private:
@@ -38,7 +38,7 @@ private:
 	unsigned int channel;
 };
 
-#if STM32
+#if TGBTC
 #include "AdditionalOutputSensor.h"
 // This class represents a DHT humidity sensor
 class TmcDriverActualTemperatureSensor : public AdditionalOutputSensor

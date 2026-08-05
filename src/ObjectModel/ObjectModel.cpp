@@ -446,7 +446,7 @@ void ExpressionValue::ExtractRequestedPart(const StringRef& rslt, bool quoteStri
 		case ExpansionDetail::firmwareFileNameBin:
 		case ExpansionDetail::firmwareFileNameUf2:
 			if (quoteStrings) { rslt.cat('"'); }
-#if STM32
+#if TGBTC
 			// allow use of non Duet firmware
 			if (IsSTM32Firmware(sVal, indexOfDivider1))
 			{

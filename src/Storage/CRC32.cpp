@@ -2,7 +2,7 @@
 
 #include "CRC32.h"
 
-#if STM32
+#if TGBTC
 # include <RTOSIface/RTOSIface.h>
 # include "HardwareCRC32.h"
 extern HardwareCRC32 HWCRC32;
@@ -201,7 +201,7 @@ void CRC32::Update(char c) noexcept
 // Slicing-by-4 using 1 quadword per loop iteration: 28 instructions, 31 clocks (3.875 clocks/byte)
 void CRC32::Update(const char *_ecv_array s, size_t len) noexcept
 {
-#if STM32
+#if TGBTC
 	TaskCriticalSectionLocker lock;			// we need exclusive use of the CRC unit
 	crc = ~HWCRC32.CalcCRC32(reinterpret_cast<const uint8_t*>(s), len, ~crc);
 #else

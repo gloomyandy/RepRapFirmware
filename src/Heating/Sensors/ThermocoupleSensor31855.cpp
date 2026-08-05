@@ -121,7 +121,7 @@ void ThermocoupleSensor31855::Poll() noexcept
 {
 	uint32_t rawVal;
 	TemperatureError sts = DoSpiTransaction(nullptr, 4, rawVal);
-#if STM32
+#if TGBTC
 	// Some STM32F4 boards have 31855 sensors but the board is wired for 6675 devices and
 	// so has T- wired to ground. This produces a permanent short to ground error.
 	// So we mask this out. Not nice!

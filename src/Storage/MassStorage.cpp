@@ -5,7 +5,7 @@
 
 #if HAS_MASS_STORAGE
 # include <Libraries/Fatfs/diskio.h>
-#if !STM32 
+#if !TGBTC 
 # include <Libraries/sd_mmc/sd_mmc.h>
 # include <Libraries/sd_mmc/conf_sd_mmc.h>
 // Check that the correct number of SD cards is configured in the library
@@ -436,7 +436,7 @@ void MassStorage::Init() noexcept
 # endif
 }
 
-#if STM32 && HAS_MASS_STORAGE
+#if TGBTC && HAS_MASS_STORAGE
 void MassStorage::Init2() noexcept
 {
 	// some things may have changed when we loaded the board config, update them.

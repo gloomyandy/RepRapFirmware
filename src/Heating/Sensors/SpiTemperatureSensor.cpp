@@ -15,7 +15,7 @@
 
 SpiTemperatureSensor::SpiTemperatureSensor(unsigned int sensorNum, const char *_ecv_array name, SpiMode spiMode, uint32_t clockFrequency) noexcept
 	: SensorWithPort(sensorNum, name), 
-#if STM32
+#if TGBTC
 	device(Platform::GetSharedSpiDevice(TempSensorSSPChannel),
 #else
 	device(Platform::GetSharedSpiDevice(),

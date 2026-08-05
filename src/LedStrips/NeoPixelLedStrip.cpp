@@ -108,7 +108,7 @@ GCodeResult NeoPixelLedStrip::NeoPixelSendData(LedParams& params) noexcept
 size_t NeoPixelLedStrip::GetBytesPerLed() const noexcept
 {
 	const size_t bytesPerLed = (IsRGBW()) ? 4 : 3;
-#if STM32
+#if TGBTC
 	return bytesPerLed;
 #else
 	return (useDma) ? bytesPerLed * 4 : bytesPerLed;
@@ -117,7 +117,7 @@ size_t NeoPixelLedStrip::GetBytesPerLed() const noexcept
 
 #if SUPPORT_DMA_NEOPIXEL
 
-#if !STM32
+#if !TGBTC
 // Encode one NeoPixel byte into the buffer.
 // A 0 bit is encoded as 1000
 // A 1 bit is encoded as 1110
@@ -144,7 +144,7 @@ static void EncodeNeoPixelByte(uint8_t *_ecv_array p, uint8_t val) noexcept
 // Send data to NeoPixel LEDs by DMA to SPI
 GCodeResult NeoPixelLedStrip::SpiSendData(const LedParams& params) noexcept
 {
-#if STM32
+#if TGBTC
 	const unsigned int bytesPerLed = (IsRGBW()) ? 4 : 3;
 	unsigned int numLeds = params.numLeds;
 	uint8_t *_ecv_array p = chunkBuffer + (bytesPerLed * numAlreadyInBuffer);
@@ -191,7 +191,7 @@ GCodeResult NeoPixelLedStrip::SpiSendData(const LedParams& params) noexcept
 }
 #endif
 
-#if !STM32
+#if !TGBTC
 // Bit bang data to Neopixels. See https://wp.josh.com/2014/05/13/ws2812-neopixels-are-not-so-finicky-once-you-get-to-know-them/ for the timing requirements.
 constexpr uint32_t NanosecondsToCycles(uint32_t ns) noexcept
 {

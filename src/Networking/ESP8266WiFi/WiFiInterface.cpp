@@ -83,7 +83,7 @@ constexpr Pin APIN_ESP_SPI_MISO = EspMisoPin;
 constexpr Pin APIN_ESP_SPI_SCK = EspSclkPin;
 constexpr IRQn ESP_SPI_IRQn = WiFiSpiSercomIRQn;
 
-#elif STM32
+#elif TGBTC
 # if STM32H7
   static __nocache MessageBufferOut messageBufferOut;
   static __nocache MessageBufferIn messageBufferIn;
@@ -93,7 +93,7 @@ constexpr IRQn ESP_SPI_IRQn = WiFiSpiSercomIRQn;
 # define USE_DMAC           0		// use SAM4 general DMA controller
 # define USE_DMAC_MANAGER	0		// use SAMD/SAME DMA controller via DmacManager module
 # define USE_XDMAC          0		// use SAME7 XDMA controller
-// On STM32 boards we usually have a plugable WiFi module and so do not know what type it is
+// On TG boards we usually have a plugable WiFi module and so do not know what type it is
 // so we do not use WIFI_USES_ESP32 to control the configuration. We also do not use EspEnablePin
 // it is set to NoPin and make use of EspResetPin to reset/enable both ESP8266 and ESP32 devices
 # if WIFI_USES_ESP32
@@ -132,7 +132,7 @@ const uint32_t WiFiStableMillis = 100;
 
 const unsigned int MaxHttpConnections = 4;
 
-#if !STM32
+#if !TGBTC
 // Static functions
 static inline void DisableSpi() noexcept
 {
@@ -206,7 +206,7 @@ static void debugPrintBuffer(const char *_ecv_array msg, void *buf, size_t dataL
 }
 #endif
 
-#if STM32
+#if TGBTC
 # include "WiFiInterface.hpp"
 #endif
 
@@ -504,7 +504,7 @@ void WiFiInterface::Activate() noexcept
 		else
 		{
 			platform.Message(UsbMessage, "WiFi is disabled.\n");
-#if STM32
+#if TGBTC
 			// try and detect what sort of hardware we have for uploads etc.
 			if (uploader) uploader->DetectWiFiModuleType();
 #endif
@@ -608,7 +608,7 @@ void WiFiInterface::Start() noexcept
 	spiTxUnderruns = spiRxOverruns = 0;
 	reconnectCount = 0;
 	transferAlreadyPendingCount = readyTimeoutCount = responseTimeoutCount = 0;
-#if STM32
+#if TGBTC
 	badHeaderCount = actualBadHeaderCount = 0;
 #endif
 
@@ -632,7 +632,7 @@ void WiFiInterface::Stop() noexcept
 #endif
 		digitalWrite(EspEnablePin, false);
 		DisableEspInterrupt();						// ignore IRQs from the transfer request pin
-#if !STM32
+#if !TGBTC
 		NVIC_DisableIRQ(ESP_SPI_IRQn); // Shouldn't DisableSpi do this?
 #endif
 		DisableSpi();
@@ -678,7 +678,7 @@ void WiFiInterface::Spin() noexcept
 				{
 					platform.Message(NetworkInfoMessage, "WiFi module disabled - start timed out\n");
 					SetState(NetworkState::disabled);
-#if STM32
+#if TGBTC
 					if (uploader) uploader->DetectWiFiModuleType();
 #endif
 				}
@@ -712,7 +712,7 @@ void WiFiInterface::Spin() noexcept
 						{
 							reprap.GetPlatform().MessageF(NetworkErrorMessage, "failed to set WiFi hostname: %s\n", TranslateWiFiResponse(rc));
 						}
-#if STM32
+#if TGBTC
 						// Set the module type based on the status response
 						if (NetworkModule == NetworkModuleType::espauto)
 						{
@@ -759,7 +759,7 @@ void WiFiInterface::Spin() noexcept
 						// Something went wrong, maybe a bad firmware image was flashed. Disable the WiFi chip again in this case
 						Stop();
 						platform.MessageF(NetworkErrorMessage, "failed to initialise WiFi module: %s\n", TranslateWiFiResponse(rc));
-#if STM32
+#if TGBTC
 						if (uploader) uploader->DetectWiFiModuleType();
 #endif
 					}
@@ -1008,7 +1008,7 @@ void WiFiInterface::Diagnostics(const StringRef& reply) noexcept
 					 TranslateWiFiState(currentMode),
 					 transferAlreadyPendingCount, readyTimeoutCount, responseTimeoutCount
 			   );
-#if STM32
+#if TGBTC
 	reply.lcatf("Bad header: %u/%u", badHeaderCount, actualBadHeaderCount);
 #endif
 
@@ -1021,7 +1021,7 @@ void WiFiInterface::Diagnostics(const StringRef& reply) noexcept
 			NetworkStatusResponse& r = status.Value();
 			r.versionText[ARRAY_UPB(r.versionText)] = 0;
 			reply.lcatf("Firmware version %s", r.versionText);
-#if STM32
+#if TGBTC
 			reply.catf(" (%s)", NetworkModule.ToString());
 #endif
 			reply.lcatf("Module reset reason: %s, Vcc %.2f, flash size %" PRIu32 ", free heap %" PRIu32,
@@ -2039,7 +2039,7 @@ void WiFiInterface::TerminateDataPort() noexcept
 	}
 }
 
-#if !STM32
+#if !TGBTC
 
 #if USE_PDC
 static Pdc *spi_pdc;
@@ -2375,7 +2375,7 @@ void WiFiInterface::SetupSpi() noexcept
 	NVIC_EnableIRQ(ESP_SPI_IRQn);
 }
 
-#endif //end ifndef STM32
+#endif //end ifndef TGBTC
 
 // Send a command to the ESP and get the result
 int32_t WiFiInterface::SendCommand(NetworkCommand cmd, SocketNumber socketNum, uint8_t flags, uint32_t param32, const void *_ecv_null dataOut, size_t dataOutLength, void *_ecv_null dataIn, size_t dataInLength) noexcept
@@ -2457,7 +2457,7 @@ int32_t WiFiInterface::SendCommand(NetworkCommand cmd, SocketNumber socketNum, u
 	WiFiSpiSercom->SPI.INTFLAG.reg = 0xFF;						// clear any pending interrupts
 	WiFiSpiSercom->SPI.INTENSET.reg = SERCOM_SPI_INTENSET_TXC;	// enable the end of transmit interrupt. From the datasheet: "In Slave mode, this flag is set when the _SS pin is pulled high."
 	EnableSpi();
-#elif STM32
+#elif TGBTC
     spi_slave_dma_setup(dataOutLength, dataInLength);
 #else
     // DMA may have transferred an extra word to the SPI transmit data register. We need to clear this.
@@ -2571,7 +2571,7 @@ int32_t WiFiInterface::SendCommand(NetworkCommand cmd, SocketNumber socketNum, u
 		{
 			debugPrintf("bad format version %02x\n", bufferIn->hdr.formatVersion);
 		}
-#if STM32
+#if TGBTC
 		// For some reason I don't understand when using the ESP32 with DMA seems to result in a very
 		// occasaional packet with formatVersion == 0. We check for that here and allow it if a second
 		// header field has the correct value. 
@@ -2689,7 +2689,7 @@ void WiFiInterface::GetNewStatus() noexcept
 	}
 }
 
-#if !STM32
+#if !TGBTC
 #if SAME5x
 
 /*static*/ void WiFiInterface::CommonSpiInterrupt(void *param) noexcept
@@ -2756,7 +2756,7 @@ inline void WiFiInterface::SpiInterrupt() noexcept
 	}
 }
 
-#endif //if !STM32
+#endif //if !TGBTC
 
 // Start the ESP
 void WiFiInterface::StartWiFi() noexcept
@@ -2767,7 +2767,7 @@ void WiFiInterface::StartWiFi() noexcept
 #endif
 
 	digitalWrite(EspEnablePin, true);
-#if STM32
+#if TGBTC
 	if(!serialWiFiDevice->Configure(SerialWiFiRxTxPins[0], SerialWiFiRxTxPins[1]))
 	{
 		reprap.GetPlatform().MessageF(UsbMessage, "Failed to set WIFI Serial with pins %c.%d and %c.%d.\n", 'A'+(SerialWiFiRxTxPins[0] >> 4), (SerialWiFiRxTxPins[0] & 0xF), 'A'+(SerialWiFiRxTxPins[1] >> 4), (SerialWiFiRxTxPins[1] & 0xF) );
