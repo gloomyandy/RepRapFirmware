@@ -159,20 +159,12 @@ extern TIM_HandleTypeDef *STHandle;
 
 inline __attribute__((always_inline)) StepTimer::Ticks StepTimer::GetTimerTicks() noexcept
 {
-# if STM32 && TGBTC
-	return __HAL_TIM_GET_COUNTER(STHandle);
-# else
 	return STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_CV;
-# endif
 }
 
 inline __attribute__((always_inline)) StepTimer::Ticks StepTimer::GetTimerTicksWhenInterruptsDisabled() noexcept
 {
-# if STM32 && TGBTC
-	return __HAL_TIM_GET_COUNTER(STHandle);
-# else
 	return STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_CV;
-# endif
 }
 
 #endif
