@@ -17,7 +17,7 @@
 # include <CAN/CanInterface.h>
 #endif
 
-#if STM32 && TGBTC
+#if TGBTC
 #include <HardwareTimer.h>
 HardwareTimer STimer(STEP_TC);
 TIM_HandleTypeDef *STHandle;
@@ -94,7 +94,7 @@ void StepTimer::Init() noexcept
 	NVIC_SetPriority(StepTcIRQn, NvicPriorityStep);			    // Set the priority for this IRQ
 	NVIC_ClearPendingIRQ(StepTcIRQn);
 	NVIC_EnableIRQ(StepTcIRQn);
-#elif STM32 && TGBTC
+#elif TGBTC
 	uint32_t preScale = STimer.getTimerClkFreq()/StepClockRate;
 	//debugPrintf("ST clock rate %d ST base freq %d setting presacle %d\n", StepClockRate, static_cast<int>(STimer.getTimerClkFreq()), static_cast<int>(preScale));
 	STimer.setPrescaleFactor(preScale);
@@ -206,7 +206,7 @@ void StepTimer::Init() noexcept
 
 #endif
 
-#if STM32H7
+#if TGBTC && STM32H7
 // Get the step timer clock count
 /*static*/ uint32_t StepTimer::GetTimerTicks() noexcept
 {
@@ -366,7 +366,7 @@ void StepTimer::DisableTimerInterrupt() noexcept
 {
 	static uint32_t originalOffset = 0;
 
-#if SAME70 || STM32H7
+#if SAME70 || (TGBTC && STM32H7)
 	// On the SAME70 the timestamp counter is the lower 16 bits of the step counter
 	const uint32_t localTimeNow = StepTimer::GetTimerTicks();
 	const uint32_t timeStampDelay = (uint32_t)((localTimeNow - timeStamp) & 0xFFFF);
@@ -526,7 +526,7 @@ void STEP_TC_HANDLER() noexcept
 	if (likely((tcsr & TC_INTFLAG_MC0) != 0))						// the step interrupt uses MC0 compare
 	{
 		StepTc->INTENCLR.reg = TC_INTFLAG_MC0;						// disable the interrupt (no need to clear it, we do that before we re-enable it)
-#elif STM32 && TGBTC
+#elif TGBTC
 	uint32_t tcsr = STHandle->Instance->SR;
 	tcsr &= STHandle->Instance->DIER;
 #if STM32H7

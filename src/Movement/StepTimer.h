@@ -150,7 +150,7 @@ private:
 	static constexpr unsigned int MaxSyncCount = 10;
 #endif
 };
-#if STM32 && TGBTC
+#if TGBTC && STM32
 extern TIM_HandleTypeDef *STHandle;
 #endif
 
@@ -174,7 +174,7 @@ inline __attribute__((always_inline)) uint16_t StepTimer::GetTimerTicks16() noex
 {
 #if SAME70 || SAM4S
 	return (uint16_t)STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_CV;
-#elif STM32 && TGBTC
+#elif TGBTC && STM32
 	return (uint16_t)__HAL_TIM_GET_COUNTER(STHandle);
 #else
 	return (uint16_t)GetTimerTicks();

@@ -5590,7 +5590,7 @@ void GCodes::AllocateAxes(const GCodeBuffer& gb, MovementState& ms, AxesBitmap a
 		if (reprap.GetDebugFlags(Module::Move).IsBitSet(MoveDebugFlags::AxisAllocation))
 		{
 			debugPrintf("Failed to allocate drives %07" PRIx32 " to MS %u, axis letters %08"
-#if defined(DUET3) || STM32H7
+#if defined(DUET3) || TGBTC
 				PRIx64
 #else
 				PRIx32

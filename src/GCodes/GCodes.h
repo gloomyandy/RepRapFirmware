@@ -297,7 +297,7 @@ public:
 #endif
 
 	static constexpr const char *_ecv_array AllowedAxisLetters =
-#if defined(DUET3) || STM32H7
+#if defined(DUET3) || TGBTC
 						"XYZUVWABCDabcdefghijklmnopqrstuvwxyz";
 #else
 						"XYZUVWABCDabcdef";

@@ -46,7 +46,7 @@ const char *_ecv_array _ecv_null SafeStrptime(const char *_ecv_array buf, const 
 
 #if SAME70
 # define __nocache		__attribute__((section(".ram_nocache")))
-#elif STM32H7
+#elif STM32H7 && TGBTC
 # define __nocache		__attribute__((section(".ram_nocache")))
 # define __nocache2		__attribute__((section(".ram_nocache2")))
 #else
@@ -431,7 +431,7 @@ typedef Bitmap<uint32_t> InputPortsBitmap;			// Type of a bitmap representing a 
 typedef Bitmap<uint32_t> TriggerNumbersBitmap;		// Type of a bitmap representing a set of trigger numbers
 typedef Bitmap<uint64_t> ToolNumbersBitmap;			// Type of a bitmap representing a set of tool numbers
 
-#if defined(DUET3) || STM32H7
+#if defined(DUET3) || TGBTC
 typedef Bitmap<uint64_t> ParameterLettersBitmap;	// Type of a bitmap representing a set of parameter letters in A..Z and a..z
 constexpr char HighestAxisLetter = 'z';
 #else
@@ -640,7 +640,7 @@ constexpr float RadiansToDegrees = 180.0/3.141592653589793;
 
 // The step clock is used for timing step pulses and other fine-resolution timer purposes
 
-#if SAME70 || SAME5x || STM32H7 || STM32F4
+#if SAME70 || SAME5x || TGBTC
 // All Duet 3 boards use a common step clock rate of 750kHz so that we can sync the clocks over CAN
 constexpr uint32_t StepClockRate = 48000000/64;								// 750kHz
 #else

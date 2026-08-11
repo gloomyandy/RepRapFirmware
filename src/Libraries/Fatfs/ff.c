@@ -635,13 +635,15 @@ static const BYTE DbcTbl[] = MKCVTBL(TBL_DC, FF_CODE_PAGE);
 # if SAME70
 extern uint8_t _nocache_ram_start;
 extern uint8_t _nocache_ram_end;
-#elif STM32H7
+#elif TGBTC
+# if STM32H7
 extern uint8_t _nocache2_ram_start;
 extern uint8_t _nocache2_ram_end;
-#elif STM32F4
+# elif STM32F4
 extern uint8_t _sccmram;
 extern uint8_t _ccmramend;
 # endif
+#endif
 
 //extern int debugPrintf(const char *, ...);
 

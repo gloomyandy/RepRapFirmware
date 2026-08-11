@@ -277,7 +277,7 @@ static GCodeResult EutGetInfo(const CanMessageReturnInfo& msg, const StringRef& 
 		break;
 
 	case CanMessageReturnInfo::typeBootloaderName:
-#if STM32H7 && TGBTC
+#if TGBTC
 		reply.copy(BOARD_SHORT_NAME);
 #else
 		reply.copy("(n/a)");
@@ -333,7 +333,7 @@ static GCodeResult InitiateFirmwareUpdate(const CanMessageUpdateYourFirmware& ms
 		reprap.ScheduleFirmwareUpdateOverCan();
 		return GCodeResult::ok;
 	}
-#if STM32H7 && TGBTC
+#if TGBTC
 	if (msg.module == 3)
 	{
 		reply.printf("Board %u starting BootLoader update", CanInterface::GetCanAddress());
