@@ -172,7 +172,7 @@ static const boardConfigEntry_t boardConfigs[]=
 #endif
 
 #if NUM_ASYNC_PORTS != 0
-    {"serial.aux.rxTxPins", &Serial1RxTxPins, NumberSerialPins, cvPinType},
+    {"serial.aux.rxTxPins", &Serial0RxTxPins, NumberSerialPins, cvPinType},
 #endif
 #if NUM_ASYNC_PORTS > 1
     {"serial.aux2.rxTxPins", &Serial1RxTxPins, NumberSerialPins, cvPinType},
