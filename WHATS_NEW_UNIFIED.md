@@ -1,3 +1,10 @@
+Version 3.7.0-beta.3
+=====================
+* Duet3d V3.7.0-beta.3
+* Fix problem with AUX port configuration
+* Added possible fix for accleromter problem on expansion boards (needs testing)
+* Improved handling of slow network connections (incomplete write errors)
+
 Version 3.7.0-beta.2
 =====================
 * Duet3d V3.7.0-beta.2
