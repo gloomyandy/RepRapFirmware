@@ -200,6 +200,7 @@ static void HandleInputStateChangedV1(const CanMessageInputChangedV1& msg, CanAd
 
 		case RemoteInputHandle::typeGpIn:
 			p.HandleRemoteGpInChange(src, handle.parts.major, handle.parts.minor, state);
+			endstopStatesChanged = true;					// the port may be bound to an extruder endstop, see the E parameter of M574
 			break;
 
 		case RemoteInputHandle::typeStallEndstop:
@@ -241,6 +242,7 @@ static void HandleInputStateChangedV2(const CanMessageInputChangedV2& msg, CanAd
 
 		case RemoteInputHandle::typeGpIn:
 			p.HandleRemoteGpInChange(src, handle.parts.major, handle.parts.minor, state);
+			endstopStatesChanged = true;					// the port may be bound to an extruder endstop, see the E parameter of M574
 			break;
 
 		case RemoteInputHandle::typeStallEndstop:
@@ -738,8 +740,8 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 				uint8_t fragmentNumber = 0;
 				for (;;)
 				{
-					const size_t fragmentLength = min<size_t>(totalLength - lengthDone, CanMessageStandardReply::MaxTextLength);
-					memcpy(msg->text, reply.c_str() + lengthDone, fragmentLength);
+					const size_t fragmentLength = min<size_t>(totalLength - lengthDone, msg->GetMaxTextLength());
+					memcpy(msg->GetText(), reply.c_str() + lengthDone, fragmentLength);
 					lengthDone += fragmentLength;
 					buf->dataLength = msg->GetActualDataLength(fragmentLength);
 					msg->fragmentNumber = fragmentNumber;
@@ -752,6 +754,7 @@ void CommandProcessor::ProcessReceivedMessage(CanMessageBuffer *buf) noexcept
 					msg->moreFollows = true;
 					CanInterface::SendResponseNoFree(buf);
 					++fragmentNumber;
+					msg->numWords = 0;						// data words go in fragment 0 only
 				}
 			}
 		}

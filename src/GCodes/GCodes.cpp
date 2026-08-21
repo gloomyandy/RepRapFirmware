@@ -204,7 +204,7 @@ void GCodes::Init() noexcept
 	m501SeenInConfigFile = false;
 	doingToolChange = false;
 	active = true;
-	limitAxes = noMovesBeforeHoming = true;
+	limitAxes = limitAxesRelative = noMovesBeforeHoming = true;
 	SetAllAxesNotHomed();
 
 	laserMaxPower = DefaultMaxLaserPower;
@@ -2133,9 +2133,11 @@ bool GCodes::LoadExtrusionFromGCode(GCodeBuffer& gb, MovementState& ms) THROWS(G
 								rawExtruderTotalByDrive[extruder] += extrusionAmount;
 								rawExtruderTotal += extrusionAmount;
 							}
-							ms.raw.coords[ExtruderToLogicalDrive(extruder)] = (ms.raw.applyM220M221)
-																			? extrusionAmount * extrusionFactors[extruder]
-																			: extrusionAmount;
+							const float cookedExtrusionAmount = (ms.raw.applyM220M221)
+																? extrusionAmount * extrusionFactors[extruder]
+																: extrusionAmount;
+							ms.raw.coords[ExtruderToLogicalDrive(extruder)] = cookedExtrusionAmount;
+							cookedTotalExtrusion += cookedExtrusionAmount;
 							extrudersMoving.SetBit(extruder);
 #if SUPPORT_ASYNC_MOVES && !PREALLOCATE_TOOL_AXES
 							logicalDrivesMoving.SetBit(ExtruderToLogicalDrive(extruder));
@@ -2153,15 +2155,16 @@ bool GCodes::LoadExtrusionFromGCode(GCodeBuffer& gb, MovementState& ms) THROWS(G
 #if SUPPORT_ASYNC_MOVES && !PREALLOCATE_TOOL_AXES
 		AllocateAxes(gb, ms, logicalDrivesMoving, ParameterLettersBitmap());
 #endif
-		if (ms.raw.moveType == 1 || ms.raw.moveType == 4)
+		if ((ms.raw.moveType == 1 || ms.raw.moveType == 4) && cookedTotalExtrusion != 0.0)
 		{
 			// Enable extruder endstops for the extruders moving
 			// First calculate the extruder speeds so that stall detection endstops can be validated.
 			// We checked before calling this that no axes are moving.
+			// Divide by the absolute total extrusion so that each speed is signed with the direction of that extruder's movement
 			float speeds[MaxExtruders];
 			for (size_t i = 0; i < GetNumExtruders(); ++i)
 			{
-				speeds[i] = ms.raw.coords[ExtruderToLogicalDrive(i)] * ms.raw.feedRate / cookedTotalExtrusion;
+				speeds[i] = ms.raw.coords[ExtruderToLogicalDrive(i)] * ms.raw.feedRate / fabsf(cookedTotalExtrusion);
 			}
 			bool reduceAcceleration;
 			platform.GetEndstops().EnableExtruderEndstops(extrudersMoving, speeds, reduceAcceleration);			// this will throw if the endstops can't be enabled
@@ -2636,10 +2639,10 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 			{
 			case LimitPositionResult::adjusted:
 			case LimitPositionResult::adjustedAndIntermediateUnreachable:
-				if (!gb.LatestMachineState().axesRelative)
+				if (!gb.LatestMachineState().axesRelative || !limitAxesRelative)
 				{
 					abandonMove();
-					gb.ThrowGCodeException(TargetUnreachableText);				// absolute moves to unreachable positions are errors
+					gb.ThrowGCodeException(TargetUnreachableText);				// unreachable moves are errors unless relative moves are being clamped
 				}
 				ToolOffsetInverseTransform(ms);									// make sure the limits are reflected in the user position
 				if (lp == LimitPositionResult::adjusted)

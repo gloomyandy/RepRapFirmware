@@ -894,13 +894,13 @@ unsigned int CanInterface::GetNumPendingMotionMessages() noexcept
 #endif
 
 // Send a request to an expansion board and append the response to 'reply'
-GCodeResult CanInterface::SendRequestAndGetStandardReply(CanMessageBuffer *buf, CanRequestId rid, const StringRef& reply, uint8_t *_ecv_null extra) noexcept
+GCodeResult CanInterface::SendRequestAndGetStandardReply(CanMessageBuffer *buf, CanRequestId rid, const StringRef& reply, uint8_t *_ecv_null extra, uint32_t *_ecv_null words) noexcept
 {
-	return SendRequestAndGetCustomReply(buf, rid, reply, extra, CanMessageType::unusedMessageType, [](const CanMessageBuffer*) noexcept->void { });
+	return SendRequestAndGetCustomReply(buf, rid, reply, extra, words, CanMessageType::unusedMessageType, [](const CanMessageBuffer*) noexcept->void { });
 }
 
 // Send a request to an expansion board and append the response to 'reply'. The response may either be a standard reply or 'replyType'.
-GCodeResult CanInterface::SendRequestAndGetCustomReply(CanMessageBuffer *buf, CanRequestId rid, const StringRef& reply, uint8_t *_ecv_null extra, CanMessageType replyType, function_ref_noexcept<void(const CanMessageBuffer*) noexcept> callback) noexcept
+GCodeResult CanInterface::SendRequestAndGetCustomReply(CanMessageBuffer *buf, CanRequestId rid, const StringRef& reply, uint8_t *_ecv_null extra, uint32_t *_ecv_null words, CanMessageType replyType, function_ref_noexcept<void(const CanMessageBuffer*) noexcept> callback) noexcept
 {
 	if (can0dev == nullptr)
 	{
@@ -946,11 +946,19 @@ GCodeResult CanInterface::SendRequestAndGetCustomReply(CanMessageBuffer *buf, Ca
 					const size_t textLength = buf->msg.standardReply.GetTextLength(buf->dataLength);
 					if (textLength != 0)			// avoid concatenating blank lines to existing output
 					{
-						reply.lcatn(buf->msg.standardReply.text, textLength);
+						reply.lcatn(buf->msg.standardReply.GetText(), textLength);
 					}
 					if (extra != nullptr)
 					{
 						*extra = buf->msg.standardReply.extra;
+					}
+					if (words != nullptr)
+					{
+						// Words the reply didn't carry (e.g. older expansion firmware) read as zero
+						for (size_t i = 0; i < CanMessageStandardReply::MaxNumWords; i++)
+						{
+							words[i] = (i < buf->msg.standardReply.numWords) ? buf->msg.standardReply.GetWord(i) : 0;
+						}
 					}
 					uint32_t waitedFor = millis() - whenStartedWaiting;
 					if (waitedFor > longestWaitTime)
@@ -961,7 +969,7 @@ GCodeResult CanInterface::SendRequestAndGetCustomReply(CanMessageBuffer *buf, Ca
 				}
 				else
 				{
-					reply.catn(buf->msg.standardReply.text, buf->msg.standardReply.GetTextLength(buf->dataLength));
+					reply.catn(buf->msg.standardReply.GetText(), buf->msg.standardReply.GetTextLength(buf->dataLength));
 				}
 				if (!buf->msg.standardReply.moreFollows)
 				{
@@ -1528,7 +1536,7 @@ GCodeResult CanInterface::CreateHandle(CanAddress boardAddress, RemoteInputHandl
 	return rslt;
 }
 
-static GCodeResult ChangeInputMonitor(CanAddress boardAddress, RemoteInputHandle h, uint8_t action, uint32_t param, uint8_t *_ecv_null retVal, const StringRef &reply) noexcept
+static GCodeResult ChangeInputMonitor(CanAddress boardAddress, RemoteInputHandle h, uint8_t action, uint32_t param, uint8_t *_ecv_null retVal, const StringRef &reply, uint32_t *_ecv_null words = nullptr) noexcept
 {
 	if (!h.IsValid())
 	{
@@ -1548,7 +1556,7 @@ static GCodeResult ChangeInputMonitor(CanAddress boardAddress, RemoteInputHandle
 	msg->action = action;
 	msg->param = param;
 	uint8_t extra;
-	const GCodeResult rslt = CanInterface::SendRequestAndGetStandardReply(buf, rid, reply, &extra);
+	const GCodeResult rslt = CanInterface::SendRequestAndGetStandardReply(buf, rid, reply, &extra, words);
 	if (rslt == GCodeResult::ok && retVal != nullptr)
 	{
 		*retVal = extra;
@@ -1627,7 +1635,7 @@ GCodeResult CanInterface::ReadRemoteHandles(CanAddress boardAddress, RemoteInput
 	auto msg = buf->SetupRequestMessage<CanMessageReadInputsRequest>(rid, GetCanAddress(), boardAddress);
 	msg->mask = mask;
 	msg->pattern = pattern;
-	const GCodeResult rslt = SendRequestAndGetCustomReply(buf, rid, reply, nullptr, CanMessageType::readInputsReplyV0,
+	const GCodeResult rslt = SendRequestAndGetCustomReply(buf, rid, reply, nullptr, nullptr, CanMessageType::readInputsReplyV0,
 															[callback, param](const CanMessageBuffer *bufp) noexcept -> void
 																{
 																	auto response = bufp->msg.readInputsReplyV0;
@@ -1636,6 +1644,19 @@ GCodeResult CanInterface::ReadRemoteHandles(CanAddress boardAddress, RemoteInput
 																		callback(param, response.results[i].handle, LoadLEU32(&response.results[i].reading));
 																	}
 																});
+	return rslt;
+}
+
+// Tare an analog handle and/or change its baseline tracking, returning the baseline that the board latched or holds.
+// Only the board knows the raw reading, so it has to come back in the reply
+GCodeResult CanInterface::TareHandle(CanAddress boardAddress, RemoteInputHandle h, uint32_t mode, int32_t& baseline, const StringRef &reply) noexcept
+{
+	uint32_t words[CanMessageStandardReply::MaxNumWords];
+	const GCodeResult rslt = ChangeInputMonitor(boardAddress, h, CanMessageChangeInputMonitorV1::actionTare, mode, nullptr, reply, words);
+	if (rslt == GCodeResult::ok)
+	{
+		baseline = (int32_t)words[0];
+	}
 	return rslt;
 }
 

@@ -70,6 +70,7 @@ public:
 	bool FileExists(const char *filename) noexcept;
 	bool DeleteFileOrDirectory(const char *fileOrDirectory, bool recursive = false) noexcept;
 	bool SecureDeleteFile(const char *filename) noexcept;	// zero-overwrite + fsync + unlink on the SBC; files only
+	size_t GetFileList(const char *directory, uint32_t startIndex, char *buffer, size_t bufferLength, bool& endOfList) noexcept;	// Read packed FileListEntry records starting at the given entry index
 
 	FileHandle OpenFile(const char *filename, OpenMode mode, FilePosition& fileLength, uint32_t preAllocSize = 0) noexcept;
 	int ReadFile(FileHandle handle, char *buffer, size_t bufferLength) noexcept;
@@ -131,7 +132,8 @@ private:
 		seek,
 		truncate,
 		close,
-		secureDeleteFile
+		secureDeleteFile,
+		getFileList
 	} fileOperation;
 	std::atomic<bool> fileOperationPending;
 
@@ -144,6 +146,7 @@ private:
 	const char * fileWriteBuffer;
 	size_t fileBufferLength;
 	FilePosition fileOffset;
+	bool fileListEndOfList;
 	// End of file operation variables
 
 	volatile OutputStack gcodeReply;
