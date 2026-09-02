@@ -566,7 +566,7 @@ static void SendCanMessage(CanDevice::TxBufferNumber whichBuffer, uint32_t timeo
 	const uint32_t cancelledId = can0dev->SendMessage(whichBuffer, timeout, buffer);
 	if (cancelledId != 0)
 	{
-#if USE_SPI_CAN
+#if USE_SPICAN
 		++txTimeouts[(unsigned int)whichBuffer - (unsigned int)CanDevice::TxBufferNumber::fifo];
 #else
 		++txTimeouts[(unsigned int)whichBuffer];
