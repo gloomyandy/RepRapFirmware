@@ -47,6 +47,7 @@ void FileStore::Init() noexcept
 #if HAS_SBC_INTERFACE
 	handle = noFileHandle;
 	length = 0;
+	asyncWriteFailed = false;
 #endif
 #if HAS_EMBEDDED_FILES || HAS_SBC_INTERFACE || HAS_EMBEDDED_CONFIG
 	offset = 0;
@@ -124,6 +125,7 @@ bool FileStore::Open(const char *_ecv_array filePath, OpenMode mode, uint32_t pr
 		if (handle != noFileHandle)
 		{
 			offset = (mode == OpenMode::append) ? length : 0;
+			asyncWriteFailed = false;
 			fileOpened = true;
 		}
 		else
@@ -620,6 +622,46 @@ bool FileStore::Store(const char *_ecv_array s, size_t len, size_t *bytesWritten
 #endif
 }
 
+bool FileStore::StoreFullWriteBuffer() noexcept
+{
+	const size_t bytesToWrite = writeBuffer->BytesStored();
+#if HAS_SBC_INTERFACE
+	if (reprap.UsingSbcInterface())
+	{
+		// Hand the full buffer to the SBC task and carry on filling a spare one so that the caller isn't stalled by the SPI round trip
+		FileWriteBuffer *const spareBuffer = MassStorage::AllocateWriteBuffer();
+		if (spareBuffer != nullptr)
+		{
+			if (calcCrc)
+			{
+				crc.Update(writeBuffer->Data(), bytesToWrite);
+			}
+			if (!reprap.GetSbcInterface().WriteFileAsync(handle, writeBuffer, asyncWriteFailed))
+			{
+				MassStorage::ReleaseWriteBuffer(spareBuffer);
+				return false;
+			}
+			writeBuffer = spareBuffer;
+			offset += bytesToWrite;
+			if (offset > length)
+			{
+				length = offset;
+			}
+			return true;
+		}
+	}
+#endif
+
+	size_t bytesWritten;
+	// In SBC mode, if we have a timeout or a connection reset then during the following Store() call this file may be invalidated
+	if (!Store(writeBuffer->Data(), bytesToWrite, &bytesWritten))
+	{
+		return false;
+	}
+	writeBuffer->DataTaken();
+	return bytesWritten == bytesToWrite;
+}
+
 bool FileStore::Write(char b) noexcept
 {
 	return Write(&b, sizeof(char));
@@ -643,6 +685,13 @@ bool FileStore::Write(const char *_ecv_array s, size_t len) noexcept
 		{
 			size_t totalBytesWritten = 0;
 			bool writeOk = true;
+#if HAS_SBC_INTERFACE
+			if (asyncWriteFailed)
+			{
+				writeOk = false;
+			}
+			else
+#endif
 			if (writeBuffer == nullptr)
 			{
 				writeOk = Store(s, len, &totalBytesWritten);
@@ -661,20 +710,9 @@ bool FileStore::Write(const char *_ecv_array s, size_t len) noexcept
 #if HAS_WRITER_TASK
 						writeOk = writeBuffer->StartFlushBuffer();
 #else
-						const size_t bytesToWrite = writeBuffer->BytesStored();
-						size_t bytesWritten;
-						// In SBC mode, if we have a timeout or a connection reset then during the following Store() call this file may be invalidated
-						writeOk = Store(writeBuffer->Data(), bytesToWrite, &bytesWritten);
+						writeOk = StoreFullWriteBuffer();
 						if (!writeOk)
 						{
-							break;
-						}
-
-						writeBuffer->DataTaken();
-
-						if (bytesToWrite != bytesWritten)
-						{
-							// Something went wrong
 							break;
 						}
 #endif
@@ -722,6 +760,17 @@ bool FileStore::Flush() noexcept
 			writeBuffer->StartFlushBuffer();
 			writeBuffer->WaitFlushComplete();
 #else
+#if HAS_SBC_INTERFACE
+			if (reprap.UsingSbcInterface())
+			{
+				reprap.GetSbcInterface().WaitForAsyncWrite();
+				if (asyncWriteFailed)
+				{
+					reprap.GetPlatform().MessageF(ErrorMessage, "Failed to flush data to file. Card may be full.\n");
+					return false;
+				}
+			}
+#endif
 			const size_t bytesToWrite = writeBuffer->BytesStored();
 			if (bytesToWrite != 0)
 			{
