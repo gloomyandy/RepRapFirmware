@@ -733,6 +733,7 @@ void BoardConfig::Init() noexcept
     uint32_t STime = StepTimer::GetTimerTicks();
     delay(1000);
     debugPrintf("Timer test elapsed: %u\n", (unsigned)(StepTimer::GetTimerTicks() - STime));
+    debugPrintf("RNG test %u %u %u\n", (unsigned)random32(), (unsigned)random32(), (unsigned)random32());
 #endif
     if (!LoadBoardDefaults())
     {
