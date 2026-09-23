@@ -655,13 +655,13 @@ static _Bool isAligned(const BYTE *p)
 	{
 		return false;
 	}
-# elif STM32H7
+# elif TGBTC && STM32H7
 	// On the STM32H7 all transfers must be within non-cached AXA memory. We assume the whole buffer either is or isn't.
 	if (p < &_nocache2_ram_start || p >= &_nocache2_ram_end)
 	{
 		return false;
 	}
-# elif STM32F4
+# elif (TGBTC && STM32F4)
 	// On the STM32F4 we can not transfer data from CCMRAM.
 	if (p >= &_sccmram && p <= &_ccmramend)
 	{

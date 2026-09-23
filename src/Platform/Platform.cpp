@@ -1251,7 +1251,7 @@ float Platform::GetCpuTemperature() const noexcept
 	return (voltage - 1.44) * (1000.0/4.7) + 27.0 + mcuTemperatureAdjust;			// accuracy at 27C is +/-13C
 # elif SAME70
 	return (voltage - 0.72) * (1000.0/2.33) + 25.0 + mcuTemperatureAdjust;			// accuracy at 25C is +/-34C
-# elif STM32 && TGBTC
+# elif TGBTC && STM32
 	// VSENSE_CORRECTED = VSENSE*VRef/3.3
 	// TMCU = ((TSCAL2_TEMP - TSCAL1_TEMP)/(TSCAL2 - TSCAL1))*(VSENSE_CORRECTED - TSCAL1) + TSCAL1_TEMP
 	return ((110.0f - 30.0f)/(((float)(GET_ADC_CAL(TEMPSENSOR_CAL2_ADDR, TEMPSENSOR_CAL2_DEF))) - ((float)(GET_ADC_CAL(TEMPSENSOR_CAL1_ADDR, TEMPSENSOR_CAL1_DEF))))) * ((voltage*((float)(1u << 12))/3.3f)*vRefCorrection/VRefCorrectionScale - ((float)(GET_ADC_CAL(TEMPSENSOR_CAL1_ADDR, TEMPSENSOR_CAL1_DEF)))) + 30.0f + mcuTemperatureAdjust; 
@@ -1352,9 +1352,9 @@ void Platform::InitialiseInterrupts() noexcept
 	NVIC_SetPriority(UDP_IRQn, NvicPriorityUSB);
 #elif SAM3XA
 	NVIC_SetPriority(UOTGHS_IRQn, NvicPriorityUSB);
-#elif STM32F4 || STM32H743xx
+#elif TGBTC && (STM32F4 || STM32H743xx)
 	NVIC_SetPriority(OTG_FS_IRQn, NvicPriorityUSB);
-#elif STM32H723xx
+#elif TGBTC && STM32H723xx
 	NVIC_SetPriority(OTG_HS_IRQn, NvicPriorityUSB);
 #else
 # error Unsupported processor
@@ -1371,7 +1371,7 @@ void Platform::InitialiseInterrupts() noexcept
 # elif SAME70
 	NVIC_SetPriority(MCAN0_INT0_IRQn, NvicPriorityCan);		// we don't use INT1
 	NVIC_SetPriority(MCAN1_INT0_IRQn, NvicPriorityCan);		// we don't use INT1
-# elif STM32H7
+# elif TGBTC && STM32H7
 	NVIC_SetPriority(FDCAN1_IT0_IRQn, NvicPriorityCan);
 	NVIC_SetPriority(FDCAN1_IT1_IRQn, NvicPriorityCan);
 	NVIC_SetPriority(FDCAN2_IT0_IRQn, NvicPriorityCan);

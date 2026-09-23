@@ -26,7 +26,7 @@ namespace MoveTiming
 #elif SAM4E || SAM4S || SAME5x
 	constexpr uint32_t MinCalcInterval = (40 * StepClockRate)/1000000;				// the smallest sensible interval between calculations (40us) in step timer clocks
 	constexpr uint32_t HiccupTime = (30 * StepClockRate)/1000000;					// how long we hiccup for in step timer clocks
-#elif STM32
+#elif TGBTC && STM32
 	constexpr uint32_t MinCalcInterval = (40 * StepClockRate)/1000000;				// the smallest sensible interval between calculations (40us) in step timer clocks
 	constexpr uint32_t HiccupTime = (30 * StepClockRate)/1000000;					// how long we hiccup for in step timer clocks
 #else

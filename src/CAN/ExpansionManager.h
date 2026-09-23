@@ -17,7 +17,7 @@
 #include <CanMessageBuffer.h>
 #include <General/NamedEnum.h>
 #include <Platform/UniqueId.h>
-#if STM32F4
+#if TGBTC && STM32F4
 #include <Platform/Tasks.h>
 #endif
 #include <Movement/StepperDrivers/DriverData.h>
@@ -64,7 +64,7 @@ class ExpansionManager INHERIT_OBJECT_MODEL
 public:
 	ExpansionManager() noexcept;
 
-#if STM32F4
+#if TGBTC && STM32F4
 	void* operator new(size_t count) { return Tasks::AllocPermanent(count); }
 	void* operator new(size_t count, std::align_val_t align) { return Tasks::AllocPermanent(count, align); }
 	void operator delete(void* ptr) noexcept {}

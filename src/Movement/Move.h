@@ -45,12 +45,12 @@ constexpr bool DirectionBackwards = !DirectionForwards;
 // A DDA represents a move in the queue.
 // Each DDA needs one DM per drive that it moves, but only when it has been prepared and frozen
 
-#if SAME70 || STM32H7
+#if SAME70 || (TGBTC && STM32H7)
 constexpr unsigned int InitialDdaRingLength = 60;
 constexpr unsigned int AuxDdaRingLength = 5;
 const unsigned int InitialNumDms = (InitialDdaRingLength/2 * 4) + AuxDdaRingLength;
 
-#elif SAM4E || SAM4S || SAME5x || STM32
+#elif SAM4E || SAM4S || SAME5x || (TGBTC && STM32)
 
 constexpr unsigned int InitialDdaRingLength = 40;
 constexpr unsigned int AuxDdaRingLength = 3;

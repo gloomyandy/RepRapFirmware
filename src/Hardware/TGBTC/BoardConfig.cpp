@@ -1303,7 +1303,8 @@ void BoardConfig::Diagnostics(MessageType mtype) noexcept
     MessageF(mtype, "No cache RAM 1 start 0x%x end 0x%x\n", (unsigned)&_nocache_ram_start, (unsigned)&_nocache_ram_end);
     MessageF(mtype, "No cache RAM 2 start 0x%x end 0x%x\n", (unsigned)&_nocache2_ram_start, (unsigned)&_nocache2_ram_end);
 #endif
-
+    MessageF(mtype, "\n== FLASH ==\n");
+    MessageF(mtype, "Max firmware length %u bytes\n", IFLASH_SIZE);
     //MessageF(mtype, "\n== USB ==\n");
     //MessageF(mtype, "Read overrun %d\n", (int)USBReadOverrun);
     //USBReadOverrun = 0;

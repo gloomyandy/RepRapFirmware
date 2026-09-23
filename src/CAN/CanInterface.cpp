@@ -145,7 +145,7 @@ constexpr CanDevice::Config Can0Config =
 
 static_assert(Can0Config.IsValid());
 
-#if !STM32
+#if !(TGBTC && STM32)
 // CAN buffer memory must be in the first 64Kb of RAM (SAME5x) or in non-cached RAM (SAME70), so put it in its own memory section
 static uint32_t can0Memory[Can0Config.GetMemorySize()] __attribute__ ((section (".CanMessage")));
 #endif
@@ -183,7 +183,7 @@ static CanDevice *_ecv_null can1dev = nullptr;
 
 #endif
 
-#ifdef STM32
+#if (TGBTC && STM32)
 // Transmit buffer usage. All dedicated buffer numbers must be contiguous and (<buffno> - fifo) < Can0Config.numTxBuffers.
 #else
 // Transmit buffer usage. All dedicated buffer numbers must be < Can0Config.numTxBuffers.
@@ -340,7 +340,7 @@ void TxCallback(uint8_t marker, CanId id, uint16_t timeStamp) noexcept
 
 void CanInterface::Init() noexcept
 {
-#if !(STM32 && TGBTC)
+#if !(TGBTC && STM32)
 	CanMessageBuffer::Init(NumCanBuffers);
 #endif
 	pendingMotionBuffers = nullptr;
@@ -357,7 +357,7 @@ void CanInterface::Init() noexcept
 #elif SAME5x
 	SetPinFunction(CanRxPin, CanPinsMode);
 	SetPinFunction(CanTxPin, CanPinsMode);
-#elif STM32 && TGBTC
+#elif TGBTC && STM32
 	// pin initialisation is handled in CoreN2G
 #else
 # error Unsupported MCU

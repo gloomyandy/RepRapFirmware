@@ -115,7 +115,7 @@ constexpr IRQn ESP_SPI_IRQn = WiFiSpiSercomIRQn;
 # include "xdmac/xdmac.h"
 #endif
 
-#if !SAME5x && !STM32
+#if !SAME5x && !(TGBTC && STM32)
 # include "matrix/matrix.h"
 #endif
 

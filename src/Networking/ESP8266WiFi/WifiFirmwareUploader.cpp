@@ -561,7 +561,7 @@ WifiFirmwareUploader::EspUploadResult WifiFirmwareUploader::flashWriteBlock(uint
 	// Allocate a data buffer for the combined header and block data
 	const uint16_t dataOfst = 16;
 	const uint16_t blkBufSize = dataOfst + blkSize;
-#if !STM32
+#if !(TGBTC && STM32)
 	// On the STM32F4 our stack is not DMA capable, so we can't use the stack instead we allocate it when we open the file.
 	uint32_t blkBuf32[blkBufSize/4];
 #endif
@@ -879,7 +879,7 @@ void WifiFirmwareUploader::SendUpdateFile(const char *_ecv_array file, uint32_t 
 		MessageF("Upload file is empty %s\n", file);
 		return;
 	}
-#if STM32
+#if TGBTC && STM32
 	// we need a buffer that is DMA capable, the stack may not be
 	const uint32_t blkSize = EspFlashBlockSize;
 

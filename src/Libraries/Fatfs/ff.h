@@ -187,7 +187,7 @@ typedef struct {
 	DiskBuffer *sector_buffer;	/* pointer to the disk buffer we are using, or null */
 #else
 	LBA_t	winsect_act;		/* Current sector appearing in the win[] */
-# if SAME70 || STM32H7
+# if SAME70 || (TGBTC && STM32H7)
 	BYTE	*win_act;			/* pointer to the sector buffer, which is in non-cached memory */
 # else
 	BYTE	win_act[FF_MAX_SS];	/* Disk access window for Directory, FAT (and file data at tiny cfg) */
@@ -195,7 +195,7 @@ typedef struct {
 #endif
 } FATFS;
 
-# if (SAME70 || STM32H7) && !FF_LRU
+# if (SAME70 || (TGBTC && STM32H7)) && !FF_LRU
 static inline void ff_set_win(FATFS *fs, BYTE *buf) noexcept { fs->win_act = buf; }
 # endif
 

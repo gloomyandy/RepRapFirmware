@@ -126,7 +126,7 @@ private:
 	EspUploadResult uploadResult;
 	int restartModeOnCompletion;
 	ESPType espType;
-#if STM32
+#if TGBTC && STM32
 	uint32_t *blkBuf32;
 #endif
 };

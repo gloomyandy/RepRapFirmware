@@ -196,4 +196,5 @@ SECTIONS
   /* Provide system stack location */
   PROVIDE(_estack = ORIGIN(RAM_D1) + LENGTH(RAM_D1));
   PROVIDE(_firmware_crc = _firmware_end);
+  PROVIDE(_flash_size = LENGTH(FLASH));
 }

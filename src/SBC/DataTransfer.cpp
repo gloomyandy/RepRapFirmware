@@ -422,13 +422,13 @@ extern "C" void SBC_SPI_HANDLER() noexcept
 
 // Static data. Note, the startup code we use doesn't make any provision for initialising non-cached memory, other than to zero. So don't specify initial value here
 
-#if SAME70 || STM32H7
+#if SAME70 || (TGBTC && STM32H7)
 // On the STM32H7 and SAME70 we need to ensure that the following are in memory that is not cached (see above). 
 __nocache SpiTransferHeader DataTransfer::rxHeader;
 __nocache SpiTransferHeader DataTransfer::txHeader;
 __nocache uint32_t DataTransfer::rxResponse;
 __nocache uint32_t DataTransfer::txResponse;
-#if STM32H7
+#if TGBTC && STM32H7
 alignas(4) __nocache char DataTransfer::rxBuffer[SbcTransferBufferSize];
 alignas(4) __nocache char DataTransfer::txBuffer[SbcTransferBufferSize];
 #endif
@@ -459,7 +459,7 @@ DataTransfer::DataTransfer() noexcept : state(InternalTransferState::ExchangingD
 	txHeader.protocolVersion = SbcProtocolVersion;
 	txHeader.numPackets = 0;
 	txHeader.sequenceNumber = 0;
-#if STM32F4
+#if (TGBTC && STM32F4)
 	// We need to allocate memory early to ensure it is below the last 32Mb of RAM
 	rxBuffer = (char *)new uint32_t[(SbcTransferBufferSize + 3)/4];
 	txBuffer = (char *)new uint32_t[(SbcTransferBufferSize + 3)/4];
@@ -469,7 +469,7 @@ DataTransfer::DataTransfer() noexcept : state(InternalTransferState::ExchangingD
 #if TGBTC
 void DataTransfer::FreeMemory() noexcept
 {
-#if STM32F4
+#if (TGBTC && STM32F4)
 	delete rxBuffer;
 	delete txBuffer;
 #endif

@@ -13,11 +13,11 @@
 #include <RTOSIface/RTOSIface.h>
 #endif
 
-#if SAME70 || STM32H7
+#if SAME70 || (TGBTC && STM32H7)
 constexpr size_t NumFileWriteBuffers = 2;					// Number of write buffers
 constexpr size_t FileWriteBufLen = 8192;					// Size of each write buffer
 constexpr size_t SbcFileWriteBufLen = 4096;					// Available size of each write buffer in SBC mode
-#elif STM32F4
+#elif (TGBTC && STM32F4)
 constexpr size_t NumFileWriteBuffers = 1;
 constexpr size_t FileWriteBufLen = 8192;
 constexpr size_t SbcFileWriteBufLen = 4096;

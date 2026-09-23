@@ -366,7 +366,7 @@ void Tasks::Diagnostics(const StringRef& reply) noexcept
 		const struct mallinfo mi = mallinfo();
 		reply.lcatf("RAM: static %d, dynamic %d (%d recycled), never used %d, free sys stack %d",
 					(const char *_ecv_array)&_end - ramstart, mi.uordblks, mi.fordblks, GetNeverUsedRam(), GetHandlerFreeStack()/4);
-#if STM32F4
+#if (TGBTC && STM32F4)
 		{
 			size_t ccmStatic, ccmUsed, ccmFree;
 			CoreCCMRAMUsage(ccmStatic, ccmUsed, ccmFree);

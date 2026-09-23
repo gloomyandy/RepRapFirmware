@@ -55,7 +55,7 @@ protected:
 	DECLARE_OBJECT_MODEL_WITH_ARRAYS
 
 private:
-#if SAME70 || SAME5x || STM32
+#if SAME70 || SAME5x || (TGBTC && STM32)
 	typedef Bitmap<uint64_t> ObjectCancellationBitmap;	// Type of a bitmap used to represent objects on the build plate that have been cancelled
 #else
 	typedef Bitmap<uint32_t> ObjectCancellationBitmap;	// Type of a bitmap used to represent objects on the build plate that have been cancelled

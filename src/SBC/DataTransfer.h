@@ -120,7 +120,7 @@ private:
 	unsigned int failedTransfers, checksumErrors;
 
 	// Transfer buffers
-#if SAME70 || STM32H7
+#if SAME70 || (TGBTC && STM32H7)
 	// SAME70 has a write-back cache, so these must be in non-cached memory because we DMA to/from them.
 	// See http://ww1.microchip.com/downloads/en/DeviceDoc/Managing-Cache-Coherency-on-Cortex-M7-Based-MCUs-DS90003195A.pdf
 	// This in turn means that we must declare them static, so we can only have one DataTransfer instance
@@ -141,7 +141,7 @@ private:
 	uint32_t rxResponse;
 	uint32_t txResponse;
 #endif
-#if STM32H7
+#if (TGBTC && STM32H7)
 	alignas(4) static __nocache char rxBuffer[SbcTransferBufferSize];
 	alignas(4) static __nocache char txBuffer[SbcTransferBufferSize];
 #else
@@ -157,7 +157,7 @@ private:
 	// USB transport members
 	SerialCDC *usbDevice;
 	unsigned int usbDeviceIndex;
-# if SAME70 || STM32H7
+# if SAME70 || (TGBTC && STM32H7)
 	// The zero-copy USB path DMAs directly to/from these, so on the write-back-cache SAME70 they must be
 	// in non-cached memory for the same reason as the SPI headers above, which forces them to be static
 	static __nocache UsbTransferHeader usbRxHeader;

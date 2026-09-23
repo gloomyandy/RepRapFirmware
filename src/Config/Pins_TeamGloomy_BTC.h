@@ -47,6 +47,8 @@
 #else
 # error "unsuported configuration"
 #endif
+extern uint8_t _flash_size;
+#define IFLASH_SIZE ((uint32_t)&_flash_size)
 // The name of the file used by the board bootloader, boot file is renamed to this
 #define FIRMWARE_FILE       "0:/firmware.bin"
 

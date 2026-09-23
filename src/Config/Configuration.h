@@ -103,7 +103,7 @@ constexpr unsigned int MaxBlockIndent = 10;				// maximum indentation of GCode. 
 //     Using single-precision maths and up to 9-factor calibration: (9 + 5) * 4 bytes per point
 //     Using double-precision maths and up to 9-factor calibration: (9 + 5) * 8 bytes per point
 //   So 32 points using double precision arithmetic need 3584 bytes of stack space.
-#if SAME70 || STM32H7
+#if SAME70 || (TGBTC && STM32H7)
 constexpr size_t MaxGridProbePoints = 961;				// 961 allows us to probe e.g. 300x300 at 10mm intervals
 #else
 constexpr size_t MaxGridProbePoints = 441;				// 441 allows us to probe e.g. 400x400 at 20mm intervals
@@ -175,7 +175,7 @@ constexpr size_t ShortGCodeLength = 64;
 // When using RTOS, it is best if it is possible to fit an HTTP response header in a single buffer. Our headers are currently about 230 bytes long.
 // A note on reserved buffers: the worst case is when a GCode with a long response is processed. After string the response, there must be enough buffer space
 // for the HTTP responder to return a status response. Otherwise DWC never gets to know that it needs to make a rr_reply call and the system deadlocks.
-#if SAME70 || SAME5x || STM32
+#if SAME70 || SAME5x || (TGBTC && STM32)
 constexpr size_t OUTPUT_BUFFER_SIZE = 256;				// How many bytes does each OutputBuffer hold?
 constexpr size_t OUTPUT_BUFFER_COUNT = 40;				// How many OutputBuffer instances do we have?
 constexpr size_t RESERVED_OUTPUT_BUFFERS = 4;			// Number of reserved output buffers after long responses, enough to hold a status response
@@ -193,7 +193,7 @@ constexpr size_t MaxReportedAxes = 5;					// This used to be fixed at 9 but even
 constexpr size_t MaxReportedAxesForPanelDue = 6;		// If the requester is PanelDue then we can return more axes because fewer fields are included
 constexpr size_t maxQueuedCodes = 16;					// How many codes can be queued?
 
-#if SAME70 || SAME5x || STM32H7
+#if SAME70 || SAME5x || (TGBTC && STM32H7)
 constexpr size_t MaxTrackedObjects = 64;				// How many build plate objects we track. Each one needs 12 bytes of storage, in addition to the string space on the heap.
 #else
 constexpr size_t MaxTrackedObjects = 32;				// How many build plate objects we track. Each one needs 12 bytes of storage, in addition to the string space on the heap.
@@ -203,7 +203,7 @@ constexpr size_t MaxTrackedObjects = 32;				// How many build plate objects we t
 constexpr size_t MaxExpressionArrayIndices = 5;
 
 // How many filaments we can return in the file information. Each one uses 4 bytes of statically-allocated RAM.
-#if SAME70 || SAME5x || STM32
+#if SAME70 || SAME5x || (TGBTC && STM32)
 constexpr unsigned int MaxFilaments = 20;
 #else
 constexpr unsigned int MaxFilaments = 8;
@@ -264,7 +264,7 @@ constexpr size_t MaxI2cOrModbusValues = 34;						// max bytes in M260 or M261 co
 // File handling
 #if defined(DUET3) || defined(DUET3MINI) || TGBTC
 constexpr size_t MAX_FILES = 20;						// Must be large enough to handle the max number of concurrent web requests + file being printed + macros being executed + log file
-# if SAME70
+# if SAME70 || (TGBTC && STM32H7)
 constexpr unsigned int NumLruBuffers = 10;				// Number of disk buffers to allocate if FF_LRU is enabled in ff_config.h
 # else
 constexpr unsigned int NumLruBuffers = 5;				// Number of disk buffers to allocate if FF_LRU is enabled in ff_config.h

@@ -23,7 +23,7 @@ const size_t MaxNetworkInterfaces = 1;
 # error Wrong Network.h file included
 #endif
 
-# if SAME70 || STM32H7
+# if SAME70 || (TGBTC && STM32H7)
 const size_t NumHttpResponders = 6;		// the number of concurrent HTTP requests we can process
 const size_t NumTelnetResponders = 2;	// the number of concurrent Telnet sessions we support
 #else

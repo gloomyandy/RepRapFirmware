@@ -58,7 +58,7 @@ alignas(4) static __nocache uint8_t sectorBuffers[NumLruBuffers][FF_MAX_SS];
 #  else
 alignas(4) static __nocache uint8_t sectorBuffers[NumSdCards][FF_MAX_SS];
 #  endif
-# elif STM32H7
+# elif TGBTC && STM32H7
 #  if FF_LRU
 alignas(4) static __nocache2 uint8_t sectorBuffers[NumLruBuffers][FF_MAX_SS];
 #  else
@@ -101,7 +101,7 @@ protected:
 void SdCardInfo::Clear(unsigned int card) noexcept
 {
 	memset(&fileSystem, 0, sizeof(fileSystem));
-# if (SAME70 || STM32H7) && !FF_LRU
+# if (SAME70 || (TGBTC && STM32H7)) && !FF_LRU
 	ff_set_win(&fileSystem, sectorBuffers[card]);
 # endif
 }
@@ -175,7 +175,7 @@ static FileInfoParser infoParser;
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE
 # if SAME70
 alignas(4) static __nocache char writeBufferStorage[NumFileWriteBuffers * FileWriteBufLen];
-# elif STM32H7
+# elif TGBTC && STM32H7
 alignas(4) static __nocache2 char writeBufferStorage[NumFileWriteBuffers * FileWriteBufLen];
 # else
 alignas(4) static char writeBufferStorage[NumFileWriteBuffers * FileWriteBufLen];	// 32-bit aligned for better HSMCI performance

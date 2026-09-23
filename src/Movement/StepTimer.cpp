@@ -313,7 +313,7 @@ bool StepTimer::ScheduleTimerInterrupt(uint32_t tim) noexcept
 	while (StepTc->SYNCBUSY.reg & TC_SYNCBUSY_CC0) { }
 	StepTc->INTFLAG.reg = TC_INTFLAG_MC0;							// clear any existing compare match
 	StepTc->INTENSET.reg = TC_INTFLAG_MC0;
-#elif STM32 && TGBTC
+#elif TGBTC && STM32
 	__HAL_TIM_CLEAR_IT(STHandle, TIM_IT_CC1);
 	__HAL_TIM_SET_COMPARE(STHandle, TIM_CHANNEL_1, tim);
 	__HAL_TIM_ENABLE_IT(STHandle, TIM_IT_CC1);
@@ -330,7 +330,7 @@ void StepTimer::DisableTimerInterrupt() noexcept
 {
 #if SAME5x
 	StepTc->INTENCLR.reg = TC_INTFLAG_MC0;
-#elif STM32 && TGBTC
+#elif TGBTC && STM32
 	__HAL_TIM_DISABLE_IT(STHandle, TIM_IT_CC1);
 #else
 	STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IDR = TC_IER_CPBS;
@@ -692,7 +692,7 @@ void StepTimer::CancelCallback() noexcept
 					((StepTc->INTENSET.reg & TC_INTFLAG_MC0) == 0)
 # elif SAME70 || SAM4E || SAM4S
 					((STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_IER & TC_IER_CPBS) == 0)
-# elif STM32 && TGBTC
+# elif TGBTC && STM32
 					(__HAL_TIM_GET_IT_SOURCE(STHandle, TIM_IT_CC1) == 0)
 # endif
 						? "disabled" : "enabled");
@@ -702,7 +702,7 @@ void StepTimer::CancelCallback() noexcept
 		if (STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_RB != pst->whenDue)
 # elif SAME70 || SAM4S
 		if (STEP_TC->TC_CHANNEL[STEP_TC_CHAN].TC_RB != (uint16_t)pst->whenDue)
-# elif STM32 && TGBTC
+# elif TGBTC && STM32
 		if (__HAL_TIM_GET_COMPARE(STHandle, TIM_CHANNEL_1) != (uint16_t)pst->whenDue)
 # endif
 		{

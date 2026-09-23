@@ -523,7 +523,7 @@ void RepRap::Init() noexcept
 	NVIC_SetPriority(WDT_IRQn, NvicPriorityWatchdog);								// set priority for watchdog interrupts
 	NVIC_ClearPendingIRQ(WDT_IRQn);
 	NVIC_EnableIRQ(WDT_IRQn);														// enable the watchdog early warning interrupt
-#elif STM32
+#elif TGBTC && STM32
 	NVIC_SetPriority(WWDG_IRQn, NvicPriorityWatchdog);								// set priority for watchdog interrupts
 	WatchdogInit();
 #else
@@ -1428,7 +1428,7 @@ void RepRap::Tick() noexcept
 					relevantStackPtr = const_cast<const uint32_t *_ecv_array>(pxTaskGetLastStackTop(relevantTask->GetFreeRTOSHandle()));
 					// All registers were saved on the stack, so to get useful return addresses we need to skip most of them.
 					// See the port.c files in FreeRTOS for the stack layouts
-#if SAME70 || SAM4E || SAME5x || STM32
+#if SAME70 || SAM4E || SAME5x || STM32F4 || STM32H7
 					// ARM Cortex M7 with double precision floating point, or ARM Cortex M4F
 					if ((relevantStackPtr[8] & 0x10) == 0)						// test EXC_RETURN FP bit
 					{
@@ -2147,8 +2147,7 @@ bool RepRap::CheckFirmwareUpdatePrerequisites(const StringRef& reply, const Stri
 		reply.printf("Firmware binary \"%s\" not found", firmwareBinaryLocation.c_str());
 		return false;
 	}
-// FIXME: Add STM32 size check
-#if !STM32
+
 #if SAME5x
 	// UF2 files consist of 512 byte blocks with (for the SAME5x) 256 bytes of data per block
 	if ((firmwareFile->Length() / 512) * 256 > FLASH_SIZE)
@@ -2160,7 +2159,7 @@ bool RepRap::CheckFirmwareUpdatePrerequisites(const StringRef& reply, const Stri
 		reply.printf("Firmware binary \"%s\" is too big for the available flash memory", filenameRef.c_str());
 		return false;
 	}
-#endif
+
 	// Check that the binary looks sensible. The first word is the initial stack pointer, which should be the top of RAM.
 	uint32_t firstDword;
 	bool ok =
@@ -2172,7 +2171,7 @@ bool RepRap::CheckFirmwareUpdatePrerequisites(const StringRef& reply, const Stri
 	firmwareFile->Read(reinterpret_cast<char *_ecv_array>(&firstDword), sizeof(firstDword)) == (int)sizeof(firstDword);
 	firmwareFile->Close();
 	if (!ok || firstDword !=
-#if STM32
+#if TGBTC
 						(uint32_t)&_estack
 #elif SAME5x
 						HSRAM_ADDR + HSRAM_SIZE
