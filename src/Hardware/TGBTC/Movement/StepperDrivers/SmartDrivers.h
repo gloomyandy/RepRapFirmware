@@ -48,6 +48,8 @@ namespace SmartDrivers
 	uint32_t GetRegister(size_t driver, SmartDriverRegister reg) noexcept;
 	GCodeResult GetAnyRegister(size_t driver, const StringRef& reply, uint8_t regNum) noexcept;
 	GCodeResult SetAnyRegister(size_t driver, const StringRef& reply, uint8_t regNum, uint32_t regVal) noexcept;
+	GCodeResult ConfigureLutCorrection(size_t driver, unsigned int harmonic, bool seenMagnitude, float magnitudeDegrees, bool seenPhase, bool phaseInverted, const StringRef& reply) noexcept;
+	void AppendLutCorrections(size_t driver, const StringRef& reply) noexcept;
 	StandardDriverStatus GetStatus(size_t driver, bool accumulated, bool clearAccumulated) noexcept;
 	bool IsReady() noexcept;
 #if HAS_STALL_DETECT
@@ -61,8 +63,8 @@ namespace SmartDrivers
 #endif
 	void SetSenseResistor(size_t driver, float value) noexcept;
 	float GetSenseResistor(size_t driver) noexcept;
-	void SetMaxCurrent(size_t driver, float value) noexcept;
-	float GetMaxCurrent(size_t driver) noexcept;
+	void SetMaxMotorCurrent(size_t driver, float value) noexcept;
+	float GetMaxMotorCurrent(size_t driver) noexcept;
 	float GetDriverTemperature(size_t driver) noexcept;
 	uint32_t GetDriverMaxClockFrequency(size_t driver) noexcept;
 	uint32_t GetDriverNominalClockFrequency(size_t driver) noexcept;

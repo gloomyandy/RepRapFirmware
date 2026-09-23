@@ -433,6 +433,9 @@ public:
 	GCodeResult GetAnyRegister(const StringRef& reply, uint8_t regNum) noexcept;
 	GCodeResult SetAnyRegister(const StringRef& reply, uint8_t regNum, uint32_t regVal) noexcept;
 
+	GCodeResult ConfigureLutCorrection(unsigned int harmonic, bool seenMagnitude, float magnitudeDegrees, bool seenPhase, bool phaseInverted, const StringRef& reply) noexcept;
+	void AppendLutCorrections(const StringRef& reply) const noexcept {};
+
 	float GetStandstillCurrentPercent() const noexcept;
 	void SetStandstillCurrentPercent(float percent) noexcept;
 	bool SetCurrentScaler(int8_t cs) noexcept {return false;};
@@ -1005,6 +1008,13 @@ bool Tmc22xxDriverState::SetDriverMode(unsigned int mode) noexcept
 DriverMode Tmc22xxDriverState::GetDriverMode() const noexcept
 {
 	return (IsStealthChop()) ? DriverMode::stealthChop : DriverMode::spreadCycle;
+}
+
+// Configure the sine table phase correction of one harmonic, see M569.2. Same semantics as M970.3: J0 removes the harmonic, O defaults to 0 for a new one
+GCodeResult Tmc22xxDriverState::ConfigureLutCorrection(unsigned int harmonic, bool seenMagnitude, float magnitudeDegrees, bool seenPhase, bool phaseInverted, const StringRef& reply) noexcept
+{
+	reply.copy("Not supported");
+	return GCodeResult::error;
 }
 
 // Set the motor current

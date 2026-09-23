@@ -422,6 +422,28 @@ GCodeResult SmartDrivers::SetAnyRegister(size_t driver, const StringRef& reply, 
 	return GCodeResult::error;
 }
 
+// Configure the sine table phase correction of one harmonic, see M569.2
+GCodeResult SmartDrivers::ConfigureLutCorrection(size_t driver, unsigned int harmonic, bool seenMagnitude, float magnitudeDegrees, bool seenPhase, bool phaseInverted, const StringRef& reply) noexcept
+{
+	if (driver < numDrivers)
+	{
+		return driverStates[driver]->ConfigureLutCorrection(harmonic, seenMagnitude, magnitudeDegrees, seenPhase, phaseInverted, reply);
+	}
+	reply.copy("Invalid smart driver number");
+	return GCodeResult::error;
+}
+
+// Append the configured sine table phase corrections of a driver to the reply
+void SmartDrivers::AppendLutCorrections(size_t driver, const StringRef& reply) noexcept
+{
+	if (driver < numDrivers)
+	{
+		driverStates[driver]->AppendLutCorrections(reply);
+	}
+}
+
+
+
 #if HAS_STALL_DETECT
 
 LocalDriversBitmap SmartDrivers::GetStalledDrivers(LocalDriversBitmap driversOfInterest) noexcept
@@ -438,7 +460,7 @@ void SmartDrivers::SetSenseResistor(size_t driver, float value) noexcept
 		driverStates[driver]->SetSenseResistor(value);
 }
 
-void SmartDrivers::SetMaxCurrent(size_t driver, float value) noexcept
+void SmartDrivers::SetMaxMotorCurrent(size_t driver, float value) noexcept
 {
 	if (driver < numDrivers)
 		driverStates[driver]->SetMaxCurrent(value);
@@ -449,7 +471,7 @@ float SmartDrivers::GetSenseResistor(size_t driver) noexcept
 	return (driver < numDrivers ? driverStates[driver]->GetSenseResistor() : 0.0f);
 }
 
-float SmartDrivers::GetMaxCurrent(size_t driver) noexcept
+float SmartDrivers::GetMaxMotorCurrent(size_t driver) noexcept
 {
 	return (driver < numDrivers ? driverStates[driver]->GetMaxCurrent() : 0.0f);
 }

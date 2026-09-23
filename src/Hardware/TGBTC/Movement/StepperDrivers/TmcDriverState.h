@@ -31,6 +31,9 @@ public:
 	virtual GCodeResult GetAnyRegister(const StringRef& reply, uint8_t regNum) noexcept = 0;
 	virtual GCodeResult SetAnyRegister(const StringRef& reply, uint8_t regNum, uint32_t regVal) noexcept = 0;
 
+	virtual GCodeResult ConfigureLutCorrection(unsigned int harmonic, bool seenMagnitude, float magnitudeDegrees, bool seenPhase, bool phaseInverted, const StringRef& reply) noexcept;
+	virtual void AppendLutCorrections(const StringRef& reply) const noexcept;
+
 	virtual float GetStandstillCurrentPercent() const noexcept = 0;
 	virtual void SetStandstillCurrentPercent(float percent) noexcept = 0;
 	virtual bool SetCurrentScaler(int8_t cs) noexcept = 0;
