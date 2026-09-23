@@ -4,8 +4,10 @@
  *  Created on: 26 Aug 2018
  *      Author: David
  *  Purpose:
- *  	Support for TMC5130, TMC5160 and TMC5161 stepper drivers
- * 		Andy added support for TMC2240 drivers
+ *  	Support for TMC5160 stepper drivers
+ * 		Andy added support for TMC2240 drivers plus major rework for stm32.
+ * 		Unlike the Duet version this supports a mixture of 2240 and 5160 drivers on the
+ * 		same bus.
  */
 
 #include "SmartDrivers.h"
@@ -35,8 +37,6 @@
 
 static inline Move& GetMoveInstance() noexcept { return reprap.GetMove(); }
 
-//#define TMC_TYPE	5130
-#define TMC_TYPE	5160
 #define DEBUG_DRIVER_TIMEOUT	0
 
 constexpr float MinimumMotorCurrent = 50.0;
@@ -107,10 +107,6 @@ constexpr uint32_t TransferTimeout = 3;						// any transfer should complete wit
 // GCONF register (0x00, RW)
 constexpr uint8_t REGNUM_GCONF = 0x00;
 
-constexpr uint32_t GCONF_5130_USE_VREF = 1 << 0;			// use external VRef
-constexpr uint32_t GCONF_5130_INT_RSENSE = 1 << 1;			// use internal sense resistors
-constexpr uint32_t GCONF_5130_END_COMMUTATION = 1 << 3;		// Enable commutation by full step encoder (DCIN_CFG5 = ENC_A, DCEN_CFG4 = ENC_B)
-
 constexpr uint32_t GCONF_5160_RECAL = 1 << 0;				// Zero crossing recalibration during driver disable (via ENN or via TOFF setting)
 constexpr uint32_t GCONF_5160_FASTSTANDSTILL = 1 << 1;		// Timeout for step execution until standstill detection: 1: Short time: 2^18 clocks, 0: Normal time: 2^20 clocks
 constexpr uint32_t GCONF_5160_MULTISTEP_FILT = 1 << 3;		// Enable step input filtering for stealthChop optimization with external step source (default=1)
@@ -135,11 +131,7 @@ constexpr uint32_t GCONF_DIRECT_MODE = 1 << 16;				// 0: Normal operation, 1: Mo
 															// is not available in this mode. The automatic stealthChop current regulation will work only for low stepper motor velocities.
 constexpr uint32_t GCONF_TEST_MODE = 1 << 17;				// 0: Normal operation, 1: Enable analog test output on pin ENCN_DCO. IHOLD[1..0] selects the function of ENCN_DCO: 0…2: T120, DAC, VDDH
 
-#if TMC_TYPE == 5130
-constexpr uint32_t DefaultGConfReg = GCONF_DIAG0_STALL | GCONF_DIAG0_PUSHPULL;
-#elif TMC_TYPE == 5160
 constexpr uint32_t DefaultGConfReg = GCONF_5160_RECAL | GCONF_5160_MULTISTEP_FILT | GCONF_DIAG0_STALL | GCONF_DIAG0_PUSHPULL;
-#endif
 constexpr uint32_t DefaultGConfReg2240 = GCONF_5160_MULTISTEP_FILT | GCONF_DIAG0_STALL | GCONF_DIAG0_PUSHPULL;
 
 // General configuration and status registers
@@ -167,8 +159,6 @@ constexpr uint32_t IOIN_VERSION_2240 = 0x40;				// version for TMC2240 in spi mo
 // OTP_PROG register (0x06, WO, 5160 only) is not used in this firmware
 // OTP_READ register (0x07, RO, 5160 only) is not used in this firmware
 // FACTORY_CONF register (0x08, RW, 5160 only) trims the clock frequency and is preset for 12MHz
-
-#if TMC_TYPE == 5160
 
 // SHORT_CONF register
 constexpr uint8_t REGNUM_5160_SHORTCONF = 0x09;
@@ -232,7 +222,6 @@ constexpr uint8_t REGNUM_ADC_TEMP = 0x51;
 constexpr unsigned int ADC_TEMP_SHIFT = 0;
 constexpr uint32_t ADC_TEMP_MASK = 0x01FFF << ADC_TEMP_SHIFT;								// ADC temperature reading
 
-#endif
 
 // Velocity dependent control registers
 
@@ -281,7 +270,6 @@ constexpr uint32_t CHOPCONF_HSTRT_SHIFT = 4;				// hysteresis start
 constexpr uint32_t CHOPCONF_HSTRT_MASK = 0x07 << CHOPCONF_HSTRT_SHIFT;
 constexpr uint32_t CHOPCONF_HEND_SHIFT = 7;					// hysteresis end
 constexpr uint32_t CHOPCONF_HEND_MASK = 0x0F << CHOPCONF_HEND_SHIFT;
-constexpr uint32_t CHOPCONF_5130_RNDTOFF = 1 << 13;			// random off time
 constexpr uint32_t CHOPCONF_2240_FD3 = 1u << 11;			// MSB of fast decay time setting TFD
 constexpr uint32_t CHOPCONF_2240_DISFDCC = 1u << 12;		// disables fast decay mode when CHM = 1
 constexpr uint32_t CHOPCONF_CHM = 1 << 14;					// fixed off time
@@ -291,7 +279,6 @@ constexpr uint32_t CHOPCONF_2240_VHIGHFS = 1u << 18;		// high velocity fullstep 
 constexpr uint32_t CHOPCONF_2240_VHIGHCHM = 1u << 19;		// high velocity chopper mode
 constexpr uint32_t CHOPCONF_2240_TPFD_SHIFT = 20;			// Passive fast decay time, allows dampening of motor mid-range resonances
 constexpr uint32_t CHOPCONF_2240_TPFD_MASK = 0x0F;
-constexpr uint32_t CHOPCONF_5130_VSENSE_HIGH = 1 << 17;		// use high sensitivity current scaling
 constexpr uint32_t CHOPCONF_MRES_SHIFT = 24;				// microstep resolution
 constexpr uint32_t CHOPCONF_MRES_MASK = 0x0F << CHOPCONF_MRES_SHIFT;
 constexpr uint32_t CHOPCONF_INTPOL = 1 << 28;				// use interpolation
@@ -299,11 +286,7 @@ constexpr uint32_t CHOPCONF_DEDGE = 1 << 29;				// step on both edges
 constexpr uint32_t CHOPCONF_DISS2G = 1 << 30;				// disable short to ground protection
 constexpr uint32_t CHOPCONF_DISS2VS = 1 << 31;				// disable low side short protection
 
-#if TMC_TYPE == 5130
-constexpr uint32_t DefaultChopConfReg = (1 << CHOPCONF_TBL_SHIFT) | (3 << CHOPCONF_TOFF_SHIFT) | (5 << CHOPCONF_HSTRT_SHIFT) | CHOPCONF_5130_VSENSE_HIGH;
-#elif TMC_TYPE == 5160
 constexpr uint32_t DefaultChopConfReg = (1 << CHOPCONF_TBL_SHIFT) | (3 << CHOPCONF_TOFF_SHIFT) | (5 << CHOPCONF_HSTRT_SHIFT);
-#endif
 constexpr uint32_t Default2240ChopConfReg = (2 << CHOPCONF_TBL_SHIFT) | (3 << CHOPCONF_TOFF_SHIFT) | (5 << CHOPCONF_HSTRT_SHIFT) | (2 << CHOPCONF_HEND_SHIFT);
 
 constexpr uint8_t REGNUM_COOLCONF = 0x6D;
@@ -492,18 +475,13 @@ private:
 	static constexpr unsigned int WriteCoolConf = 7;		// coolstep control
 	static constexpr unsigned int WritePwmConf = 8;			// stealthchop and freewheel control
 	static constexpr unsigned int WriteGstat = 9;			// global status register (writing it resets status bits)
-#if TMC_TYPE == 5160
 	static constexpr unsigned int Write5160ShortConf = 10;	// short circuit detection configuration
 	static constexpr unsigned int Write5160DrvConf = 11;		// driver timing
 	static constexpr unsigned int Write5160GlobalScaler = 12; // motor current scaling
 	static constexpr unsigned int WriteMslut0 = 13;			// microstep table difference bits, 8 registers
 	static constexpr unsigned int WriteMslutSel = 21;		// microstep table difference decoding
 	static constexpr unsigned int WriteMslutStart = 22;		// microstep table start values
-
 	static constexpr unsigned int NumWriteRegisters = 23; 	// the number of registers that we write to
-#else
-	static constexpr unsigned int NumWriteRegisters = 10;	// the number of registers that we write to
-#endif
 	static constexpr unsigned int WriteSpecial = NumWriteRegisters;
 	static constexpr unsigned int WriteAll5160 = ((1u << NumWriteRegisters) - 1) & ~(1 << WriteXDirect);
 	static constexpr unsigned int WriteAll2240 = ((1u << NumWriteRegisters) - 1) & ~((1 << Write5160ShortConf) | (1 << WriteXDirect));
@@ -578,7 +556,6 @@ const uint8_t Tmc51xxDriverState::WriteRegNumbers[NumWriteRegisters] =
 	REGNUM_COOLCONF,
 	REGNUM_PWMCONF,
 	REGNUM_GSTAT,
-#if TMC_TYPE == 5160
 	REGNUM_5160_SHORTCONF,
 	REGNUM_5160_DRVCONF,
 	REGNUM_5160_GLOBAL_SCALER,
@@ -592,7 +569,6 @@ const uint8_t Tmc51xxDriverState::WriteRegNumbers[NumWriteRegisters] =
 	REGNUM_MSLUT0 + 7,
 	REGNUM_MSLUTSEL,
 	REGNUM_MSLUTSTART,
-#endif
 };
 
 const uint8_t Tmc51xxDriverState::ReadRegNumbers[NumReadRegisters] =
@@ -638,11 +614,9 @@ pre(!driversPowered)
 
 	// Set default values for all registers and flag them to be updated
 	UpdateRegister(WriteGConf, DefaultGConfReg);
-#if TMC_TYPE == 5160
 	UpdateRegister(Write5160ShortConf, DefaultShortConfReg);
 	UpdateRegister(Write5160DrvConf, DefaultDrvConfReg);
 	UpdateRegister(Write5160GlobalScaler, DefaultGlobalScalerReg);
-#endif
 	UpdateRegister(WriteIholdIrun, DefaultIholdIrunReg);
 	UpdateRegister(WriteTpwmthrs, DefaultTpwmthrsReg);
 	UpdateRegister(WriteTcoolthrs, DefaultTcoolthrsReg);
@@ -905,41 +879,21 @@ bool Tmc51xxDriverState::SetDriverMode(unsigned int mode) noexcept
 	{
 	case (unsigned int)DriverMode::spreadCycle:
 		UpdateRegister(WriteGConf, writeRegisters[WriteGConf] & ~(GCONF_DIRECT_MODE | GCONF_STEALTHCHOP));
-#if TMC_TYPE == 5130
-		configuredChopConfReg = &= ~(CHOPCONF_CHM | CHOPCONF_5130_RNDTOFF);
-#else
 		configuredChopConfReg &= ~CHOPCONF_CHM;
-#endif
 		UpdateChopConfRegister();
 		break;
 
 	case (unsigned int)DriverMode::stealthChop:
 		UpdateRegister(WriteGConf, (writeRegisters[WriteGConf] & ~GCONF_DIRECT_MODE) | GCONF_STEALTHCHOP);
-#if TMC_TYPE == 5130
-		configuredChopConfReg = &= ~(CHOPCONF_CHM | CHOPCONF_5130_RNDTOFF);
-#else
 		configuredChopConfReg &= ~CHOPCONF_CHM;
-#endif
 		UpdateChopConfRegister();
 		break;
 
 	case (unsigned int)DriverMode::constantOffTime:
 		UpdateRegister(WriteGConf, writeRegisters[WriteGConf] & ~(GCONF_DIRECT_MODE | GCONF_STEALTHCHOP));
-#if TMC_TYPE == 5130
-		configuredChopConfReg = (configuredChopConfReg & ~CHOPCONF_5130_RNDTOFF) | CHOPCONF_CHM;
-#else
 		configuredChopConfReg |= CHOPCONF_CHM;
-#endif
 		UpdateChopConfRegister();
 		break;
-
-#if TMC_TYPE == 5130
-	case (unsigned int)DriverMode::randomOffTime:
-		UpdateRegister(WriteGConf, writeRegisters[WriteGConf] & ~GCONF_STEALTHCHOP);
-		configuredChopConfReg |= CHOPCONF_CHM | CHOPCONF_5130_RNDTOFF;
-		UpdateChopConfRegister();
-		break;
-#endif
 
 	default:
 		return false;
@@ -955,9 +909,6 @@ DriverMode Tmc51xxDriverState::GetDriverMode() const noexcept
 {
 	return ((writeRegisters[WriteGConf] & GCONF_STEALTHCHOP) != 0) ? DriverMode::stealthChop
 		: ((configuredChopConfReg & CHOPCONF_CHM) == 0) ? DriverMode::spreadCycle
-#if TMC_TYPE == 5130
-			: ((configuredChopConfReg & CHOPCONF_5130_RNDTOFF) != 0) ? DriverMode::randomOffTime
-#endif
 				: DriverMode::constantOffTime;
 }
 
@@ -1184,16 +1135,6 @@ float Tmc51xxDriverState::CalculateCurrent() const noexcept
 
 void Tmc51xxDriverState::UpdateCurrent() noexcept
 {
-#if TMC_TYPE == 5130
-	// Assume a current sense resistor of 0.082 ohms, to which we must add 0.025 ohms internal resistance.
-	// Full scale peak motor current in the high sensitivity range is give by I = 0.18/(R+0.03) = 0.18/0.105 ~= 1.6A
-	// This gives us a range of 50mA to 1.6A in 50mA steps in the high sensitivity range (VSENSE = 1)
-	const uint32_t iRunCsBits = (32 * motorCurrent - 800)/1615;		// formula checked by simulation on a spreadsheet
-	const uint32_t iHoldCurrent = (motorCurrent * standstillCurrentFraction)/256;	// set standstill current
-	const uint32_t iHoldCsBits = (32 * iHoldCurrent - 800)/1615;	// formula checked by simulation on a spreadsheet
-	UpdateRegister(WriteIholdIrun,
-					(writeRegisters[WriteIholdIrun] & ~(IHOLDIRUN_IRUN_MASK | IHOLDIRUN_IHOLD_MASK)) | (iRunCsBits << IHOLDIRUN_IRUN_SHIFT) | (iHoldCsBits << IHOLDIRUN_IHOLD_SHIFT));
-#elif TMC_TYPE == 5160
 	float RecipFullScaleCurrent;
 	if (IsTmc2240())
 	{
@@ -1237,9 +1178,6 @@ void Tmc51xxDriverState::UpdateCurrent() noexcept
 	const uint8_t iHold = (iRun * limitedStandstillCurrentFraction)/256;
 	UpdateRegister(WriteIholdIrun, (writeRegisters[WriteIholdIrun] & ~(IHOLDIRUN_IRUN_MASK | IHOLDIRUN_IHOLD_MASK)) | (iRun << IHOLDIRUN_IRUN_SHIFT) | (iHold << IHOLDIRUN_IHOLD_SHIFT));
 	UpdateRegister(Write5160GlobalScaler, globalScaler);
-#else
-# error unknown device
-#endif
 }
 
 // Enable or disable the driver
