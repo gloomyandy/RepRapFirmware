@@ -1,3 +1,12 @@
+Vesrsion 3.7.0-rc.1
+===================
+* Duet3d 3.7.0-rc.1
+* Allow DMA use on SPI transfers on RPXXXX
+* Optimise RP2350 SPI operations and closedloop critical path
+* Fix assertion error when writing to flash after exception on RPXXXX
+* Fix incorrect initial tmc2240 chopconf setting
+* Added firmware size check to mainboard firmware and report flash size in m122 p200
+
 Version 3.7.0-beta.3
 =====================
 * Duet3d V3.7.0-beta.3
