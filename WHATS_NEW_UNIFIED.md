@@ -1,6 +1,7 @@
 Vesrsion 3.7.0-rc.1
 ===================
 * Duet3d 3.7.0-rc.1
+* Introduced new build options to avoid clash with Duet3D stm32 code
 * Allow DMA use on SPI transfers on RPXXXX
 * Optimise RP2350 SPI operations and closedloop critical path
 * Fix assertion error when writing to flash after exception on RPXXXX
