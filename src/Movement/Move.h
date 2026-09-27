@@ -25,7 +25,7 @@
 #include <Hardware/IoPorts.h>
 #include <Endstops/EndstopDefs.h>
 
-#if SUPPORT_PHASE_STEPPING
+#if SUPPORT_PHASE_STEPPING || SUPPORT_CAN_EXPANSION
 #include <Movement/PhaseStep.h>
 #endif
 
@@ -171,6 +171,9 @@ public:
 	float AccelerationTime() const noexcept { return accelerationTime; }
 	void UpdateSCurveFlagAndJerk() noexcept;
 	bool IsUsingSCurve() const noexcept { return usingSCurve; }
+# if SUPPORT_CAN_EXPANSION
+	bool AnyDriveHasRemoteDriver() const noexcept;
+# endif
 #endif
 
 	float MaxFeedrate(size_t axisOrExtruder) const noexcept;
@@ -331,7 +334,7 @@ public:
 #if SUPPORT_REMOTE_COMMANDS
 	GCodeResult EutSetMotorCurrents(const CanMessageMultipleDrivesRequest<float>& msg, size_t dataLength, const StringRef& reply) noexcept;
 	GCodeResult EutSetStepsPerMmAndMicrostepping(const CanMessageMultipleDrivesRequest<StepsPerUnitAndMicrostepping>& msg, size_t dataLength, const StringRef& reply) noexcept;
-	GCodeResult EutHandleSetDriverStates(const CanMessageMultipleDrivesRequest<DriverStateControl>& msg, const StringRef& reply) noexcept;
+	GCodeResult EutHandleSetDriverStates(const CanMessageMultipleDrivesRequest<DriverStateControl>& msg, size_t dataLength, const StringRef& reply) noexcept;
 	GCodeResult EutProcessM569(const CanMessageGeneric& msg, const StringRef& reply) noexcept;
 	GCodeResult EutProcessM569Point2(const CanMessageGeneric& msg, const StringRef& reply) noexcept;
 	GCodeResult EutProcessM569Point7(const CanMessageGeneric& msg, const StringRef& reply) noexcept;
@@ -342,6 +345,11 @@ public:
 	void StopDriversFromRemote(uint16_t whichDrives) noexcept;
 	void RevertPosition(const CanMessageRevertPosition& msg) noexcept;
 
+	GCodeResult EutSetStandstillCurrentFactor(const CanMessageMultipleDrivesRequest<float>& msg, size_t dataLength, const StringRef& reply) noexcept;
+# if SUPPORT_PHASE_STEPPING
+	GCodeResult EutProcessM970(const CanMessageGeneric& msg, const StringRef& reply) noexcept;
+	GCodeResult EutProcessM970Point3(const CanMessageGeneric& msg, const StringRef& reply) noexcept;
+# endif
 	GCodeResult EutSetRemotePressureAdvanceV1(const CanMessageMultipleDrivesRequest<float>& msg, size_t dataLength, const StringRef& reply) noexcept;
 	GCodeResult EutSetRemotePressureAdvanceV2(const CanMessageMultipleDrivesRequest<ShortPressureAdvanceParameters>& msg, size_t dataLength, const StringRef& reply) noexcept;
 	GCodeResult EutSetInputShaping(const CanMessageSetInputShapingV1& msg, size_t dataLength, const StringRef& reply) noexcept
@@ -387,11 +395,11 @@ public:
 	void CancelStepping() noexcept;															// Stop generating steps
 #endif
 
-	bool NoLiveMovement() const noexcept { return rings[0].IsIdle(); }						// Is a move running, or are there any queued?
+	bool NoLiveMovement(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].IsIdle(); }		// Is a move running, or are there any queued?
 
-	uint32_t GetScheduledMoves() const noexcept { return rings[0].GetScheduledMoves(); }	// How many moves have been scheduled?
-	uint32_t GetCompletedMoves() const noexcept { return rings[0].GetCompletedMoves(); }	// How many moves have been completed?
-	void ResetMoveCounters() noexcept { rings[0].ResetMoveCounters(); }
+	uint32_t GetScheduledMoves(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].GetScheduledMoves(); }	// How many moves have been scheduled?
+	uint32_t GetCompletedMoves(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].GetCompletedMoves(); }	// How many moves have been completed?
+	void ResetMoveCounters(size_t msNumber) noexcept pre(msNumber < NumMovementSystems) { rings[msNumber].ResetMoveCounters(); }
 	void UpdateExtrusionPendingLimits(float extrusionPending) noexcept;
 
 	HeightMap& AccessHeightMap() noexcept { return heightMap; }								// Access the bed probing grid
@@ -399,7 +407,7 @@ public:
 
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE
 	bool LoadHeightMapFromFile(FileStore *f, const char *_ecv_array fname, const StringRef& r) noexcept;	// Load the height map from a file returning true if an error occurred
-	bool SaveHeightMapToFile(FileStore *f, const char *_ecv_array fname) noexcept;						// Save the height map to a file returning true if an error occurred
+	bool SaveHeightMapToFile(FileStore *f, const char *_ecv_array fname) noexcept;							// Save the height map to a file returning true if an error occurred
 # if SUPPORT_PROBE_POINTS_FILE
 	bool LoadProbePointsFromFile(FileStore *f, const char *_ecv_array fname, const StringRef& r) noexcept;	// Load the probe points map from a file returning true if an error occurred
 	void ClearProbePointsInvalid() noexcept;
@@ -415,14 +423,14 @@ public:
 
 	const RandomProbePointSet& GetProbePoints() const noexcept { return probePoints; }		// Return the probe point set constructed from G30 commands
 
-	float GetTopSpeedMmPerSec(size_t msNumber) const noexcept { return rings[msNumber].GetTopSpeedMmPerSec(); }
-	float GetRequestedSpeedMmPerSec(size_t msNumber) const noexcept { return rings[msNumber].GetRequestedSpeedMmPerSec(); }
-	float GetAccelerationMmPerSecSquared(size_t msNumber) const noexcept { return rings[msNumber].GetAccelerationMmPerSecSquared(); }		// Get the (peak) acceleration for reporting in the object model
-	float GetDecelerationMmPerSecSquared(size_t msNumber) const noexcept { return rings[msNumber].GetDecelerationMmPerSecSquared(); }		// Get the (peak) deceleration for reporting in the object model
-	float GetCurrentMoveDistance(size_t msNumber) const noexcept { return rings[msNumber].GetCurrentMoveDistance(); }
-	float GetCurrentMoveDuration(size_t msNumber) const noexcept { return rings[msNumber].GetCurrentMoveDuration(); }
-	FilePosition GetCurrentMoveFilePosition(size_t msNumber) const noexcept { return rings[msNumber].GetCurrentMoveFilePosition(); }		// Get the file position of the move being executed, or noFilePosition if there is none
-	float GetTotalExtrusionRate(size_t msNumber) const noexcept { return rings[msNumber].GetTotalExtrusionRate(); }
+	float GetTopSpeedMmPerSec(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].GetTopSpeedMmPerSec(); }
+	float GetRequestedSpeedMmPerSec(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].GetRequestedSpeedMmPerSec(); }
+	float GetAccelerationMmPerSecSquared(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].GetAccelerationMmPerSecSquared(); }	// Get the (peak) acceleration for reporting in the object model
+	float GetDecelerationMmPerSecSquared(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].GetDecelerationMmPerSecSquared(); }	// Get the (peak) deceleration for reporting in the object model
+	float GetCurrentMoveDistance(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].GetCurrentMoveDistance(); }
+	float GetCurrentMoveDuration(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].GetCurrentMoveDuration(); }
+	FilePosition GetCurrentMoveFilePosition(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].GetCurrentMoveFilePosition(); }		// Get the file position of the move being executed, or noFilePosition if there is none
+	float GetTotalExtrusionRate(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].GetTotalExtrusionRate(); }
 
 	void UpdateLiveMachineCoordinates(float coords[MaxAxes], const Tool *_ecv_null tool) const noexcept;		// Force an update of the live machine coordinates
 
@@ -431,6 +439,9 @@ public:
 	// Filament monitor support
 	int32_t GetAccumulatedExtrusion(size_t logicalDrive, bool& isPrinting) noexcept;		// Return and reset the accumulated commanded extrusion amount
 	uint32_t ExtruderPrintingSince(size_t logicalDrive) const noexcept;						// When we started doing normal moves after the most recent extruder-only move
+
+	void ChangeExtrusionFactor(size_t msNumber, unsigned int extruder, float multiplier) noexcept	// fast extrusion factor change
+		pre(msNumber < NumMovementSystems);
 
 #if HAS_MASS_STORAGE || HAS_SBC_INTERFACE
 	bool WriteResumeSettings(FileStore *f) const noexcept;									// Write settings for resuming the print
@@ -454,12 +465,14 @@ public:
 	void InvertCurrentMotorSteps(size_t driver) noexcept;
 #endif
 
-#if SUPPORT_PHASE_STEPPING
+#if SUPPORT_PHASE_STEPPING || SUPPORT_CAN_EXPANSION
 	GCodeResult ConfigurePhaseStepping(size_t axisOrExtruder, float value, PhaseStepConfig config, const StringRef& reply) noexcept;	// configure Ka & Kv parameters for phase stepping
 	PhaseStepParams GetPhaseStepParams(size_t axisOrExtruder) const noexcept;
-	bool UpdateCurrentMotion(size_t driver, uint32_t when, MotionParameters& mParams) noexcept;	// get the net full steps taken, including in the current move so far, also speed and acceleration; return true if moving
 	bool SetStepMode(size_t axisOrExtruder, StepMode mode, const StringRef& reply) noexcept;
 	StepMode GetStepMode(size_t axisOrExtruder) const noexcept;
+#endif
+#if SUPPORT_PHASE_STEPPING
+	bool UpdateCurrentMotion(size_t driver, uint32_t when, MotionParameters& mParams) noexcept;	// get the net full steps taken, including in the current move so far, also speed and acceleration; return true if moving
 	void PrepareLeadscrewAdjustmentDM(size_t localDriver) noexcept;							// set up the DM that adjusts a leadscrew so that it executes the same way as the Z axis
 	void ResetPhaseStepMonitoringVariables() noexcept;
 
@@ -589,6 +602,9 @@ private:
 #endif
 
 	void InternalDisableDriver(size_t driver) noexcept;
+#if SUPPORT_PHASE_STEPPING
+	bool SetLocalDriverStepMode(DriveMovement& dm, uint8_t driver, StepMode mode, unsigned int microsteps) noexcept;	// switch one local driver between step/dir and phase stepping, keeping MSCNT and the commanded phase in sync
+#endif
 	void EngageBrake(size_t driver) noexcept;
 	void DisengageBrake(size_t driver) noexcept;
 
@@ -651,8 +667,11 @@ private:
 	bool phaseStepMovingFast;								// Whether any phase stepping driver is above the speed at which we defer the driver status poll
 #endif
 
-#if SUPPORT_PHASE_STEPPING && SUPPORT_CAN_EXPANSION
+#if SUPPORT_CAN_EXPANSION
 	LogicalDrivesBitmap remotePhaseStepDrives;				// logical drives whose remote drivers have been switched to phase stepping
+#endif
+#if SUPPORT_CAN_EXPANSION && !SUPPORT_PHASE_STEPPING
+	PhaseStepParams remotePhaseStepParams[MaxAxesPlusExtruders];	// Kv/Ka per logical drive for reporting; boards with local phase stepping keep these in the DMs instead
 #endif
 
 #if SUPPORT_ASYNC_MOVES
@@ -960,6 +979,12 @@ inline __attribute__((always_inline)) bool Move::ScheduleNextStepInterrupt() noe
 		return stepsTimer.ScheduleMovementCallbackFromIsr(activeDMs->nextStepTime);
 	}
 	return false;
+}
+
+inline void Move::ChangeExtrusionFactor(size_t msNumber, unsigned int extruder, float multiplier) noexcept	// fast extrusion factor change
+{
+	const size_t drive = ExtruderToLogicalDrive(extruder);
+	rings[msNumber].ChangeExtrusionFactor(drive, multiplier, maxInstantDvs[drive]);
 }
 
 // Insert the specified drive into the step list, in step time order.

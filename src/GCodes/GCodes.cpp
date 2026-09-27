@@ -90,7 +90,7 @@ GCodes::GCodes(Platform& p) noexcept :
 	FileGCodeInput * const fileInput = nullptr;
 #endif
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::File)] = new GCodeBuffer(GCodeChannel::File, nullptr, fileInput, GenericMessage);
-	moveStates[0].codeQueue = new GCodeQueue();
+	moveStates[0].codeQueue = new GCodeQueue(0);
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Queue)] = new GCodeBuffer(GCodeChannel::Queue, moveStates[0].codeQueue, fileInput, GenericMessage);
 
 #if SUPPORT_ASYNC_MOVES
@@ -100,7 +100,7 @@ GCodes::GCodes(Platform& p) noexcept :
 	FileGCodeInput * const file2Input = nullptr;
 # endif
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::File2)] = new GCodeBuffer(GCodeChannel::File2, nullptr, file2Input, GenericMessage);
-	moveStates[1].codeQueue = new GCodeQueue();
+	moveStates[1].codeQueue = new GCodeQueue(1);
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Queue2)] = new GCodeBuffer(GCodeChannel::Queue2, moveStates[1].codeQueue, fileInput, GenericMessage);
 	gcodeSources[GCodeChannel::ToBaseType(GCodeChannel::Queue2)]->SetActiveQueueNumber(1);		// so that all commands read from this queue get executed on queue #1 instead of the default #0
 #else
@@ -1075,28 +1075,35 @@ bool GCodes::DoAsynchronousPause(GCodeBuffer& gb, PrintPausedReason reason, GCod
 	{
 		ms.pausedInMacro = false;
 
-		const bool movesSkipped = reprap.GetMove().PausePrint(ms);						// tell Move we wish to pause this queue
 		GCodeBuffer& fgb = *GetFileGCode(ms.GetNumber());
-		if (movesSkipped)
+		bool movesSkipped, waitingMoveSkipped;
 		{
-			// The PausePrint call has filled in the restore point with machine coordinates
-			ToolOffsetInverseTransform(ms, ms.GetPauseRestorePoint().moveCoords, ms.currentUserPosition);	// transform the returned coordinates to user coordinates
-			ms.ClearMove();
+			// Keep the Move task out until the waiting move has been discarded, else it can add that move to the ring after PausePrint has reset it
+			TaskCriticalSectionLocker lock;
+			movesSkipped = reprap.GetMove().PausePrint(ms);								// tell Move we wish to pause this queue
+			waitingMoveSkipped = !movesSkipped && ms.segmentsLeft != 0;
+			if (movesSkipped)
+			{
+				// The PausePrint call has filled in the restore point with machine coordinates
+				ToolOffsetInverseTransform(ms, ms.GetPauseRestorePoint().moveCoords, ms.currentUserPosition);	// transform the returned coordinates to user coordinates
+				ms.ClearMove();
+			}
+			else if (waitingMoveSkipped)
+			{
+				// We were not able to skip any moves, however we can skip the move that is waiting
+				ms.GetPauseRestorePoint().virtualExtruderPosition = ms.raw.moveStartVirtualExtruderPosition;
+				ms.GetPauseRestorePoint().filePos = ms.raw.filePos;
+				ms.GetPauseRestorePoint().gCommandNumber = ms.raw.gCommandNumber;
+				ms.GetPauseRestorePoint().originalFeedRate = ms.raw.originalFeedRate;
+				ms.GetPauseRestorePoint().proportionDone = ms.GetProportionDone();
+				ms.GetPauseRestorePoint().initialUserC0 = ms.raw.initialUserC0;
+				ms.GetPauseRestorePoint().initialUserC1 = ms.raw.initialUserC1;
+				ToolOffsetInverseTransform(ms, ms.GetPauseRestorePoint().moveCoords, ms.currentUserPosition);	// transform the returned coordinates to user coordinates
+				ms.ClearMove();
+			}
 		}
-		else if (ms.segmentsLeft != 0)
-		{
-			// We were not able to skip any moves, however we can skip the move that is waiting
-			ms.GetPauseRestorePoint().virtualExtruderPosition = ms.raw.moveStartVirtualExtruderPosition;
-			ms.GetPauseRestorePoint().filePos = ms.raw.filePos;
-			ms.GetPauseRestorePoint().gCommandNumber = ms.raw.gCommandNumber;
-			ms.GetPauseRestorePoint().originalFeedRate = ms.raw.originalFeedRate;
-			ms.GetPauseRestorePoint().proportionDone = ms.GetProportionDone();
-			ms.GetPauseRestorePoint().initialUserC0 = ms.raw.initialUserC0;
-			ms.GetPauseRestorePoint().initialUserC1 = ms.raw.initialUserC1;
-			ToolOffsetInverseTransform(ms, ms.GetPauseRestorePoint().moveCoords, ms.currentUserPosition);	// transform the returned coordinates to user coordinates
-			ms.ClearMove();
-		}
-		else
+
+		if (!movesSkipped && !waitingMoveSkipped)
 		{
 			// We were not able to skip any moves, and there is no move waiting
 			ms.GetPauseRestorePoint().originalFeedRate = fgb.LatestMachineState().feedRate;
@@ -3810,9 +3817,8 @@ void GCodes::StartPrinting(bool fromStart) noexcept
 	for (MovementState& ms : moveStates)
 	{
 		ms.InitObjectCancellation();
+		reprap.GetMove().ResetMoveCounters(ms.GetNumber());
 	}
-
-	reprap.GetMove().ResetMoveCounters();
 
 	if (fromStart)															// if not resurrecting a print
 	{

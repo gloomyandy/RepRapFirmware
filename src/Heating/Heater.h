@@ -99,7 +99,7 @@ public:
 
 	const FopDt& GetModel() const noexcept { return model; }				// Get the process model
 	GCodeResult SetOrReportModel(unsigned int heater, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
-	void SetExtrusionFeedForward(float pwmBoost, float tempBoost) noexcept;
+	void SetExtrusionFeedForward(float pwmBoost, float tempBoost, bool isNonPrintingMove) noexcept;
 
 #if SUPPORT_REMOTE_COMMANDS
 	virtual GCodeResult TuningCommand(const CanMessageHeaterTuningCommand& msg, const StringRef& reply) noexcept = 0;
@@ -146,7 +146,7 @@ protected:
 	virtual GCodeResult UpdateFaultDetectionParameters(const StringRef& reply) noexcept = 0;
 	virtual GCodeResult UpdateHeaterMonitors(const StringRef& reply) noexcept = 0;
 	virtual GCodeResult StartAutoTune(const StringRef& reply, bool seenA, float ambientTemp) noexcept = 0;
-	virtual void ApplyExtrusionFeedForward() noexcept = 0;
+	virtual void ApplyExtrusionFeedForward(float newExtrusionPwmBoost, float newTempBoost, bool isNonPrintingMove) noexcept = 0;
 
 	int GetSensorNumber() const noexcept { return sensorNumber; }
 	int GetAmbientSensorNumber() const noexcept { return ambientSensorNumber; }
@@ -166,10 +166,11 @@ protected:
 	void SetAndReportModelAfterTuning(bool usingFans) noexcept;
 
 	HeaterMonitor monitors[MaxMonitorsPerHeater];					// embedding them in the Heater uses less memory than dynamic allocation
+
 	volatile float lastFanPwm;										// The fan PWM when we last calculated heater feedforward for the fan
-	volatile float extrusionPwmBoost;								// The value of extrusion PWM boost to apply
+	volatile float lastExtrusionPwmBoost;							// The last value of extrusion boost we applied
+	volatile float allowedExtrusionPwmBoost;						// The maximum extra PWM that we expect to need if extrusion is taking place due to melting filament
 	volatile float extrusionTemperatureBoost;						// the amount of extrusion temperature boost we are currently applying
-	float previousExtrusionPwmBoost;								// The previoius value of extrusion boost we applied
 
 	bool tuned = false;												// true if tuning was successful
 
@@ -185,7 +186,7 @@ protected:
 	static constexpr float DefaultTuningHysteresis = 5.0;
 	static constexpr float MaxTuningHysteresis = 20.0;
 	static constexpr float MinTuningFanPwm = 0.1;
-	static constexpr float DefaultTuningFanPwm = 0.7;
+	static constexpr float DefaultTuningFanPwm = 0.8;				// changed from 0.7 to 0.8 post 3.7.0-rc.1 to get more accurate results across the PWM range
 	static constexpr float TuningPeakTempDrop = 2.0;				// must be well below TuningHysteresis
 	static constexpr float HeaterSettledCoolingTimeRatio = 0.93;
 
@@ -215,6 +216,7 @@ protected:
 	static FansBitmap tuningFans;
 	static TuningPhase tuningPhase;
 	static uint8_t idleCyclesDone;
+	static uint8_t cyclesToSkip;
 	static bool tuningQuietMode;
 
 	static HeaterParameters fanOffParams, fanOnParams;

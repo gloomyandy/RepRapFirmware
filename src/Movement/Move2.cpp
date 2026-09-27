@@ -105,6 +105,28 @@ bool Move::ExtruderHasLocalDriver(size_t extruder) const noexcept
 	return extruderDrivers[extruder].IsLocal();
 }
 
+bool Move::AnyDriveHasRemoteDriver() const noexcept
+{
+	for (size_t axis = 0; axis < reprap.GetGCodes().GetTotalAxes(); axis++)
+	{
+		for (size_t i = 0; i < axisDrivers[axis].numDrivers; i++)
+		{
+			if (axisDrivers[axis].driverNumbers[i].IsRemote())
+			{
+				return true;
+			}
+		}
+	}
+	for (size_t extruder = 0; extruder < reprap.GetGCodes().GetNumExtruders(); extruder++)
+	{
+		if (extruderDrivers[extruder].IsRemote())
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 #endif
 
 // Set the microstepping for local drivers, returning true if successful. All drivers for the same axis must use the same microstepping.
@@ -811,7 +833,7 @@ GCodeResult Move::SetMotorCurrent(size_t axisOrExtruder, float currentOrPercent,
 # else
 								const float actualCurrent = motorCurrents[axisOrExtruder];
 # endif
-								rslt = max<GCodeResult>(rslt, UpdateMotorCurrent(driver, motorCurrents[axisOrExtruder] * motorCurrentFraction[axisOrExtruder], reply));
+								UpdateMotorCurrent(driver, motorCurrents[axisOrExtruder] * motorCurrentFraction[axisOrExtruder]);
 							}
 		);
 		return rslt;
@@ -1353,7 +1375,7 @@ void Move::ReportM569Parameters(size_t drive, const StringRef& reply) noexcept
 #endif
 		{
 			// It's a smart driver, so print the parameters common to all modes, except for the position
-			reply.catf(", mode %s, ccr 0x%05" PRIx32 ", toff %" PRIu32 ", tblank %" PRIu32,
+			reply.catf(", mode %s, ccr 0x%06" PRIx32 ", toff %" PRIu32 ", tblank %" PRIu32,
 					TranslateDriverMode(SmartDrivers::GetDriverMode(drive)),
 					SmartDrivers::GetRegister(drive, SmartDriverRegister::chopperControl),
 					SmartDrivers::GetRegister(drive, SmartDriverRegister::toff),
@@ -1515,16 +1537,147 @@ void Move::AddMoveFromRemote(const CanMessageMovementLinearShaped& msg) noexcept
 	}
 }
 
-GCodeResult Move::EutSetMotorCurrents(const CanMessageMultipleDrivesRequest<float>& msg, size_t dataLength, const StringRef& reply) noexcept
+GCodeResult Move::EutSetStandstillCurrentFactor(const CanMessageMultipleDrivesRequest<float>& msg, size_t dataLength, const StringRef& reply) noexcept
 {
 # if HAS_SMART_DRIVERS
-	const auto drivers = Bitmap<uint16_t>::MakeFromRaw(msg.driversToUpdate);
-	if (dataLength < msg.GetActualDataLength(drivers.CountSetBits()))
+	if (dataLength < msg.GetActualDataLength())
 	{
 		reply.copy("bad data length");
 		return GCodeResult::error;
 	}
 
+	const auto drivers = Bitmap<uint16_t>::MakeFromRaw(msg.driversToUpdate);
+	GCodeResult rslt = GCodeResult::ok;
+	drivers.Iterate([this, &msg, &reply, &rslt](unsigned int driver, unsigned int count) noexcept
+						{
+							if (driver >= NumDirectDrivers)
+							{
+								reply.lcatf("No such driver %u.%u", CanInterface::GetCanAddress(), driver);
+								rslt = GCodeResult::error;
+							}
+							else
+							{
+								SmartDrivers::SetStandstillCurrentPercent(driver, msg.values[count]);
+# if SUPPORT_PHASE_STEPPING
+								dms[driver].phaseStepControl.SetStandstillCurrent(msg.values[count]);
+# endif
+							}
+						}
+					);
+	return rslt;
+# else
+	reply.copy("Setting standstill current not supported by this board");
+	return GCodeResult::errorNotSupported;
+# endif
+}
+
+# if SUPPORT_PHASE_STEPPING
+
+GCodeResult Move::EutProcessM970(const CanMessageGeneric& msg, const StringRef& reply) noexcept
+{
+	CanMessageGenericParser parser(msg, M970Params);
+	uint8_t drive;
+	if (!parser.GetUintParam('P', drive))
+	{
+		reply.copy("Missing P parameter in CAN message");
+		return GCodeResult::error;
+	}
+	if (drive >= NumDirectDrivers)
+	{
+		reply.printf("Driver number %u.%u out of range", CanInterface::GetCanAddress(), drive);
+		return GCodeResult::error;
+	}
+
+	DriveMovement& dm = dms[drive];
+	bool seen = false;
+	uint8_t mode;
+	if (parser.GetUintParam('S', mode))
+	{
+		seen = true;
+		if (mode >= (uint8_t)StepMode::unknown)
+		{
+			reply.printf("Invalid step mode %u", mode);
+			return GCodeResult::error;
+		}
+		if ((StepMode)mode != dm.GetStepMode())
+		{
+			if ((StepMode)mode == StepMode::phase)
+			{
+				delay(10);													// let the TMC task read the microstep counter after the last movement
+				dm.phaseStepControl.SetStandstillCurrent(SmartDrivers::GetStandstillCurrentPercent(drive));
+			}
+			bool interpolation;
+			const unsigned int microsteps = GetMicrostepping(drive, interpolation);
+			UpdateCurrentMotion(drive, StepTimer::ConvertLocalToMovementTime(StepTimer::GetTimerTicks()), dm.phaseStepControl.mParams);
+			if (!SetLocalDriverStepMode(dm, drive, (StepMode)mode, microsteps))
+			{
+				reply.printf("Driver %u.%u does not support phase stepping", CanInterface::GetCanAddress(), drive);
+				return GCodeResult::error;
+			}
+			dm.SetStepMode((StepMode)mode);
+			ResetPhaseStepMonitoringVariables();
+		}
+	}
+	float val;
+	if (parser.GetFloatParam('V', val))
+	{
+		seen = true;
+		dm.phaseStepControl.SetKv(val);
+	}
+	if (parser.GetFloatParam('A', val))
+	{
+		seen = true;
+		dm.phaseStepControl.SetKa(val);
+	}
+	if (!seen)
+	{
+		reply.printf("Driver %u.%u uses %s, Kv=%.1f, Ka=%.1f", CanInterface::GetCanAddress(), drive,
+						TranslateStepMode(dm.GetStepMode()), (double)dm.phaseStepControl.GetKv(), (double)dm.phaseStepControl.GetKa());
+	}
+	return GCodeResult::ok;
+}
+
+GCodeResult Move::EutProcessM970Point3(const CanMessageGeneric& msg, const StringRef& reply) noexcept
+{
+	CanMessageGenericParser parser(msg, M970Point3Params);
+	uint8_t drive;
+	if (!parser.GetUintParam('P', drive))
+	{
+		reply.copy("Missing P parameter in CAN message");
+		return GCodeResult::error;
+	}
+	if (drive >= NumDirectDrivers)
+	{
+		reply.printf("Driver number %u.%u out of range", CanInterface::GetCanAddress(), drive);
+		return GCodeResult::error;
+	}
+
+	uint8_t harmonic;
+	if (parser.GetUintParam('S', harmonic))
+	{
+		float magnitude = 0.0, phase = 0.0;
+		const bool seenMagnitude = parser.GetFloatParam('J', magnitude);
+		const bool seenPhase = parser.GetFloatParam('O', phase);
+		return PhaseStep::ConfigureCorrection(drive, harmonic, seenMagnitude, magnitude, seenPhase, phase, reply);
+	}
+
+	reply.printf("Driver %u.%u waveform correction:", CanInterface::GetCanAddress(), drive);
+	PhaseStep::AppendCorrections(drive, reply);
+	return GCodeResult::ok;
+}
+
+# endif	// SUPPORT_PHASE_STEPPING
+
+GCodeResult Move::EutSetMotorCurrents(const CanMessageMultipleDrivesRequest<float>& msg, size_t dataLength, const StringRef& reply) noexcept
+{
+# if HAS_SMART_DRIVERS
+	if (dataLength < msg.GetActualDataLength())
+	{
+		reply.copy("bad data length");
+		return GCodeResult::error;
+	}
+
+	const auto drivers = Bitmap<uint16_t>::MakeFromRaw(msg.driversToUpdate);
 	GCodeResult rslt = GCodeResult::ok;
 	drivers.Iterate([this, &msg, &reply, &rslt](unsigned int driver, unsigned int count) noexcept
 						{
@@ -1556,13 +1709,13 @@ GCodeResult Move::EutSetMotorCurrents(const CanMessageMultipleDrivesRequest<floa
 
 GCodeResult Move::EutSetStepsPerMmAndMicrostepping(const CanMessageMultipleDrivesRequest<StepsPerUnitAndMicrostepping>& msg, size_t dataLength, const StringRef& reply) noexcept
 {
-	const auto drivers = Bitmap<uint16_t>::MakeFromRaw(msg.driversToUpdate);
-	if (dataLength < msg.GetActualDataLength(drivers.CountSetBits()))
+	if (dataLength < msg.GetActualDataLength())
 	{
 		reply.copy("bad data length");
 		return GCodeResult::error;
 	}
 
+	const auto drivers = Bitmap<uint16_t>::MakeFromRaw(msg.driversToUpdate);
 	GCodeResult rslt = GCodeResult::ok;
 	drivers.Iterate([this, &msg, &reply, &rslt](unsigned int driver, unsigned int count) noexcept
 						{
@@ -1586,9 +1739,14 @@ GCodeResult Move::EutSetStepsPerMmAndMicrostepping(const CanMessageMultipleDrive
 	return rslt;
 }
 
-GCodeResult Move::EutHandleSetDriverStates(const CanMessageMultipleDrivesRequest<DriverStateControl>& msg, const StringRef& reply) noexcept
+GCodeResult Move::EutHandleSetDriverStates(const CanMessageMultipleDrivesRequest<DriverStateControl>& msg, size_t dataLength, const StringRef& reply) noexcept
 {
-	//TODO check message is long enough for the number of drivers specified
+	if (dataLength < msg.GetActualDataLength())
+	{
+		reply.copy("bad data length");
+		return GCodeResult::error;
+	}
+
 	const auto drivers = Bitmap<uint16_t>::MakeFromRaw(msg.driversToUpdate);
 	drivers.Iterate([this, &msg](unsigned int driver, unsigned int count) noexcept
 		{
@@ -1668,12 +1826,22 @@ GCodeResult Move::EutProcessM569(const CanMessageGeneric& msg, const StringRef& 
 # if SUPPORT_TMC51xx
 		int32_t ival;
 # endif
-		if (parser.GetUintParam('D', val))	// set driver mode
+		if (parser.GetUintParam('D', val))		// set driver mode
 		{
 			seen = true;
 			if (!SmartDrivers::SetDriverMode(drive, val))
 			{
 				reply.printf("Driver %u.%u does not support mode '%s'", CanInterface::GetCanAddress(), drive, TranslateDriverMode(val));
+				return GCodeResult::error;
+			}
+		}
+
+		if (parser.GetUintParam('C', val))		// set chopper control register
+		{
+			seen = true;
+			if (!SmartDrivers::SetRegister(drive, SmartDriverRegister::chopperControl, val))
+			{
+				reply.printf("Bad ccr for driver %u", drive);
 				return GCodeResult::error;
 			}
 		}

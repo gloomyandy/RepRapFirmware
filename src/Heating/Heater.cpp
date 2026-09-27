@@ -44,7 +44,7 @@ constexpr ObjectModelTableEntry Heater::objectModelTable[] =
 	{ "active",				OBJECT_MODEL_FUNC(self->GetActiveTemperature(), 1), 									ObjectModelEntryFlags::live },
 	{ "avgPwm",				OBJECT_MODEL_FUNC(self->GetAveragePWM(), 3), 											ObjectModelEntryFlags::liveNotPanelDue },
 	{ "current",			OBJECT_MODEL_FUNC(self->GetTemperature(), 2), 											ObjectModelEntryFlags::live },
-	{ "extrPwmBoost",		OBJECT_MODEL_FUNC_IF(self->usingFeedForward, self->extrusionPwmBoost, 2), 				ObjectModelEntryFlags::liveNotPanelDue },
+	{ "extrPwmBoost",		OBJECT_MODEL_FUNC_IF(self->usingFeedForward, self->lastExtrusionPwmBoost, 2), 			ObjectModelEntryFlags::liveNotPanelDue },
 	{ "extrTempBoost",		OBJECT_MODEL_FUNC_IF(self->usingFeedForward, self->extrusionTemperatureBoost, 2), 		ObjectModelEntryFlags::liveNotPanelDue },
 	{ "max",				OBJECT_MODEL_FUNC(self->GetHighestTemperatureLimit(), 1), 								ObjectModelEntryFlags::none },
 	{ "maxBadReadings",		OBJECT_MODEL_FUNC((int32_t)self->maxBadTemperatureCount), 								ObjectModelEntryFlags::none },
@@ -97,6 +97,7 @@ float Heater::lastCoolingRate;
 FansBitmap Heater::tuningFans;
 Heater::TuningPhase Heater::tuningPhase(TuningPhase::checking_temperature_is_stable);
 uint8_t Heater::idleCyclesDone;
+uint8_t Heater::cyclesToSkip;
 bool Heater::tuningQuietMode;
 
 Heater::HeaterParameters Heater::fanOffParams, Heater::fanOnParams;
@@ -128,17 +129,17 @@ Heater::~Heater() noexcept
 
 void Heater::ResetHeater() noexcept
 {
-	extrusionPwmBoost = 0.0;
+	lastExtrusionPwmBoost = 0.0;
+	allowedExtrusionPwmBoost = 0.0;
 	extrusionTemperatureBoost = 0.0;
-	previousExtrusionPwmBoost = 0.0;
 	lastFanPwm = 0.0;
 }
 
 void Heater::SwitchOff() noexcept
 {
-	extrusionPwmBoost = 0.0;
+	lastExtrusionPwmBoost = 0.0;
+	allowedExtrusionPwmBoost = 0.0;
 	extrusionTemperatureBoost = 0.0;
-	previousExtrusionPwmBoost = 0.0;
 }
 
 void Heater::SetSensorNumber(int sn) noexcept
@@ -149,12 +150,10 @@ void Heater::SetSensorNumber(int sn) noexcept
 	}
 }
 
-void Heater::SetExtrusionFeedForward(float pwmBoost, float tempBoost) noexcept
+void Heater::SetExtrusionFeedForward(float pwmBoost, float tempBoost, bool isNonPrintingMove) noexcept
 {
 	usingFeedForward = true;
-	extrusionPwmBoost = pwmBoost;
-	extrusionTemperatureBoost = tempBoost;
-	ApplyExtrusionFeedForward();
+	ApplyExtrusionFeedForward(pwmBoost, tempBoost, isNonPrintingMove);
 }
 
 GCodeResult Heater::SetOrReportModel(unsigned int heater, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)

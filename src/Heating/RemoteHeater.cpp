@@ -219,6 +219,7 @@ void RemoteHeater::Spin() noexcept
 #else
 							tuningPhase = TuningPhase::measuring_with_fan_on;
 							reprap.GetFansManager().SetFansValue(tuningFans, tuningFanPwm);		// turn fans on at full PWM
+							cyclesToSkip = 2;
 #endif
 							ReportTuningUpdate();
 						}
@@ -390,29 +391,31 @@ void RemoteHeater::SetFanFeedForwardPwm(float pwm) noexcept
 	if (pwm != lastFanPwm)
 	{
 		lastFanPwm = pwm;
-		UpdateFeedForward();
+		UpdateFeedForward(true, false);
 	}
 }
 
-void RemoteHeater::ApplyExtrusionFeedForward() noexcept
+void RemoteHeater::ApplyExtrusionFeedForward(float newExtrusionPwmBoost, float newTempBoost, bool isNonPrintingMove) noexcept
 {
-	if (extrusionPwmBoost != previousExtrusionPwmBoost || extrusionTemperatureBoost != previousExtrusionTemperatureBoost)
+	if (newExtrusionPwmBoost != lastExtrusionPwmBoost || newTempBoost != extrusionTemperatureBoost)
 	{
-		previousExtrusionPwmBoost = extrusionPwmBoost;
-		previousExtrusionTemperatureBoost = extrusionTemperatureBoost;
-		UpdateFeedForward();
+		lastExtrusionPwmBoost = newExtrusionPwmBoost;
+		extrusionTemperatureBoost = newTempBoost;
+		UpdateFeedForward(false, isNonPrintingMove);
 	}
 }
 
 // Send a message to the remote heater to update its feedforward parameters
 //TODO: should we change this to a message that doesn't wait for a response?
-void RemoteHeater::UpdateFeedForward() noexcept
+void RemoteHeater::UpdateFeedForward(bool fanOnly, bool nonPrintingExtruderMove) noexcept
 {
 	CanMessageBuffer buf;
 	auto msg = buf.SetupRequestMessageNoRid<CanMessageHeaterFeedForwardV1>(CanInterface::GetCanAddress(), boardAddress);
 	msg->heaterNumber = GetHeaterNumber();
 	msg->fanPwmFraction = lastFanPwm;
-	msg->extrusionPwmBoost = extrusionPwmBoost;
+	msg->fanOnly = fanOnly;
+	msg->nonPrintingExtruderMove = nonPrintingExtruderMove;
+	msg->extrusionPwmBoost = lastExtrusionPwmBoost;
 	msg->extrusionTemperatureBoost = extrusionTemperatureBoost;
 	CanInterface::SendMessageNoReplyNoFree(&buf);
 }
@@ -561,16 +564,24 @@ void RemoteHeater::UpdateHeaterTuning(CanAddress src, const CanMessageHeaterTuni
 {
 	if (src == boardAddress && tuningState >= TuningState::idleCycles && !newTuningResult)
 	{
-		tOn.Add((float)msg.ton);
-		tOff.Add((float)msg.toff);
-		dHigh.Add((float)msg.dhigh);
-		dLow.Add((float)msg.dlow);
-		heatingRateAcc.Add(msg.heatingRate);
-		coolingRateAcc.Add(msg.coolingRate);
-		tuningVoltage.Add(msg.voltage);
-		currentCoolingRate = msg.coolingRate;
-		tuningCyclesDone = msg.cyclesDone;
-		newTuningResult = true;
+		// The first one or two cycles after turning the fan on may be measured before the fan is up to speed, especially on INDX
+		if (tuningPhase == TuningPhase::measuring_with_fan_on && cyclesToSkip != 0)
+		{
+			--cyclesToSkip;								// give the fan time to reach speed
+		}
+		else
+		{
+			tOn.Add((float)msg.ton);
+			tOff.Add((float)msg.toff);
+			dHigh.Add((float)msg.dhigh);
+			dLow.Add((float)msg.dlow);
+			heatingRateAcc.Add(msg.heatingRate);
+			coolingRateAcc.Add(msg.coolingRate);
+			tuningVoltage.Add(msg.voltage);
+			currentCoolingRate = msg.coolingRate;
+			tuningCyclesDone = msg.cyclesDone;
+			newTuningResult = true;
+		}
 	}
 }
 

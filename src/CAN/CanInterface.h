@@ -47,6 +47,8 @@ namespace CanInterface
 	void MainBoardAcknowledgedAnnounce() noexcept;
 	void LogIgnoredMovementMessage() noexcept;
 	void CheckBrs(const CanMessageTimeSync& msg) noexcept;
+	void UpdateSyncLockState(bool synced) noexcept;
+	GCodeResult ProcessM959(const CanMessageGeneric& msg, const StringRef& reply) noexcept;
 #endif
 
 	CanRequestId AllocateRequestId(CanAddress destination, CanMessageBuffer *buf) noexcept;
@@ -96,10 +98,8 @@ namespace CanInterface
 	GCodeResult SetRemotePressureAdvance(const CanDriversData<ShortPressureAdvanceParameters>& data, const StringRef& reply) noexcept;
 	GCodeResult SetRemoteDriverStepsPerMmAndMicrostepping(const CanDriversData<StepsPerUnitAndMicrostepping>& data, const StringRef& reply) noexcept;
 	GCodeResult ConfigureRemoteDriver(DriverId driver, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException) pre(driver.IsRemote());
-#if SUPPORT_PHASE_STEPPING
 	GCodeResult SetRemoteDriverStepMode(DriverId driver, unsigned int mode, const StringRef& reply) noexcept pre(driver.IsRemote());
 	GCodeResult SetRemotePhaseStepParam(DriverId driver, char param, float value, const StringRef& reply) noexcept pre(driver.IsRemote());
-#endif
 	GCodeResult GetSetRemoteDriverStallParameters(const CanDriversList& drivers, GCodeBuffer& gb, const StringRef& reply, OutputBuffer *_ecv_null & buf) THROWS(GCodeException);
 	void EnableRemoteStallEndstop(DriverId did, float speed, bool useEncoder) THROWS(GCodeException) pre(did.IsRemote());
 	void DisableRemoteStallEndstops(CanAddress boardId) noexcept;
@@ -133,7 +133,7 @@ namespace CanInterface
 	GCodeResult ChangeAddressAndNormalTiming(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 	GCodeResult EnableCan(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 #if SUPPORT_ACCELEROMETERS
-	GCodeResult StartAccelerometer(DriverId device, uint8_t axes, uint32_t numSamples, uint8_t mode, const GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
+	GCodeResult StartAccelerometer(CanAddress boardAddress, size_t deviceNumber, uint8_t axes, uint32_t numSamples, uint8_t mode, const GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 #endif
 	GCodeResult StartClosedLoopDataCollection(DriverId device, uint16_t filter, uint16_t numSamples, uint16_t p_rateRequested, uint8_t p_movementRequested, uint8_t mode, const GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);
 	GCodeResult ProcessM655(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException);

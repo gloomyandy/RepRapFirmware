@@ -585,6 +585,28 @@ FilePosition DDARing::GetCurrentMoveFilePosition() const noexcept
 	return (cdda != nullptr) ? cdda->GetFilePosition() : noFilePosition;
 }
 
+// Fast change extrusion factor by modifying uncommitted moves already in the queue
+void DDARing::ChangeExtrusionFactor(size_t drive, float multiplier, float maxDv) noexcept
+{
+	DDA *cdda;
+
+	TaskCriticalSectionLocker lock;					// prevent the Move task committing moves while we process the movement queue
+	{
+		AtomicCriticalSectionLocker lock2;			// shut out the ISR because it can change getPointer
+		cdda = getPointer;
+		while (cdda->IsCommitted())
+		{
+			cdda = cdda->GetNext();
+		}
+	}
+
+	while (cdda != addPointer)
+	{
+		cdda->AdjustExtrusion(drive, multiplier, maxDv);
+		cdda = cdda->GetNext();
+	}
+}
+
 // Pause the print as soon as we can.
 // If we are able to skip any moves, return true and update ms.pauseRestorePoint to the first move we skipped.
 // If we can't skip any moves, update just the coordinates and laser PWM in ms.pauseRestorePoint and return false.
@@ -616,31 +638,54 @@ bool DDARing::PauseMoves(MovementState& ms) noexcept
 	// We can pause before a move if it is the first segment in that move.
 	// The caller should set up rp.feedrate to the default feed rate for the file gcode source before calling this.
 
-	TaskCriticalSectionLocker lock;							// prevent the Move task changing data while we look at it
+	TaskCriticalSectionLocker lock;								// prevent the Move task changing data while we look at it
 
-	const DDA * const savedDdaRingAddPointer = addPointer;
-
-	IrqDisable();
-	DDA *dda = getPointer;
-	if (dda != savedDdaRingAddPointer)
+	const DDA * const savedDdaRingAddPointer = addPointer;		// capture volatile variable to avoid reloading it every time we read it
+	DDA *dda;
 	{
-		bool pauseOkHere = dda->CanPauseAfter();
-		dda = dda->GetNext();
-
-		while (dda != savedDdaRingAddPointer)				// while there are queued moves
+		BasePriorityBooster booster(NvicPriorityStep);			// lock out step interrupts
+		dda = getPointer;
+		bool canPauseHere = true;								// if no moves have been committed, we haven't started moving yet
+		while (dda->IsCommitted())
 		{
-			if (pauseOkHere)								// if we can pause before executing the move that dda refers to
+			canPauseHere = dda->CanPauseAfter();				// see if the jerk limits allow us to stop after this move
+			dda = dda->GetNext();								// we can't adjust or cancel moves that are already committed
+		}
+
+		if (dda != addPointer)
+		{
+#if SUPPORT_3RD_ORDER
+			if (dda != getPointer && dda->IsSCurveMove())
 			{
-				addPointer = dda;
-				dda->Free();								// set the move status to empty so that when we re-enable interrupts the ISR doesn't start executing it
-				break;
+				// S-curve moves don't maintain canPauseAfter or a usable start speed until they are planned, so run out the queued moves
+				dda = addPointer;
 			}
-			pauseOkHere = dda->CanPauseAfter();
-			dda = dda->GetNext();
+			else
+#endif
+			if (canPauseHere)
+			{
+				// Nothing needed here, we can pause before this move
+			}
+			else if (dda->CanPauseAfter())						// if we can pause after the following move, we don't need to change it
+			{
+				dda = dda->GetNext();							// pause after this move
+			}
+			else
+			{
+				// We can't pause after the last uncommitted move because that would violate instantaneous speed change limits.
+				// We can't pause after the next move without modifying it because that would also violate instantaneous speed change limits.
+				dda = MakeDeceleratingChain(dda, savedDdaRingAddPointer);	// turn the next move or the next few moves into decelerating moves.
+			}
+
+			// 'dda' is now the first move we are not going to execute.
+			addPointer = dda;
+			while (dda != savedDdaRingAddPointer)				// while there are queued moves
+			{
+				dda->Free();									// set the move status to empty so that when we re-enable interrupts the ISR doesn't start executing it
+				dda = dda->GetNext();
+			}
 		}
 	}
-
-	IrqEnable();
 
 	// We may be going to skip some moves. Get the end coordinate of the previous move.
 	DDA * const prevDda = addPointer->GetPrevious();
@@ -678,6 +723,51 @@ bool DDARing::PauseMoves(MovementState& ms) noexcept
 	while (dda != savedDdaRingAddPointer);
 
 	return true;
+}
+
+// Make the move 'startDda' and if necessary some following moves decelerate to a stop.
+// Return the first move we are not going to execute, which may be the same as stopBeforeDda.
+// When pausing we don't try to use 3rd order motion control.
+// This is called with the step interrupt locked out, so keep it fast!
+// This implementation does not leave any move segments partially executed.
+DDA *DDARing::MakeDeceleratingChain(DDA *startDda, const DDA *stopBeforeDda) noexcept
+{
+	// Find the first move by the end of which maximum deceleration from the entry speed reaches a standstill.
+	// The last queued move always ends at standstill, so running out of moves can only be due to rounding error.
+	DDA *stopAfterDda = startDda;
+	float speed = startDda->GetStartSpeed();
+	for (;;)
+	{
+		const float endSpeedSquared = fsquare(speed) - 2 * stopAfterDda->GetMaxAcceleration() * stopAfterDda->GetTotalDistance();
+		const DDA *const nextDda = stopAfterDda->GetNext();
+		if (endSpeedSquared <= 0.0 || stopAfterDda->GetEndSpeed() <= 0.0 || nextDda == stopBeforeDda)
+		{
+			break;
+		}
+		speed = min<float>(fastSqrtf(endSpeedSquared), stopAfterDda->GetEndSpeed()) * nextDda->GetStartSpeed() / stopAfterDda->GetEndSpeed();
+		stopAfterDda = stopAfterDda->GetNext();
+	}
+
+	// Working backwards, cap the planned speeds by the envelope that stops at the end of stopAfterDda.
+	// The minimum of two feasible profiles is feasible, so the planned junction speeds keep the jerk limits intact.
+	// Speeds either side of a junction are scaled by the same factor to preserve the start speed ratio needed for extrusion.
+	// The entry speed of startDda is fixed because the previous move has been committed.
+	float endSpeedScale = 0.0;
+	DDA *dda = stopAfterDda;
+	for (;;)
+	{
+		const float newEndSpeed = dda->GetEndSpeed() * endSpeedScale;
+		const float maxStartSpeed = fastSqrtf(fsquare(newEndSpeed) + 2 * dda->GetMaxAcceleration() * dda->GetTotalDistance());
+		const float startSpeedScale = (dda == startDda || dda->GetStartSpeed() <= maxStartSpeed) ? 1.0 : maxStartSpeed / dda->GetStartSpeed();
+		dda->SetPauseSpeeds(*this, dda->GetStartSpeed() * startSpeedScale, newEndSpeed);
+		if (dda == startDda)
+		{
+			break;
+		}
+		endSpeedScale = startSpeedScale;
+		dda = dda->GetPrevious();
+	}
+	return stopAfterDda->GetNext();
 }
 
 #if HAS_VOLTAGE_MONITOR || HAS_STALL_DETECT
@@ -828,6 +918,7 @@ uint32_t DDARing::ManageIOBitsAndFeedForward(Platform& platform) noexcept
 #endif
 
 	bool setFeedForward = false;
+	bool ffNonPrintingMove = false;
 	uint32_t nextWakeupDelay = StepClockRate;
 	const Tool *_ecv_null feedForwardTool = nullptr;
 	float feedForwardAverageExtrusionSpeed = 0.0;
@@ -846,13 +937,14 @@ uint32_t DDARing::ManageIOBitsAndFeedForward(Platform& platform) noexcept
 #if SUPPORT_IOBITS
 			if (bitsLeftToDo & IoBitsBit)
 			{
-				if (timeToMoveStart > (int32_t)pc.GetAdvanceClocks())								// if the move hasn't started yet and we are not within the advance time
+				const int32_t advanceClocks = (int32_t)pc.GetAdvanceClocks();
+				if (timeToMoveStart > advanceClocks)												// if the move hasn't started yet and we are not within the advance time
 				{
 					pc.UpdatePorts(0);																// no move active so turn off all IOBITS ports
-					nextWakeupDelay = min<uint32_t>(nextWakeupDelay, (uint32_t)timeToMoveStart - pc.GetAdvanceClocks());	// wake up again when we need to
+					nextWakeupDelay = min<uint32_t>(nextWakeupDelay, (uint32_t)timeToMoveStart - advanceClocks);	// wake up again when we need to
 					bitsLeftToDo &= ~IoBitsBit;
 				}
-				else if (timeToMoveStart <= (int32_t)pc.GetAdvanceClocks() && timeToMoveEnd > (int32_t)pc.GetAdvanceClocks())
+				else if (timeToMoveStart <= advanceClocks && timeToMoveEnd > advanceClocks)
 				{
 					// This move is current from the perspective of IOBits
 					if (!cdda->HaveDoneIoBits())
@@ -860,17 +952,21 @@ uint32_t DDARing::ManageIOBitsAndFeedForward(Platform& platform) noexcept
 						pc.UpdatePorts(cdda->GetIoBits());
 						cdda->SetDoneIoBits();
 					}
-					nextWakeupDelay = min<uint32_t>(nextWakeupDelay, (uint32_t)timeToMoveEnd - pc.GetAdvanceClocks());
+					nextWakeupDelay = min<uint32_t>(nextWakeupDelay, (uint32_t)timeToMoveEnd - advanceClocks);
 					bitsLeftToDo &= ~IoBitsBit;
 				}
 			}
 #endif
 			if (bitsLeftToDo & FeedForwardBit)
 			{
-				feedForwardTool = cdda->GetTool();
+				const Tool *_ecv_null ffTool = cdda->GetTool();
 				// Even if there is no current tool we still need to cancel any previous feedforward temperature boost and get ready to wake up when the move ends
-				const int32_t advanceClocks = (feedForwardTool == nullptr) ? 0 : (int32_t)feedForwardTool->GetFeedForwardAdvanceClocks();
-				if (timeToMoveStart < advanceClocks && timeToMoveEnd > advanceClocks)
+				const int32_t advanceClocks = (ffTool == nullptr) ? 0 : (int32_t)ffTool->GetFeedForwardAdvanceClocks();
+				if (timeToMoveStart > advanceClocks)												// if the move hasn't started yet and we are not within the advance time
+				{
+					nextWakeupDelay = min<uint32_t>(nextWakeupDelay, (uint32_t)timeToMoveStart - advanceClocks);	// wake up again when we need to
+				}
+				else if (timeToMoveStart < advanceClocks && timeToMoveEnd > advanceClocks)
 				{
 					// This move is current from the perspective of feedforward
 					if (!cdda->HaveDoneFeedForward())
@@ -878,8 +974,10 @@ uint32_t DDARing::ManageIOBitsAndFeedForward(Platform& platform) noexcept
 						// Don't set feedforward here because we have set a very high base priority and we may need to send CAN messages. Just record that we need to set it.
 						cdda->SetDoneFeedForward();
 						feedForwardAverageExtrusionSpeed = cdda->GetAverageExtrusionSpeed();
+						ffNonPrintingMove = cdda->IsNonPrintingExtruderMove();
 						setFeedForward = true;
 					}
+					feedForwardTool = ffTool;
 					nextWakeupDelay = min<uint32_t>(nextWakeupDelay, (uint32_t)timeToMoveEnd - advanceClocks);
 					bitsLeftToDo &= ~FeedForwardBit;
 				}
@@ -942,7 +1040,7 @@ uint32_t DDARing::ManageIOBitsAndFeedForward(Platform& platform) noexcept
 	{
 		if (feedForwardTool != lastFeedForwardTool || fabsf(feedForwardAverageExtrusionSpeed - lastAverageExtrusionSpeed) > lastAverageExtrusionSpeed * 0.05)
 		{
-			feedForwardTool->ApplyExtrusionFeedForward(feedForwardAverageExtrusionSpeed);
+			feedForwardTool->ApplyExtrusionFeedForward(feedForwardAverageExtrusionSpeed, ffNonPrintingMove);
 			lastFeedForwardTool = feedForwardTool;
 			lastAverageExtrusionSpeed = feedForwardAverageExtrusionSpeed;
 		}

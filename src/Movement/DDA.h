@@ -161,6 +161,7 @@ public:
 #endif
 	float GetVirtualExtruderPosition() const noexcept { return virtualExtruderPosition; }
 	float GetTotalExtrusionRate() const noexcept;
+	void AdjustExtrusion(size_t drive, float  multiplier, float maxDv) noexcept;
 
 #if SUPPORT_3RD_ORDER
 	bool IsSCurveMove() const noexcept { return flags.useScurve; }
@@ -190,7 +191,7 @@ public:
 	uint32_t GetMoveStartTime() const noexcept { return afterPrepare.moveStartTime; }
 	uint32_t GetMoveFinishTime() const noexcept { return afterPrepare.moveStartTime + clocksNeeded; }
 
-	float GetAverageExtrusionSpeed() const noexcept pre(IsCommitted()) { return afterPrepare.averageExtrusionSpeed; }
+	float GetAverageExtrusionSpeed() const noexcept pre(IsCommitted()) { return afterPrepare.averageExtrusionSpeed; }	// result is in mm/sec and applies to any forward extrusion, even extruder-only moves
 	bool HasForwardExtrusion() const noexcept { return flags.hasForwardExtrusion; }
 	bool HaveDoneIoBits() const noexcept { return flags.doneIoBits; }
 	bool HaveDoneFeedForward() const noexcept { return flags.doneFeedForward; }
@@ -198,6 +199,12 @@ public:
 	void SetDoneIoBits() noexcept { flags.doneIoBits = true; }
 	void SetDoneFeedForward() noexcept { flags.doneFeedForward = true; }
 	void SetDoneOutputOnExtrude() noexcept { flags.doneOutputOnExtrude = true; }
+
+	// Methods to support fast pause/feed hold
+	float GetStartSpeed() const noexcept { return startSpeed; }
+	float GetEndSpeed() const noexcept { return endSpeed; }
+	float GetMaxAcceleration() const noexcept { return maxAcceleration; }
+	void SetPauseSpeeds(DDARing& ring, float newStartSpeed, float newEndSpeed) noexcept;
 
 #if SUPPORT_LASER || SUPPORT_IOBITS
 	LaserPwmOrIoBits GetLaserPwmOrIoBits() const noexcept { return laserPwmOrIoBits; }
@@ -346,7 +353,7 @@ private:
 		struct
 		{
 			// These are used for reporting the current move parameters in the object model
-			float peakAcceleration, peakDeceleration;
+			float peakAcceleration, peakDeceleration;	// peak acceleration and deceleration, both positive
 
 			// These are calculated from the above and used in the ISR, so they are set up by Prepare()
 			uint32_t moveStartTime;					// clock count at which the move is due to start (before execution) or was started (during execution)
@@ -362,9 +369,10 @@ private:
 #endif
 };
 
+// Check whether we can pause after a move, assuming that the following move hasn't been committed yet
 inline bool DDA::CanPauseAfter() const noexcept
 {
-	return flags.canPauseAfter && !next->IsCommitted();		// we can't easily cancel moves that have already been sent to CAN expansion boards
+	return flags.canPauseAfter;
 }
 
 inline bool DDA::IsProvisional() const noexcept
