@@ -257,6 +257,7 @@ constexpr uint32_t CHOPCONF_DISS2G = 1 << 30;				// disable short to ground prot
 constexpr uint32_t CHOPCONF_DISS2VS = 1 << 31;				// disable low side short protection
 
 constexpr uint32_t DefaultChopConfReg = 0x00000053 | CHOPCONF_VSENSE_HIGH;	// this is the reset default + CHOPCONF_VSENSE_HIGH - CHOPCONF_INTPOL. Try it until we find something better.
+constexpr uint32_t UserSettableChopConfBits_2209 = CHOPCONF_TBL_MASK | CHOPCONF_HSTRT_MASK | CHOPCONF_HEND_MASK | CHOPCONF_TOFF_MASK;
 
 // DRV_STATUS register
 constexpr uint8_t REGNUM_DRV_STATUS = 0x6F;
@@ -888,7 +889,7 @@ uint32_t Tmc22xxDriverState::GetRegister(SmartDriverRegister reg) const noexcept
 	switch(reg)
 	{
 	case SmartDriverRegister::chopperControl:
-		return configuredChopConfReg & 0x01FFFF;
+		return configuredChopConfReg & UserSettableChopConfBits_2209;
 
 	case SmartDriverRegister::toff:
 		return (configuredChopConfReg & CHOPCONF_TOFF_MASK) >> CHOPCONF_TOFF_SHIFT;
@@ -980,7 +981,7 @@ bool Tmc22xxDriverState::SetChopConf(uint32_t newVal) noexcept
 	{
 		return false;
 	}
-	const uint32_t userMask = CHOPCONF_TBL_MASK | CHOPCONF_HSTRT_MASK | CHOPCONF_HEND_MASK | CHOPCONF_TOFF_MASK;	// mask of bits the user is allowed to change
+	const uint32_t userMask = UserSettableChopConfBits_2209;
 	configuredChopConfReg = (configuredChopConfReg & ~userMask) | (newVal & userMask);
 	UpdateChopConfRegister();
 	return true;

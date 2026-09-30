@@ -455,6 +455,7 @@ GCodeResult Accelerometers::ConfigureAccelerometer(GCodeBuffer& gb, const String
 		auto temp = new LISAccelerometer(Platform::GetSharedSpiDevice(AccelerometerSpiChannel), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin());
 #else
 		auto temp = new LISAccelerometer(Platform::GetSharedSpiDevice(), spiFrequency, spiCsPort.GetPin(), irqPort.GetPin());
+#endif
 		if (!temp->CheckPresent())
 		{
 			delete temp;
