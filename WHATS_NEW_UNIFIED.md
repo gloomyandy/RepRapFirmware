@@ -1,4 +1,8 @@
-Vesrsion 3.7.0-rc.1
+Version 3.7.0-rc.2
+===================
+* Duet3d 3.7.0-rc.2
+
+Version 3.7.0-rc.1
 ===================
 * Duet3d 3.7.0-rc.1
 * Introduced new build options to avoid clash with Duet3D stm32 code
