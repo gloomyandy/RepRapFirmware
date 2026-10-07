@@ -109,8 +109,6 @@ private:
 	volatile bool restartRequested;
 #endif
 
-	uint32_t iapRamAvailable;											// must be at least 32Kb otherwise the SPI IAP can't work
-
 #if SUPPORTS_SBC_OVER_USB
 	SerialCDC *pendingUsbDevice;										// set from main task, read from SBC task
 	unsigned int usbDeviceIndex;										// index of the USB device used for SBC mode (for reinit on disconnect)

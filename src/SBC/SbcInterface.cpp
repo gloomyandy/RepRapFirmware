@@ -32,8 +32,6 @@
 #endif
 #include <AppNotifyIndices.h>
 
-extern char _estack;		// defined by the linker
-
 // This function is not used in this class
 const ObjectModelClassDescriptor *SbcInterface::GetObjectModelClassDescriptor() const noexcept { return nullptr; }
 
@@ -79,7 +77,6 @@ SbcInterface::SbcInterface() noexcept : isConnected(false), numDisconnects(0), n
 	gcodeReplyMutex.Create("SBCReply");
 	codeBuffer = (char *)new uint32_t[(SbcCodeBufferSize + 3)/4];
 	sbcTask = new Task<SBCTaskStackWords>();
-	iapRamAvailable = (const char*)&_estack - Tasks::GetHeapTop();
 #endif
 }
 
@@ -111,7 +108,6 @@ void SbcInterface::Init() noexcept
 	transfer.Init();
 	sbcTask = new Task<SBCTaskStackWords>();
 	sbcTask->Create(SBCTaskStart, "SBC", nullptr, TaskPriority::SbcPriority);
-	iapRamAvailable = (const char*)&_estack - Tasks::GetHeapTop();
 #endif
 }
 
@@ -1757,7 +1753,7 @@ void SbcInterface::Diagnostics(const StringRef& reply) noexcept
 	{
 		reply.lcat("Not connected");
 	}
-	reply.lcatf("State: %d, disconnects: %" PRIu32 ", timeouts: %" PRIu32 " total, %" PRIu32 " by SBC, IAP RAM available 0x%05" PRIx32, (int)state, numDisconnects, numTimeouts, numSbcTimeouts, iapRamAvailable);
+	reply.lcatf("State: %d, disconnects: %" PRIu32 ", timeouts: %" PRIu32 " total, %" PRIu32 " by SBC", (int)state, numDisconnects, numTimeouts, numSbcTimeouts);
 	reply.lcatf("Buffer RX/TX: %d/%d-%d, open files: %u", (int)rxPointer, (int)txPointer, (int)txEnd, numOpenFiles);
 #ifdef TRACK_FILE_CODES
 	reply.lcatf("File codes read/handled: %d/%d, file macros open/closing: %d %d", (int)fileCodesRead, (int)fileCodesHandled, (int)fileMacrosRunning, (int)fileMacrosClosing);
