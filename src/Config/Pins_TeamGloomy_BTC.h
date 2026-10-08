@@ -1,5 +1,5 @@
-#ifndef PINS_STM32_H__
-#define PINS_STM32_H__
+#ifndef PINS_TGBTC_H__
+#define PINS_TGBTC_H__
 #include "Core.h"
 #include "sd_mmc.h"
 #include "NVMEmulation.h"

@@ -58,7 +58,7 @@ const char memPattern = (char)0xA5;		// this must be the same pattern as FreeRTO
 #include <syscalls.h>
 
 // Define the system stack. The stack doesn't actually live here, instead the linker script uses this section to define the stack start and end symbols.
-uint32_t dummySystemStack[SystemStackSize] __attribute__ ((section (".stack")));
+uint32_t dummySystemStack[SystemStackSize] __attribute__ ((section (".stack"), used));
 
 // MAIN task data
 // The main task currently runs GCodes, so it needs to be large enough to hold the matrices used for delta auto calibration.
