@@ -2829,14 +2829,14 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 						const float extrusionFactor = gb.GetPositiveFValue() * 0.01;
 						if (extrusionFactor >= 0.01)
 						{
-							const bool isFileChannel = gb.IsFileChannel();
+							const bool immediate = !gb.IsFileChannel();			// a change from a file must not alter moves queued before it
 							if (seenD)
 							{
-								ChangeExtrusionFactor(extruder, extrusionFactor, isFileChannel);
+								ChangeExtrusionFactor(extruder, extrusionFactor, immediate);
 							}
 							else
 							{
-								ct->IterateExtruders([this, extrusionFactor, isFileChannel](unsigned int extr) { ChangeExtrusionFactor(extr, extrusionFactor, isFileChannel); });
+								ct->IterateExtruders([this, extrusionFactor, immediate](unsigned int extr) { ChangeExtrusionFactor(extr, extrusionFactor, immediate); });
 							}
 						}
 					}
@@ -4142,11 +4142,11 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					Move& move = reprap.GetMove();
 
 					bool changedMode = false;
-					if ((gb.Seen('L') || gb.Seen('D')) && move.GetKinematics().GetKinematicsType() != KinematicsType::linearDelta)
+					if ((gb.Seen('L') || gb.Seen('D')) && move.GetKinematics().GetLegacyType() != KinematicsType::linearDelta)
 					{
 						// Not in delta mode, so switch to it
 						changedMode = true;
-						move.SetKinematics(KinematicsType::linearDelta);
+						move.SetKinematics(nullptr, (int)KinematicsType::linearDelta);
 					}
 					bool error = false;
 					const bool changed = move.GetKinematics().Configure(code, gb, reply, error);
@@ -4191,21 +4191,43 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					return false;
 				}
 				{
-					Move& move = reprap.GetMove();
-					const KinematicsType oldK = move.GetKinematics().GetKinematicsType();		// get the current kinematics type so we can tell whether it changed
-
 					bool seen = false;
+					bool kinematicsChanged = false;
+					Move& move = reprap.GetMove();
+
+					// Try to get the requested kinematics from the K parameter
+					uint32_t kn = (uint32_t)-1;
+					String<StringLength50> ks;
 					if (gb.Seen('K'))
 					{
-						const unsigned int nk = gb.GetUIValue();
-						if (nk >= (unsigned int)KinematicsType::unknown || !move.SetKinematics(static_cast<KinematicsType>(nk)))
+						bool ok = false;
+						if (gb.GetStringOrUIValue(kn, ks.GetRef()))				// if string value found
 						{
-							reply.printf("Unknown kinematics type %d", nk);
+							ok = true;
+							kinematicsChanged = !ReducedStringEquals(ks.c_str(), move.GetKinematics().GetName());
+						}
+						else 													// else unsigned value found
+						{
+							ok = true;
+							kinematicsChanged = (kn != (int32_t)move.GetKinematics().GetLegacyType().ToBaseType());
+						}
+
+						if (kinematicsChanged)
+						{
+							ok = move.SetKinematics(ks.c_str(), kn);
+						}
+
+						if (!ok)
+						{
+							reply.copy("Unknown kinematics type");
 							result = GCodeResult::error;
 							break;
 						}
+
 						seen = true;
 					}
+
+					// Now try to configure the parameters of the selected kinematics
 					bool error = false;
 					if (move.GetKinematics().Configure(code, gb, reply, error))
 					{
@@ -4217,7 +4239,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeEx
 					{
 						// We changed something significant, so reset the positions and set all axes not homed
 						SetAllAxesNotHomed();
-						if (move.GetKinematics().GetKinematicsType() != oldK)
+						if (kinematicsChanged)
 						{
 							SetInitialAxisAndDrivePositions();
 						}

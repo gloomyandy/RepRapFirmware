@@ -373,12 +373,12 @@ public:
 
 	// Kinematics and related functions
 	Kinematics &_ecv_from GetKinematics() const noexcept { return *kinematics; }
-	bool SetKinematics(KinematicsType k) noexcept;											// Set kinematics, return true if successful
+	bool SetKinematics(const char *_ecv_array _ecv_null name, int legacyType) noexcept;		// Set kinematics, return true if successful
 	MovementError CartesianToMotorSteps(const float machinePos[MaxAxes], int32_t motorPos[MaxAxes], bool isCoordinated) const noexcept;
 																							// Convert Cartesian coordinates to motor coordinates, return true if successful
 	void MotorStepsToCartesian(const int32_t motorPos[], size_t numVisibleAxes, size_t numTotalAxes, float machinePos[]) const noexcept;
 																							// Convert motor coordinates to machine coordinates
-	const char *_ecv_array GetGeometryString() const noexcept { return kinematics->GetName(true); }
+	const char *_ecv_array GetGeometryString() const noexcept { return kinematics->GetName(); }
 	bool IsAccessibleProbePoint(float axesCoords[MaxAxes], AxesBitmap axes) const noexcept;
 
 	bool IsRawMotorMove(uint8_t moveType) const noexcept;									// Return true if this is a raw motor move
@@ -432,7 +432,7 @@ public:
 	FilePosition GetCurrentMoveFilePosition(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].GetCurrentMoveFilePosition(); }		// Get the file position of the move being executed, or noFilePosition if there is none
 	float GetTotalExtrusionRate(size_t msNumber) const noexcept pre(msNumber < NumMovementSystems) { return rings[msNumber].GetTotalExtrusionRate(); }
 
-	void UpdateLiveMachineCoordinates(float coords[MaxAxes], const Tool *_ecv_null tool) const noexcept;		// Force an update of the live machine coordinates
+	void UpdateLiveMachineCoordinates(float coords[MaxAxesPlusExtruders], const Tool *_ecv_null tool) const noexcept;		// Force an update of the live machine coordinates, extruders included
 
 	void AdjustLeadscrews(const floatc_t corrections[]) noexcept;							// Called by some Kinematics classes to adjust the leadscrews
 

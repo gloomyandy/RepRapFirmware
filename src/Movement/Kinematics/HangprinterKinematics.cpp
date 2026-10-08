@@ -57,15 +57,25 @@ constexpr ObjectModelTableEntry HangprinterKinematics::objectModelTable[] =
 	// Within each group, these entries must be in alphabetical order
 	// 0. kinematics members
 	{ "anchors",		OBJECT_MODEL_FUNC_ARRAY(NumArrayTableEntriesInParents + 1), ObjectModelEntryFlags::none },
-	{ "name",			OBJECT_MODEL_FUNC(self->GetName(true)), 					ObjectModelEntryFlags::none },
 	{ "printRadius",	OBJECT_MODEL_FUNC(self->printRadius, 1), 					ObjectModelEntryFlags::none },
 };
 
-constexpr uint8_t HangprinterKinematics::objectModelTableDescriptor[] = { 1, 3 };
+constexpr uint8_t HangprinterKinematics::objectModelTableDescriptor[] = { 1, 2 };
 
 DEFINE_GET_OBJECT_MODEL_TABLE_WITH_PARENT(HangprinterKinematics, RoundBedKinematics)
 
 // Constructor
+Kinematics::KinematicsTypeDescriptor hangprinterKinematicsDescriptor(HangprinterKinematics::Create);
+
+/*static*/ Kinematics *_ecv_from _ecv_null HangprinterKinematics::Create(const char *_ecv_array _ecv_null name, int legacyNumber) noexcept
+{
+	if (MatchesLegacyType(name, legacyNumber, KinematicsType::hangprinter))
+	{
+		return new HangprinterKinematics();
+	}
+	return nullptr;
+}
+
 HangprinterKinematics::HangprinterKinematics() noexcept
 	: RoundBedKinematics(KinematicsType::hangprinter, SegmentationType(true, true, true))
 {
@@ -192,11 +202,6 @@ void HangprinterKinematics::Recalc() noexcept
 	ReadODrive3AxisForce({}, StringRef(nullptr, 0), torqueConstants, mechanicalAdvantage, spoolGearTeeth, motorGearTeeth, spoolRadii);
 	SetODrive3TorqueMode({}, 0.0F, StringRef(nullptr, 0), mechanicalAdvantage, spoolGearTeeth, motorGearTeeth, spoolRadii);
 #endif
-}
-
-const char *_ecv_array HangprinterKinematics::GetName(bool forStatusReport) const noexcept
-{
-    return "Hangprinter";
 }
 
 // Set the parameters from a M665, M666 or M669 command
@@ -587,47 +592,50 @@ HangprinterKinematics::SolverResult HangprinterKinematics::SolveHybrid(
 		float residuals[HANGPRINTER_MAX_ANCHORS] = { 0.0F };
 		float J[HANGPRINTER_MAX_ANCHORS][3];
 		float H[HANGPRINTER_MAX_ANCHORS][3][3];
-		result.cost =
-		    ResidualsAndDerivatives(linePositions, result.pos, residuals, J, H);
-
-		float JTJ[3][3];
-		float grad[3];
-		AccumulateJtJandGrad(J, residuals, JTJ, grad);
-		JTJ[0][0] += eta;
-		JTJ[1][1] += eta;
-		JTJ[2][2] += eta;
-
-		float deltaLm[3] = { 0.0F };
-		float rhs1[3] = {-grad[0], -grad[1], -grad[2]};
-		if (!solveNormalSystem(JTJ, rhs1, deltaLm)) {
-			break;
-		}
-
-		float Hbar[HANGPRINTER_MAX_ANCHORS][3];
-		for (size_t i = 0; i < numAnchors; ++i) {
-			Hbar[i][0] = deltaLm[0] * H[i][0][0] + deltaLm[1] * H[i][1][0] + deltaLm[2] * H[i][2][0];
-			Hbar[i][1] = deltaLm[0] * H[i][0][1] + deltaLm[1] * H[i][1][1] + deltaLm[2] * H[i][2][1];
-			Hbar[i][2] = deltaLm[0] * H[i][0][2] + deltaLm[1] * H[i][1][2] + deltaLm[2] * H[i][2][2];
-		}
+		result.cost = ResidualsAndDerivatives(linePositions, result.pos, residuals, J, H);
 
 		float Jbar[HANGPRINTER_MAX_ANCHORS][3];
-		for (size_t i = 0; i < numAnchors; ++i) {
-			Jbar[i][0] = J[i][0] + 0.5F * Hbar[i][0];
-			Jbar[i][1] = J[i][1] + 0.5F * Hbar[i][1];
-			Jbar[i][2] = J[i][2] + 0.5F * Hbar[i][2];
+		{
+			float JTJ[3][3];
+			float grad[3];
+			AccumulateJtJandGrad(J, residuals, JTJ, grad);
+			JTJ[0][0] += eta;
+			JTJ[1][1] += eta;
+			JTJ[2][2] += eta;
+
+			float deltaLm[3] = { 0.0F };
+			float rhs1[3] = {-grad[0], -grad[1], -grad[2]};
+			if (!solveNormalSystem(JTJ, rhs1, deltaLm)) {
+				break;
+			}
+
+			float Hbar[HANGPRINTER_MAX_ANCHORS][3];
+			for (size_t i = 0; i < numAnchors; ++i) {
+				Hbar[i][0] = deltaLm[0] * H[i][0][0] + deltaLm[1] * H[i][1][0] + deltaLm[2] * H[i][2][0];
+				Hbar[i][1] = deltaLm[0] * H[i][0][1] + deltaLm[1] * H[i][1][1] + deltaLm[2] * H[i][2][1];
+				Hbar[i][2] = deltaLm[0] * H[i][0][2] + deltaLm[1] * H[i][1][2] + deltaLm[2] * H[i][2][2];
+			}
+
+			for (size_t i = 0; i < numAnchors; ++i) {
+				Jbar[i][0] = J[i][0] + 0.5F * Hbar[i][0];
+				Jbar[i][1] = J[i][1] + 0.5F * Hbar[i][1];
+				Jbar[i][2] = J[i][2] + 0.5F * Hbar[i][2];
+			}
 		}
 
-		float JTJ2[3][3];
-		float grad2[3];
-		AccumulateJtJandGrad(Jbar, residuals, JTJ2, grad2);
-		JTJ2[0][0] += eta;
-		JTJ2[1][1] += eta;
-		JTJ2[2][2] += eta;
-
 		float delta[3] = { 0.0F };
-		float rhs2[3] = {-grad2[0], -grad2[1], -grad2[2]};
-		if (!solveNormalSystem(JTJ2, rhs2, delta)) {
-			break;
+		{
+			float JTJ2[3][3];
+			float grad2[3];
+			AccumulateJtJandGrad(Jbar, residuals, JTJ2, grad2);
+			JTJ2[0][0] += eta;
+			JTJ2[1][1] += eta;
+			JTJ2[2][2] += eta;
+
+			float rhs2[3] = {-grad2[0], -grad2[1], -grad2[2]};
+			if (!solveNormalSystem(JTJ2, rhs2, delta)) {
+				break;
+			}
 		}
 
 		result.pos[0] = result.pos[0] + delta[0];
@@ -643,8 +651,7 @@ HangprinterKinematics::SolverResult HangprinterKinematics::SolveHybrid(
 	for (; iter < maxIters && !result.converged; ++iter) {
 		float residuals[HANGPRINTER_MAX_ANCHORS] = { 0.0F };
 		float J[HANGPRINTER_MAX_ANCHORS][3];
-		result.cost =
-		    ResidualsAndDerivatives(linePositions, result.pos, residuals, J, nullptr);
+		result.cost = ResidualsAndDerivatives(linePositions, result.pos, residuals, J, nullptr);
 
 		float JTJ[3][3];
 		float grad[3];
@@ -669,10 +676,11 @@ HangprinterKinematics::SolverResult HangprinterKinematics::SolveHybrid(
 		}
 	}
 
-	float residuals[HANGPRINTER_MAX_ANCHORS] = { 0.0F };
-	float Jtmp[HANGPRINTER_MAX_ANCHORS][3];
-	result.cost =
-	    ResidualsAndDerivatives(linePositions, result.pos, residuals, Jtmp, nullptr);
+	{
+		float residuals[HANGPRINTER_MAX_ANCHORS] = { 0.0F };
+		float Jtmp[HANGPRINTER_MAX_ANCHORS][3];
+		result.cost = ResidualsAndDerivatives(linePositions, result.pos, residuals, Jtmp, nullptr);
+	}
 	return result;
 }
 

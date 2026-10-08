@@ -406,7 +406,11 @@ bool GCodes::RunConfigFile(const char *_ecv_array fileName, bool isMainConfigFil
 // Return true if the trigger G-code buffer is busy running config.g or a trigger file
 bool GCodes::IsTriggerBusy() const noexcept
 {
-	return TriggerGCode()->IsDoingFile();
+	return TriggerGCode()->IsDoingFile()
+#if HAS_SBC_INTERFACE
+			|| TriggerGCode()->IsAbortRequested()		// DSF keeps the aborted file on its stack until the abort has been sent
+#endif
+		;
 }
 
 // Copy the feed rate etc. from the channel that was running config.g to the input channels
@@ -435,6 +439,13 @@ void GCodes::Spin() noexcept
 	if (!active)
 	{
 		return;
+	}
+
+	// Keep the reported machine coordinates up to date here, so that object model and status requests served by other tasks
+	// never run the kinematics transform on their own stacks
+	for (MovementState& ms : moveStates)
+	{
+		ms.RefreshMachineCoordinates();
 	}
 
 #if NUM_ASYNC_CHANNELS != 0
@@ -1898,6 +1909,7 @@ bool GCodes::LockMovementSystemAndWaitForStandstill(GCodeBuffer& gb, MovementSys
 	}
 
 	gb.MotionStopped();									// must do this after we have finished waiting, so that we don't stop waiting when executing G4
+	ms.RefreshMachineCoordinates(true);					// the coordinates reported at standstill must be exact, not up to MachineCoordinateRefreshMillis old
 
 	// Re-read the position from the motors only if the last move could have stopped short of its commanded target
 	// (endstop/probe/stall/raw move) or was a special move that bypassed the user position (probing state machines,
@@ -2379,7 +2391,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 		if (gb.Seen(axisLetters[axis]))
 		{
 			// If it is a special move on a delta, movement must be relative.
-			if (ms.raw.moveType != 0 && !gb.LatestMachineState().axesRelative && move.GetKinematics().GetKinematicsType() == KinematicsType::linearDelta)
+			if (ms.raw.moveType != 0 && !gb.LatestMachineState().axesRelative && move.GetKinematics().GetLegacyType() == KinematicsType::linearDelta)
 			{
 				gb.ThrowGCodeException("attempt to move individual motors of a delta machine to absolute positions");
 			}
@@ -5393,6 +5405,8 @@ bool GCodes::LockResource(const GCodeBuffer& gb, Resource r) noexcept
 	{
 		return true;
 	}
+
+	TaskCriticalSectionLocker lock;						// the SBC task locks resources too (LockMovementAndWaitForStandstill), so check and claim in one step
 	if (resourceOwners[r] == nullptr)
 	{
 		resourceOwners[r] = &gb;
