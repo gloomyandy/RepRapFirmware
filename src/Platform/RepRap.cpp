@@ -2346,17 +2346,23 @@ void RepRap::StartIap(c_string _ecv_null filename) noexcept
 
 #if TGBTC && HAS_SBC_INTERFACE
 	{
-		// TODO: handle SBC in USB mode
 		// We need to pass details of how to talk to the SBC to the IAP
 		const uint32_t topOfStack = *reinterpret_cast<uint32_t *>(IAP_IMAGE_START);
 		SBCIAPParams* paramsPtr = reinterpret_cast<SBCIAPParams*>(topOfStack);
 		paramsPtr->sig1 = SBCIAPParamSig;
-		paramsPtr->dev = SbcSpiChannel;
-		paramsPtr->clk = SPIPins[SbcSpiChannel][0];
-		paramsPtr->miso = SPIPins[SbcSpiChannel][1];
-		paramsPtr->mosi = SPIPins[SbcSpiChannel][2];
-		paramsPtr->cs = SbcCsPin;
-		paramsPtr->tfrRdy = SbcTfrReadyPin;
+		if (sbcInterface->GetDataTransfer().GetTransportType() == SbcTransportType::usb)
+		{
+			paramsPtr->dev = SSPChannel::SSPNONE;
+		}
+		else
+		{
+			paramsPtr->dev = SbcSpiChannel;
+			paramsPtr->clk = SPIPins[SbcSpiChannel][0];
+			paramsPtr->miso = SPIPins[SbcSpiChannel][1];
+			paramsPtr->mosi = SPIPins[SbcSpiChannel][2];
+			paramsPtr->cs = SbcCsPin;
+			paramsPtr->tfrRdy = SbcTfrReadyPin;
+		}
 		paramsPtr->sig2 = SBCIAPParamSig;
 	}
 #else
