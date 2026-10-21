@@ -1,3 +1,8 @@
+Version 3.7.0+1
+===================
+* Duet3d 3.7.0+1
+* Added IAP support for SBC USB updates
+
 Version 3.7.0
 ===================
 * Duet3d 3.7.0
