@@ -367,20 +367,14 @@ void CanInterface::Init() noexcept
 	transactionMutex.Create("CanTrans");
 
 #if SAME70
-	SetPinFunction(APIN_CAN1_TX, CAN1TXPinPeriphMode);
-	SetPinFunction(APIN_CAN1_RX, CAN1RXPinPeriphMode);
-# if DUAL_CAN
-	SetPinFunction(APIN_CAN0_TX, CAN0PinPeriphMode);
-	SetPinFunction(APIN_CAN0_RX, CAN0PinPeriphMode);
-# endif
+	SetPinFunction(PrimaryCanParams.txPin, PrimaryCanParams.txPinFunction);
+	SetPinFunction(PrimaryCanParams.rxPin, PrimaryCanParams.rxPinFunction);
 	pmc_enable_upll_clock();			// configure_mcan sets up PCLK5 to be the UPLL divided by something, so make sure the UPLL is running
-#elif SAME5x
-	SetPinFunction(CanRxPin, CanPinsMode);
-	SetPinFunction(CanTxPin, CanPinsMode);
 #elif TGBTC && STM32
 	// pin initialisation is handled in CoreN2G
 #else
-# error Unsupported MCU
+	SetPinFunction(PrimaryCanParams.txPin, PrimaryCanParams.pinsFunction);
+	SetPinFunction(PrimaryCanParams.rxPin, PrimaryCanParams.pinsFunction);
 #endif
 
 	// Initialise the CAN hardware
@@ -395,7 +389,13 @@ void CanInterface::Init() noexcept
 	if (can0dev == nullptr) return;
 	CanMessageBuffer::Init(NumCanBuffers);
 #else
-	can0dev = CanDevice::Init(0, CanDeviceNumber, Can0Config, can0Memory, timing, nullptr);
+	can0dev = CanDevice::Init(0, PrimaryCanParams.instanceNumber, Can0Config, can0Memory, timing, nullptr,
+#if EXTERNAL_CAN_TIMESTAMP_COUNTER
+								nullptr
+#else
+								StepTimer::CanTimingMessageReceived
+#endif
+							 );
 #endif
 	InitReceiveFilters();
 	can0dev->Enable();
@@ -408,8 +408,15 @@ void CanInterface::Init() noexcept
 	canReceiverTask.Create(CanReceiverLoop, "CanReceiver", nullptr, TaskPriority::CanReceiverPriority);
 
 #if DUAL_CAN
+# if SAME70
+	SetPinFunction(SecondaryCanParams.txPin, SecondaryCanParams.txPinFunction);
+	SetPinFunction(SecondaryCanParams.rxPin, SecondaryCanParams.rxPinFunction);
+# else
+	SetPinFunction(SecondaryCanParams.txPin, SecondaryCanParams.pinsFunction);
+	SetPinFunction(SecondaryCanParams.rxPin, SecondaryCanParams.pinsFunction);
+# endif
 	timing.SetDefaults(250'000);
-	can1dev = CanDevice::Init(1, SecondaryCanDeviceNumber, Can1Config, can1Memory, timing, nullptr);
+	can1dev = CanDevice::Init(1, SecondaryCanParams.instanceNumber, Can1Config, can1Memory, timing, nullptr, nullptr);
 	can1dev->SetShortFilterElement(0, CanDevice::RxBufferNumber::fifo0, 0, 0);			// set up a filter to receive all messages in FIFO 0
 	can1dev->SetExtendedFilterElement(0, CanDevice::RxBufferNumber::fifo0, 0, 0);
 	can1dev->Enable();
@@ -619,7 +626,7 @@ uint16_t CanInterface::GetTimeStampCounter() noexcept
 }
 #endif
 
-#if !SAME70
+#if !EXTERNAL_CAN_TIMESTAMP_COUNTER
 
 uint16_t CanInterface::GetTimeStampPeriod() noexcept
 {
@@ -1997,7 +2004,7 @@ GCodeResult CanInterface::EnableCan(GCodeBuffer& gb, const StringRef& reply) THR
 	}
 
 #if SUPPORT_BRS
-	uint32_t bitRateMultiplier;
+	uint32_t bitRateMultiplier = fastDataRate + 1;
 	if (gb.TryGetLimitedUIValue('R', bitRateMultiplier, seen, 9))
 	{
 		if (bitRateMultiplier == 0 || bitRateMultiplier == 5 || bitRateMultiplier == 7)
@@ -2067,7 +2074,7 @@ void CanInterface::ReportCanTiming(const StringRef& reply) noexcept
 
 #if SUPPORT_REMOTE_COMMANDS
 
-// Check that the BRS setting we are using matches the one n the time sync message and change it if necessary
+// Check that the BRS setting we are using matches the one in the time sync message and change it if necessary
 void CanInterface::CheckBrs(const CanMessageTimeSync& msg) noexcept
 {
 	if (msg.fastDataRate != fastDataRate || msg.tseg1Minus1 != dTseg1MinusOne)

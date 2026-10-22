@@ -52,12 +52,20 @@ int32_t StepTimer::peakPosJitter = 0;
 int32_t StepTimer::peakNegJitter = 0;
 int32_t StepTimer::errorAccumulator = 0;
 bool StepTimer::gotJitter = false;
-uint32_t StepTimer::peakReceiveDelay = 0;
+uint32_t StepTimer::maxReceiveDelay = 0;
+uint32_t StepTimer::minReceiveDelay;
 volatile unsigned int StepTimer::syncCount = 0;
 unsigned int StepTimer::numJitterResyncs = 0;
 unsigned int StepTimer::numTimeoutResyncs = 0;
 
+# if !EXTERNAL_CAN_TIMESTAMP_COUNTER
+// Values captured when the most recent message was received into dedicated receive buffer 0
+uint16_t StepTimer::lastTimeSyncMessageStamp;
+uint16_t StepTimer::lastCurrentTimeStamp;
+uint32_t StepTimer::lastStepTime;
 #endif
+
+# endif
 
 void StepTimer::Init() noexcept
 {
@@ -163,6 +171,10 @@ void StepTimer::Init() noexcept
 	tc_get_status(STEP_TC, STEP_TC_CHAN);						// clear any pending interrupt
 	NVIC_SetPriority(STEP_TC_IRQN, NvicPriorityStep);			// set priority for this IRQ
 	NVIC_EnableIRQ(STEP_TC_IRQN);
+#endif
+
+#if SUPPORT_CAN_EXPANSION
+	minReceiveDelay = 0xFFFFFFFF;
 #endif
 }
 
@@ -361,48 +373,49 @@ void StepTimer::DisableTimerInterrupt() noexcept
 	return syncCount == MaxSyncCount;
 }
 
+#if !EXTERNAL_CAN_TIMESTAMP_COUNTER
+
+// This is called when the CAN driver receives a message into dedicated receive buffer 0. Only time sync messages are received into this buffer.
+/*static*/ void StepTimer::CanTimingMessageReceived(uint16_t messageTime, uint16_t currentTimeStamp) noexcept
+{
+	lastTimeSyncMessageStamp = messageTime;
+	lastCurrentTimeStamp = currentTimeStamp;
+	lastStepTime = GetTimerTicksWhenInterruptsDisabled();
+}
+
+#endif
+
 // Process a received time sync message. This is only called when we are in expansion mode.
 /*static*/ void StepTimer::ProcessTimeSyncMessage(const CanMessageTimeSync& msg, size_t msgLen, uint16_t timeStamp) noexcept
 {
 	static uint32_t originalOffset = 0;
 
-#if SAME70 || (TGBTC && STM32H7)
-	// On the SAME70 the timestamp counter is the lower 16 bits of the step counter
-	const uint32_t localTimeNow = StepTimer::GetTimerTicks();
-	const uint32_t timeStampDelay = (uint32_t)((localTimeNow - timeStamp) & 0xFFFF);
-#else
+#if EXTERNAL_CAN_TIMESTAMP_COUNTER
+# if USE_SPICAN
+	// With SPI_CAN we use a timer on the SPI CAN-FD device so we still need to adjust to step clocks
 	uint32_t localTimeNow;
 	uint16_t timeStampNow;
-#if USE_SPICAN
-	{
-		CanInterface::GetTimeStampCounters(timeStampNow, localTimeNow);
-		uint16_t tsCheck1;
-		uint32_t tsCheck2;
-		CanInterface::GetTimeStampCounters(tsCheck1, tsCheck2);
-		if ((int16_t)(tsCheck1 - timeStampNow) < 0)
-		{
-			uint16_t tsCheck3;
-			uint32_t tsCheck4;
-			CanInterface::GetTimeStampCounters(tsCheck3, tsCheck4);
-			debugPrintf("Bad time stamp %u %u %u\n", (unsigned)timeStampNow, (unsigned)tsCheck1, (unsigned)tsCheck3);
-		}
-	}
-#else
-	{
-		AtomicCriticalSectionLocker lock;							// there must be no delay between calling GetTimerTicks and GetTimeStampCounter
-		localTimeNow = StepTimer::GetTimerTicksWhenInterruptsDisabled();
-		timeStampNow = CanInterface::GetTimeStampCounter();
-	}
-#endif
-	// The time stamp counter runs at the CAN normal bit rate, but the step clock runs at 48MHz/64. Calculate the delay to in step clocks.
-	// Datasheet suggests that on the SAMC21 only 15 bits of timestamp counter are readable, but Microchip confirmed this is a documentation error (case 00625843)
+	CanInterface::GetTimeStampCounters(timeStampNow, localTimeNow);
 	const uint32_t timeStampDelay = ((uint32_t)((timeStampNow - timeStamp) & 0xFFFF) * CanInterface::GetTimeStampPeriod()) >> 6;	// timestamp counter is 16 bits
+# else
+	// On other devices the timestamp counter is the lower 16 bits of the step counter
+	const uint32_t localTimeNow = StepTimer::GetTimerTicks();
+	const uint32_t timeStampDelay = (uint32_t)((localTimeNow - timeStamp) & 0xFFFF);
+# endif
+#else
+	if (timeStamp != lastTimeSyncMessageStamp) { return; }
+	const uint32_t timeStampDelay = (((uint32_t)(lastCurrentTimeStamp - timeStamp) & 0x0000FFFF) * (uint32_t)CanInterface::GetTimeStampPeriod()) >> 6;	// timestamp counter is 16 bits
+	const uint32_t localTimeNow = lastStepTime;
 #endif
 
-	// Save the peak timestamp delay for diagnostic purposes
-	if (timeStampDelay > peakReceiveDelay)
+	// Save the min and max receive timestamp delay for diagnostic purposes. Most of the delay represents the time taken to send the message over CAN.
+	if (timeStampDelay > maxReceiveDelay)
 	{
-		peakReceiveDelay = timeStampDelay;
+		maxReceiveDelay = timeStampDelay;
+	}
+	if (timeStampDelay < minReceiveDelay)
+	{
+		minReceiveDelay = timeStampDelay;
 	}
 
 	const uint32_t oldLocalTime = prevLocalTime;					// save the previous values
@@ -672,11 +685,12 @@ void StepTimer::CancelCallback() noexcept
 #if SUPPORT_REMOTE_COMMANDS
 	if (CanInterface::InExpansionMode())
 	{
-		reply.lcatf("Sync err accum %" PRIi32 ", peak jitter %" PRIi32 "/%" PRIi32 ", peak Rx delay %" PRIu32 ", resyncs %u/%u, ",
-						errorAccumulator, peakNegJitter, peakPosJitter, peakReceiveDelay, numTimeoutResyncs, numJitterResyncs);
+		reply.lcatf("Sync err accum %" PRIi32 ", peak jitter %" PRIi32 "/%" PRIi32 ", min/max Rx delay %" PRIu32 "/%" PRIu32 ", resyncs %u/%u, ",
+						errorAccumulator, peakNegJitter, peakPosJitter, minReceiveDelay, maxReceiveDelay, numTimeoutResyncs, numJitterResyncs);
 		gotJitter = false;
 		numTimeoutResyncs = numJitterResyncs = 0;
-		peakReceiveDelay = 0;
+		maxReceiveDelay = 0;
+		minReceiveDelay = 0xFFFFFFFF;
 	}
 #endif
 	const StepTimer *_ecv_null const pst = pendingList;
@@ -714,15 +728,18 @@ void StepTimer::CancelCallback() noexcept
 #if SUPPORT_CAN_EXPANSION
 
 // Handle a request for movement delay received from an expansion board
-void StepTimer::ProcessMovementDelayRequest(uint32_t delayRequested) noexcept
+uint32_t StepTimer::ProcessMovementDelayRequest(uint32_t delayRequested) noexcept
 {
 	AtomicCriticalSectionLocker lock;
 
+	// We must adopt the request even when it is implausible, because every board converges on the largest delay
+	// and disagreeing about the movement timebase would mistime each remote move
 	if (delayRequested > movementDelay)
 	{
 		movementDelay = delayRequested;
 	}
 	ownMovementDelayIncreased = true;						// always set this to ensure that we acknowledge the request
+	return movementDelay;
 }
 
 #endif

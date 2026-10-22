@@ -26,6 +26,7 @@ public:
 
 	void SetParameters(const PressureAdvanceParameters& params) noexcept;
 	void SetParametersSimple(float f) noexcept;
+	void UpdateStepsPerMm(float stepsPerMm) noexcept;
 
 #if SUPPORT_REMOTE_COMMANDS
 	void SetParameters(const ShortPressureAdvanceParameters& params) noexcept;
@@ -33,7 +34,7 @@ public:
 
 	bool IsActive() const noexcept { return k0 != (motioncalc_t)0.0; }
 	motioncalc_t GetPressureAdvanceDistance(motioncalc_t speed) const noexcept;
-	motioncalc_t GetAverageAdvanceClocks(motioncalc_t lowSpeed, motioncalc_t highSpeed, motioncalc_t steps) const noexcept
+	motioncalc_t GetAverageAdvanceClocks(motioncalc_t lowSpeed, motioncalc_t highSpeed, motioncalc_t stepsPerMmMovement) const noexcept
 		pre(highSpeed > lowSpeed);
 
 	void AppendParameters(const StringRef& reply) const noexcept;
@@ -44,12 +45,14 @@ protected:
 private:
 	// Specified parameters
 	motioncalc_t k0;						// the initial pressure advance constant in step clocks
-	motioncalc_t k1;						// the slope of pressure advance distance vs. speed above distance dk
-	motioncalc_t dk;						// the pressure advance distance up to which k0 applies
+	motioncalc_t k1;						// the slope of pressure advance distance vs. speed above distance dk, in step clocks
+	motioncalc_t dk;						// the pressure advance distance up to which k0 applies, in mm
 
 	// Derived parameters
-	motioncalc_t vk;						// the speed up to which k1 applies, equal to dk/k1
-	motioncalc_t d0;						// the distance at which the k2 line intercepts the y-axis
+	motioncalc_t vk;						// the speed up to which k0 applies in mm per step clock, equal to dk/k0
+	motioncalc_t d0;						// the distance at which the k1 line intercepts the y-axis, in mm
+
+	motioncalc_t mmPerStep;					// the reciprocal of steps/mm for this extruder
 };
 
 #endif /* SRC_MOVEMENT_EXTRUDERSHAPER_H_ */

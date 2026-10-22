@@ -518,6 +518,7 @@ void Move::Init() noexcept
 										: (drv == Z_AXIS) ? DefaultZDriveStepsPerUnit
 											: DefaultAxisDriveStepsPerUnit;
 			driveStepsPerMm[drv] = stepsPerMm;
+			dms[drv].extruderShaper.UpdateStepsPerMm(stepsPerMm);
 		}
 	}
 
@@ -966,6 +967,63 @@ bool Move::IsAccessibleProbePoint(float axesCoords[MaxAxes], AxesBitmap axes) co
 	return kinematics->IsReachable(axesCoords, axes);
 }
 
+// Collect the state that tells us why a task got stuck, to be stored in the software reset record.
+// Called from the tick ISR once movement has been stopped, so it must take no locks: DDARing::GetCurrentDDA
+// would assert from an ISR, and it returns nothing once a move is past its nominal duration, which is the very
+// case we are trying to record. The only known way for DDARing::Spin to return zero for ever is a committed
+// move that checks endstops whose drivesMoving still hold segments with nothing on the active list to step them.
+void Move::GetStuckDiagnostics(uint32_t *_ecv_array words) const noexcept
+{
+	static_assert(MaxAxesPlusExtruders <= 32);					// one bit per drive in the bitmaps below
+	uint32_t drivesWithSegments = 0;
+	uint32_t drivesNotIdle = 0;
+	for (size_t drive = 0; drive < MaxAxesPlusExtruders; drive++)
+	{
+		if (dms[drive].MotionPending())
+		{
+			drivesWithSegments |= 1u << drive;
+		}
+		if (dms[drive].state != DMState::idle)
+		{
+			drivesNotIdle |= 1u << drive;
+		}
+	}
+
+	// With async moves the Move task spins every ring, so find the one that is wedged rather than assuming ring 0.
+	// A committed move that is past its finish time but has not expired is a move the retire loop will not take and
+	// that makes Spin return zero for ever. Only a move that checks endstops can be in that state, because for any
+	// other move HasExpired is the same comparison.
+	static_assert(NumMovementSystems <= 2);						// only one bit of the word below records which ring
+	size_t stuckRing = 0;
+	bool foundStuckRing = false;
+	for (size_t ring = 0; ring < NumMovementSystems; ring++)
+	{
+		const DDA *const head = rings[ring].GetHeadDDA();
+		if (head->IsCommitted() && (int32_t)(head->GetMoveFinishTime() - StepTimer::GetMovementTimerTicks()) < 0 && !head->HasExpired())
+		{
+			stuckRing = ring;
+			foundStuckRing = true;
+			break;
+		}
+	}
+
+	// DDA::Free only marks the slot empty, so an unused DDA still holds the previous occupant's flags and
+	// drivesMoving. Record those only once they mean something, otherwise the decode shows stale values
+	const DDA *const cdda = rings[stuckRing].GetHeadDDA();
+	const DDA::DDAState cddaState = cdda->GetState();
+	static_assert(DDA::NumStateBits <= 4);						// the state occupies bits 1 to 4 of word 3
+	words[0] = drivesWithSegments;
+	words[1] = drivesNotIdle;
+	words[2] = cdda->IsCommitted() ? cdda->afterPrepare.drivesMoving.GetRaw() : 0;
+	words[3] = ((activeDMs != nullptr) ? 1u : 0u)
+				| ((uint32_t)cddaState << 1)
+				| ((cddaState == DDA::empty) ? 0u : ((uint32_t)cdda->IsCheckingEndstops() << 5) | ((uint32_t)cdda->IsIsolatedMove() << 6))
+				| (hadStepError ? 1u << 7 : 0u)
+				| ((uint32_t)stuckRing << 8)
+				| (foundStuckRing ? 1u << 9 : 0u);				// without this bit the ring number is just the fallback
+	words[4] = StepTimer::GetMovementDelay();
+}
+
 // Pause the print as soon as we can, returning true if we are able to skip any moves and updating ms.pauseRestorePoint to the first move we skipped.
 bool Move::PausePrint(MovementState& ms) noexcept
 {
@@ -980,10 +1038,52 @@ bool Move::LowPowerOrStallPause(MovementState& ms) noexcept
 	return rings[ms.GetNumber()].LowPowerOrStallPause(ms);
 }
 
-// Stop generating steps
-void Move::CancelStepping() noexcept
+// Stop generating steps, returning true if a remote driver was told to stop and the CAN async sender needs waking.
+// Only a move that checks endstops has a stop list, so for a printing move no remote driver is told anything
+bool Move::CancelStepping(DDA *abandonedMove) noexcept
 {
 	StepTimer::DisableTimerInterrupt();
+
+	// Disabling the interrupt alone would leave the drives holding the segments of the abandoned move with
+	// nothing left to re-arm the timer, so every later wait for standstill would block for ever
+	const bool wakeAsyncSender = StopAllDrivers(true, StepTimer::GetTimerTicks());
+
+	// Move the endpoints of the abandoned move to where the motors actually stopped. Without this the caller
+	// stores a restore point taken from that move's original endpoint, so a resume after power loss starts from
+	// where the move was going rather than where it got to.
+	// Local motors stopped where they are, but the remote ones keep going: CanMotion::FinishMovement runs in
+	// DDA::Prepare, so the remote boards already hold the segments of every committed move after this one and
+	// no stop list exists unless the move checks endstops, so they run on to the last of those.
+	// An axis is either all local or all remote, mixing them is not supported, so one local driver is enough to tell.
+	if (abandonedMove != nullptr)
+	{
+#if SUPPORT_CAN_EXPANSION
+		const DDA *lastCommitted = abandonedMove;
+		while (lastCommitted->GetNext()->IsCommitted())
+		{
+			lastCommitted = lastCommitted->GetNext();
+		}
+#endif
+		const size_t numTotalAxes = reprap.GetGCodes().GetTotalAxes();
+		for (size_t drive = 0; drive < numTotalAxes; drive++)
+		{
+#if SUPPORT_CAN_EXPANSION
+			bool hasLocalDriver = false;
+			IterateDrivers(drive,
+							[&hasLocalDriver](uint8_t) noexcept -> void { hasLocalDriver = true; },
+							[](DriverId) noexcept -> void { }
+						  );
+			if (!hasLocalDriver)
+			{
+				abandonedMove->endPoint[drive] = lastCommitted->endPoint[drive];
+				continue;
+			}
+#endif
+			abandonedMove->endPoint[drive] = dms[drive].currentMotorPosition - GetCurrentBacklashSteps(drive);
+		}
+	}
+
+	return wakeAsyncSender;
 }
 
 #endif
@@ -2069,7 +2169,7 @@ void Move::AddLinearSegments(size_t logicalDrive, uint32_t startTime, const Prep
 	const uint32_t decelStartTime = steadyStartTime + params.steadyClocks;
 #endif
 	const motioncalc_t totalDistance = (motioncalc_t)params.totalDistance;
-	const motioncalc_t stepsPerMm = steps/totalDistance;
+	const motioncalc_t stepsPerMmMovement = steps/totalDistance;
 
 	// Phases with zero duration will not get executed and may lead to infinities in the calculations. Avoid introducing them. Keep the total distance correct.
 	// When using input shaping we can save some FP multiplications by multiplying the acceleration or deceleration time by the pressure advance just once instead of once per impulse
@@ -2079,12 +2179,12 @@ void Move::AddLinearSegments(size_t logicalDrive, uint32_t startTime, const Prep
 	{
 		params.EnsureSpeedsSet();				// calculate the intermediate speeds
 
-		phase0PressureAdvanceClocks = (params.phaseClocks[0] == 0) ? (motioncalc_t)0.0 : dm.extruderShaper.GetAverageAdvanceClocks(params.startSpeed, params.phase1StartSpeed, steps);
-		phase1PressureAdvanceClocks = (params.phaseClocks[1] == 0) ? (motioncalc_t)0.0 : dm.extruderShaper.GetAverageAdvanceClocks(params.phase1StartSpeed, params.phase1EndSpeed, steps);
-		phase2PressureAdvanceClocks = (params.phaseClocks[2] == 0) ? (motioncalc_t)0.0 : dm.extruderShaper.GetAverageAdvanceClocks(params.phase1EndSpeed, params.topSpeed, steps);
-		phase4PressureAdvanceClocks = (params.phaseClocks[4] == 0) ? (motioncalc_t)0.0 : dm.extruderShaper.GetAverageAdvanceClocks(params.phase5StartSpeed, params.topSpeed, steps);
-		phase5PressureAdvanceClocks = (params.phaseClocks[5] == 0) ? (motioncalc_t)0.0 : dm.extruderShaper.GetAverageAdvanceClocks(params.phase5EndSpeed, params.phase5StartSpeed, steps);
-		phase6PressureAdvanceClocks = (params.phaseClocks[6] == 0) ? (motioncalc_t)0.0 : dm.extruderShaper.GetAverageAdvanceClocks(params.endSpeed, params.phase5EndSpeed, steps);
+		phase0PressureAdvanceClocks = (params.phaseClocks[0] == 0) ? (motioncalc_t)0.0 : dm.extruderShaper.GetAverageAdvanceClocks(params.startSpeed, params.phase1StartSpeed, stepsPerMmMovement);
+		phase1PressureAdvanceClocks = (params.phaseClocks[1] == 0) ? (motioncalc_t)0.0 : dm.extruderShaper.GetAverageAdvanceClocks(params.phase1StartSpeed, params.phase1EndSpeed, stepsPerMmMovement);
+		phase2PressureAdvanceClocks = (params.phaseClocks[2] == 0) ? (motioncalc_t)0.0 : dm.extruderShaper.GetAverageAdvanceClocks(params.phase1EndSpeed, params.topSpeed, stepsPerMmMovement);
+		phase4PressureAdvanceClocks = (params.phaseClocks[4] == 0) ? (motioncalc_t)0.0 : dm.extruderShaper.GetAverageAdvanceClocks(params.phase5StartSpeed, params.topSpeed, stepsPerMmMovement);
+		phase5PressureAdvanceClocks = (params.phaseClocks[5] == 0) ? (motioncalc_t)0.0 : dm.extruderShaper.GetAverageAdvanceClocks(params.phase5EndSpeed, params.phase5StartSpeed, stepsPerMmMovement);
+		phase6PressureAdvanceClocks = (params.phaseClocks[6] == 0) ? (motioncalc_t)0.0 : dm.extruderShaper.GetAverageAdvanceClocks(params.endSpeed, params.phase5EndSpeed, stepsPerMmMovement);
 	}
 	else
 	{
@@ -2101,7 +2201,7 @@ void Move::AddLinearSegments(size_t logicalDrive, uint32_t startTime, const Prep
 	{
 		accelDistance = (params.decelClocks + params.steadyClocks == 0) ? totalDistance : (motioncalc_t)params.accelDistance;
 		accelPressureAdvance = (moveFlags.isExtruder && !moveFlags.nonPrintingMove)
-								? (motioncalc_t)params.accelClocks * dm.extruderShaper.GetAverageAdvanceClocks(params.startSpeed, params.topSpeed, steps)
+								? (motioncalc_t)params.accelClocks * dm.extruderShaper.GetAverageAdvanceClocks(params.startSpeed, params.topSpeed, stepsPerMmMovement)
 								: (motioncalc_t)0.0;
 	}
 
@@ -2115,7 +2215,7 @@ void Move::AddLinearSegments(size_t logicalDrive, uint32_t startTime, const Prep
 	{
 		decelDistance = totalDistance - ((params.steadyClocks == 0) ? accelDistance : (motioncalc_t)params.decelStartDistance);
 		decelPressureAdvance = (moveFlags.isExtruder && !moveFlags.nonPrintingMove)
-								? (motioncalc_t)params.decelClocks * dm.extruderShaper.GetAverageAdvanceClocks(params.endSpeed, params.topSpeed, steps)
+								? (motioncalc_t)params.decelClocks * dm.extruderShaper.GetAverageAdvanceClocks(params.endSpeed, params.topSpeed, stepsPerMmMovement)
 								: (motioncalc_t)0.0;
 	}
 
@@ -2132,47 +2232,47 @@ void Move::AddLinearSegments(size_t logicalDrive, uint32_t startTime, const Prep
 	if (moveFlags.noShaping)
 	{
 #if SUPPORT_3RD_ORDER
-		const motioncalc_t scaledJerk = params.jerk * stepsPerMm;
+		const motioncalc_t scaledJerk = params.jerk * stepsPerMmMovement;
 		if (params.phaseClocks[0] != 0)
 		{
-			tail = AddSegment(tail, startTime, params.phaseClocks[0], params.distances[0] * stepsPerMm, params.initialAcceleration * stepsPerMm, scaledJerk, moveFlags, phase0PressureAdvanceClocks);
+			tail = AddSegment(tail, startTime, params.phaseClocks[0], params.distances[0] * stepsPerMmMovement, params.initialAcceleration * stepsPerMmMovement, scaledJerk, moveFlags, phase0PressureAdvanceClocks);
 		}
 		if (params.phaseClocks[1] != 0)
 		{
-			tail = AddSegment(tail, accelConstantStartTime, params.phaseClocks[1], params.distances[1] * stepsPerMm, params.peakAcceleration * stepsPerMm, (motioncalc_t)0.0, moveFlags, phase1PressureAdvanceClocks);
+			tail = AddSegment(tail, accelConstantStartTime, params.phaseClocks[1], params.distances[1] * stepsPerMmMovement, params.peakAcceleration * stepsPerMmMovement, (motioncalc_t)0.0, moveFlags, phase1PressureAdvanceClocks);
 		}
 		if (params.phaseClocks[2] != 0)
 		{
-			tail = AddSegment(tail, accelEndStartTime, params.phaseClocks[2], params.distances[2] * stepsPerMm, params.peakAcceleration * stepsPerMm, -scaledJerk, moveFlags, phase2PressureAdvanceClocks);
+			tail = AddSegment(tail, accelEndStartTime, params.phaseClocks[2], params.distances[2] * stepsPerMmMovement, params.peakAcceleration * stepsPerMmMovement, -scaledJerk, moveFlags, phase2PressureAdvanceClocks);
 		}
 		if (params.phaseClocks[3] != 0)
 		{
-			tail = AddSegment(tail, steadyStartTime, params.phaseClocks[3], params.distances[3] * stepsPerMm, (motioncalc_t)0.0, (motioncalc_t)0.0, moveFlags, (motioncalc_t)0.0);
+			tail = AddSegment(tail, steadyStartTime, params.phaseClocks[3], params.distances[3] * stepsPerMmMovement, (motioncalc_t)0.0, (motioncalc_t)0.0, moveFlags, (motioncalc_t)0.0);
 		}
 		if (params.phaseClocks[4] != 0)
 		{
-			tail = AddSegment(tail, decelStartTime, params.phaseClocks[4], params.distances[4] * stepsPerMm, params.initialDeceleration * stepsPerMm, -scaledJerk, moveFlags, phase4PressureAdvanceClocks);
+			tail = AddSegment(tail, decelStartTime, params.phaseClocks[4], params.distances[4] * stepsPerMmMovement, params.initialDeceleration * stepsPerMmMovement, -scaledJerk, moveFlags, phase4PressureAdvanceClocks);
 		}
 		if (params.phaseClocks[5] != 0)
 		{
-			tail = AddSegment(tail, decelConstantStartTime, params.phaseClocks[5], params.distances[5] * stepsPerMm, params.peakDeceleration * stepsPerMm, (motioncalc_t)0.0, moveFlags, phase5PressureAdvanceClocks);
+			tail = AddSegment(tail, decelConstantStartTime, params.phaseClocks[5], params.distances[5] * stepsPerMmMovement, params.peakDeceleration * stepsPerMmMovement, (motioncalc_t)0.0, moveFlags, phase5PressureAdvanceClocks);
 		}
 		if (params.phaseClocks[6] != 0)
 		{
-			tail = AddSegment(tail, decelEndStartTime, params.phaseClocks[6], params.distances[6] * stepsPerMm, params.peakDeceleration * stepsPerMm, scaledJerk, moveFlags, phase6PressureAdvanceClocks);
+			tail = AddSegment(tail, decelEndStartTime, params.phaseClocks[6], params.distances[6] * stepsPerMmMovement, params.peakDeceleration * stepsPerMmMovement, scaledJerk, moveFlags, phase6PressureAdvanceClocks);
 		}
 #else
 		if (params.accelClocks != 0)
 		{
-			tail = AddSegment(tail, startTime, params.accelClocks, accelDistance * stepsPerMm, params.acceleration * stepsPerMm, moveFlags, accelPressureAdvance);
+			tail = AddSegment(tail, startTime, params.accelClocks, accelDistance * stepsPerMmMovement, params.acceleration * stepsPerMmMovement, moveFlags, accelPressureAdvance);
 		}
 		if (params.steadyClocks != 0)
 		{
-			tail = AddSegment(tail, steadyStartTime, params.steadyClocks, steadyDistance * stepsPerMm, (motioncalc_t)0.0, moveFlags, (motioncalc_t)0.0);
+			tail = AddSegment(tail, steadyStartTime, params.steadyClocks, steadyDistance * stepsPerMmMovement, (motioncalc_t)0.0, moveFlags, (motioncalc_t)0.0);
 		}
 		if (params.decelClocks != 0)
 		{
-			tail = AddSegment(tail, decelStartTime, params.decelClocks, decelDistance * stepsPerMm, params.deceleration * stepsPerMm, moveFlags, decelPressureAdvance);
+			tail = AddSegment(tail, decelStartTime, params.decelClocks, decelDistance * stepsPerMmMovement, params.deceleration * stepsPerMmMovement, moveFlags, decelPressureAdvance);
 		}
 #endif
 	}
@@ -2180,7 +2280,7 @@ void Move::AddLinearSegments(size_t logicalDrive, uint32_t startTime, const Prep
 	{
 		for (size_t index = 0; index < axisShaper.GetNumImpulses(); ++index)
 		{
-			const motioncalc_t factor = axisShaper.GetImpulseSize(index) * stepsPerMm;
+			const motioncalc_t factor = axisShaper.GetImpulseSize(index) * stepsPerMmMovement;
 			const uint32_t startDelay = axisShaper.GetImpulseDelay(index);
 #if SUPPORT_3RD_ORDER
 			const motioncalc_t scaledJerk = params.jerk * factor;
@@ -2722,14 +2822,43 @@ void Move::Interrupt() noexcept
 			{
 				// Force a break by updating the move start time.
 				++numInterruptHiccups;
-#if SUPPORT_CAN_EXPANSION
 				uint32_t hiccupTimeInserted = 0;
-#endif
 				for (uint32_t hiccupTime = MoveTiming::HiccupTime; ; hiccupTime += MoveTiming::HiccupIncrement)
 				{
-#if SUPPORT_CAN_EXPANSION
-					hiccupTimeInserted += hiccupTime;
+					if (hiccupTimeInserted + hiccupTime > MoveTiming::MaxHiccupTimePerInterrupt)
+					{
+						// A step due this far in the past is a defect, not a transient overload. Movement delay is never
+						// given back, and we broadcast it, so slipping further would move every board's timebase for good
+						if (Platform::genericDebugBuffer != nullptr)
+						{
+							Platform::genericDebugBuffer->GetRef().printf("Code 8 move error: hiccup=%" PRIu32 ", time now=%" PRIu32 "\n", hiccupTimeInserted, now);
+						}
+						Platform::shouldTurnOffHeaters = true;
+						Platform::hasGenericDebug = true;
+
+						// hadStepError makes this interrupt break without rescheduling from now on, which is what we
+						// want when the Move task is there to notice and stop the print. In expansion mode the Move
+						// task only terminates itself, so halting would leave this board unable to step again.
+#if SUPPORT_REMOTE_COMMANDS
+						if (!CanInterface::InExpansionMode())
 #endif
+						{
+							StepErrorHalt();
+						}
+
+						// Release the drives either way: AddLinearSegments only re-arms a drive that is idle, so
+						// leaving them in a motion state would leak every segment sent to us afterwards.
+						// StopAllDrivers takes the local time at which motion stopped, not the movement time in 'now'
+#if SUPPORT_CAN_EXPANSION
+						if (StopAllDrivers(true, StepTimer::GetTimerTicks())) { CanInterface::WakeAsyncSender(); }
+#else
+						(void)StopAllDrivers(true, StepTimer::GetTimerTicks());
+#endif
+						WakeMoveTask();						// nothing is scheduled now, so the Move task must be woken to act on the error
+						return;
+					}
+
+					hiccupTimeInserted += hiccupTime;
 					StepTimer::IncreaseMovementDelay(hiccupTime);
 
 					// Reschedule the next step interrupt. This time it should succeed if the hiccup time was long enough.
