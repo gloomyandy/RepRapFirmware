@@ -262,7 +262,7 @@ constexpr ObjectModelTableEntry Platform::objectModelTable[] =
 	{ "vIn",				OBJECT_MODEL_FUNC(self, 2),																			ObjectModelEntryFlags::liveNotPanelDue },
 #endif
 #if HAS_WIFI_NETWORKING
-	{ "wifiFirmwareFileName", OBJECT_MODEL_FUNC_NOSELF(WIFI_FIRMWARE_FILE),														ObjectModelEntryFlags::none },
+	{ "wifiFirmwareFileName", OBJECT_MODEL_FUNC(self->GetDefaultWiFiFirmwareName()),											ObjectModelEntryFlags::none },
 #endif
 #if HAS_CPU_TEMP_SENSOR
 	// 1. boards[0].mcuTemp members
@@ -343,8 +343,26 @@ size_t Platform::GetNumGpOutputsToReport() const noexcept
 }
 
 bool Platform::deliberateError = false;						// true if we deliberately caused an exception for testing purposes
-String<StringLength256> Platform::genericDebugBuffer;
+String<StringLength256> *_ecv_null Platform::genericDebugBuffer = nullptr;
 bool Platform::hasGenericDebug = false;
+#if SUPPORT_ASYNC_MOVES
+String<StringLength256> *_ecv_null Platform::moveWarningBuffer = nullptr;
+bool Platform::hasMoveWarning = false;
+#endif
+
+void Platform::EnsureDebugBuffers() noexcept
+{
+	if (genericDebugBuffer == nullptr)
+	{
+		genericDebugBuffer = new String<StringLength256>();
+	}
+#if SUPPORT_ASYNC_MOVES
+	if (moveWarningBuffer == nullptr)
+	{
+		moveWarningBuffer = new String<StringLength256>();
+	}
+#endif
+}
 bool Platform::shouldTurnOffHeaters = false;
 
 Platform::Platform() noexcept :
@@ -835,21 +853,23 @@ bool Platform::FlushMessages() noexcept
 		}
 		else
 		{
-			// Write as much data as we can...
-			const size_t bytesToWrite = min<size_t>(SERIAL_MAIN_DEVICE.canWrite(), usbOutputBuffer->BytesLeft());
-			if (bytesToWrite != 0)
+			// Keep the transmit FIFO topped up: one buffer per spin makes every host poll return a short packet
+			do
 			{
-				SERIAL_MAIN_DEVICE.print(usbOutputBuffer->Read(bytesToWrite), bytesToWrite);
-			}
+				const size_t bytesToWrite = min<size_t>(SERIAL_MAIN_DEVICE.canWrite(), usbOutputBuffer->BytesLeft());
+				if (bytesToWrite != 0)
+				{
+					SERIAL_MAIN_DEVICE.print(usbOutputBuffer->Read(bytesToWrite), bytesToWrite);
+				}
 
-			if (usbOutputBuffer->BytesLeft() == 0)
-			{
+				if (usbOutputBuffer->BytesLeft() != 0)
+				{
+					usbOutput.ApplyTimeout(UsbTimeout);
+					break;
+				}
 				usbOutput.ReleaseFirstItem();
-			}
-			else
-			{
-				usbOutput.ApplyTimeout(UsbTimeout);
-			}
+				usbOutputBuffer = usbOutput.GetFirstItem();
+			} while (usbOutputBuffer != nullptr);
 		}
 		usbHasMore = !usbOutput.IsEmpty();
 	}
@@ -906,13 +926,22 @@ void Platform::Spin() noexcept
 	// Check for generic debug
 	if (hasGenericDebug)
 	{
-		Message(AddError(MessageType::GenericMessage), genericDebugBuffer.c_str());
+		Message(AddError(MessageType::GenericMessage), (genericDebugBuffer != nullptr) ? genericDebugBuffer->c_str() : "step error occurred but no debug buffer was allocated, use M111 to record details\n");
 		if (shouldTurnOffHeaters)
 		{
 			reprap.GetHeat().SwitchOffAll(true);
 		}
 		hasGenericDebug = false;
 	}
+
+#if SUPPORT_ASYNC_MOVES
+	if (hasMoveWarning && moveWarningBuffer != nullptr)
+	{
+		Message(WarningMessage, moveWarningBuffer->c_str());
+		moveWarningBuffer->Clear();
+		hasMoveWarning = false;
+	}
+#endif
 
 	// Check for M111 debug messages stored in the optional buffer
 	while (!isrDebugBuffer.IsEmpty())
@@ -1567,8 +1596,8 @@ void Platform::Diagnostics(unsigned int part, const StringRef& reply) noexcept
 #ifdef I2C_IFACE
 		{
 			const TwoWire::ErrorCounts errs = I2C_IFACE.GetErrorCounts(true);
-			reply.lcatf("I2C nak errors %" PRIu32 ", send timeouts %" PRIu32 ", receive timeouts %" PRIu32 ", finishTimeouts %" PRIu32 ", resets %" PRIu32,
-				errs.naks, errs.sendTimeouts, errs.recvTimeouts, errs.finishTimeouts, errs.resets);
+			reply.lcatf("I2C nak errors %" PRIu32 ", send timeouts %" PRIu32 ", receive timeouts %" PRIu32 ", finishTimeouts %" PRIu32 ", resets %" PRIu32 ", bus recoveries %" PRIu32,
+				errs.naks, errs.sendTimeouts, errs.recvTimeouts, errs.finishTimeouts, errs.resets, errs.recoveries);
 		}
 #endif
 		break;
@@ -2153,6 +2182,10 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 #ifdef DUET_NG
 	case (unsigned int)DiagnosticTestType::PrintExpanderStatus:
 		reply.printf("Expander status %04X\n", DuetExpansion::DiagnosticRead());
+		break;
+
+	case (unsigned int)DiagnosticTestType::WedgeI2CBus:
+		DuetExpansion::WedgeI2CBus(reply);
 		break;
 #endif
 
@@ -3449,7 +3482,13 @@ void Platform::StopLogging() noexcept
 GCodeResult Platform::SetBuzzerPort(GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)
 {
 	StopBeep();		// Stop beeping before touching the buzzer port assignment
-	return buzzerPort.AssignPort(gb, reply, PinUsedBy::gpout, PinAccess::pwm) ? GCodeResult::ok : GCodeResult::error;
+	if (!buzzerPort.AssignPort(gb, reply, PinUsedBy::gpout, PinAccess::pwm))
+	{
+		return GCodeResult::error;
+	}
+
+	buzzerPort.WriteAnalog(0.0);			// SetPinMode doesn't handle the PWM pin modes, so the pin stays undriven until the first write
+	return GCodeResult::ok;
 }
 
 bool Platform::Beep(unsigned int freq, unsigned int ms) noexcept
@@ -3676,9 +3715,10 @@ void Platform::SetBoardType() noexcept
 #if defined(DUET3MINI_V04)
 	// Test whether this is a WiFi or an Ethernet board by testing for a pulldown resistor on Dir1
 	SetPinMode(DIRECTION_PINS[1], INPUT_PULLUP, false);
+	SetPinMode(DIRECTION_PINS[2], INPUT_PULLUP, false);
 	delayMicroseconds(20);									// give the pullup resistor time to work
-	board = (digitalRead(DIRECTION_PINS[1]))				// if SAME54P20A
-				? BoardType::Duet3Mini_WiFi
+	board = (digitalRead(DIRECTION_PINS[1]))
+				? ((digitalRead(DIRECTION_PINS[2])) ? BoardType::Duet3Mini_WiFi : BoardType::Duet3Mini_WiFi_ESP32)
 					: BoardType::Duet3Mini_Ethernet;
 #elif defined(DUET3_MB6HC)
 	board = GetMB6HCBoardType();
@@ -3752,8 +3792,9 @@ const char *_ecv_array Platform::GetElectronicsString() const noexcept
 	{
 #if defined(DUET3MINI_V04)
 	case BoardType::Duet3Mini_Unknown:		return "Duet 3 " BOARD_SHORT_NAME " unknown variant";
-	case BoardType::Duet3Mini_WiFi:			return "Duet 3 " BOARD_SHORT_NAME " WiFi";
+	case BoardType::Duet3Mini_WiFi:			return "Duet 3 " BOARD_SHORT_NAME " WiFi 1.02 or earlier";
 	case BoardType::Duet3Mini_Ethernet:		return "Duet 3 " BOARD_SHORT_NAME " Ethernet";
+	case BoardType::Duet3Mini_WiFi_ESP32:	return "Duet 3 " BOARD_SHORT_NAME " WiFi 1.04 or later";
 #elif defined(DUET3_MB6HC)
 	case BoardType::Duet3_6HC_v06_100:		return "Duet 3 " BOARD_SHORT_NAME " v1.0 or earlier";
 	case BoardType::Duet3_6HC_v101:			return "Duet 3 " BOARD_SHORT_NAME " v1.01";
@@ -3798,6 +3839,7 @@ const char *_ecv_array Platform::GetBoardString() const noexcept
 #if defined(DUET3MINI_V04)
 	case BoardType::Duet3Mini_Unknown:		return "duet5lcunknown";
 	case BoardType::Duet3Mini_WiFi:			return "duet5lcwifi";
+	case BoardType::Duet3Mini_WiFi_ESP32:	return "duet5lcwifi32";
 	case BoardType::Duet3Mini_Ethernet:		return "duet5lcethernet";
 #elif defined(DUET3_MB6HC)
 	case BoardType::Duet3_6HC_v06_100:		return "duet3mb6hc100";
@@ -3862,7 +3904,25 @@ const char *_ecv_array Platform::GetBoardShortName() const noexcept
 // Return true if this is a WiFi board, false if it has Ethernet
 bool Platform::IsDuetWiFi() const noexcept
 {
-	return board == BoardType::Duet3Mini_WiFi || board == BoardType::Duet3Mini_Unknown;
+	return board == BoardType::Duet3Mini_WiFi || board == BoardType::Duet3Mini_WiFi_ESP32 || board == BoardType::Duet3Mini_Unknown;
+}
+
+bool Platform::HasESP32() const noexcept
+{
+	return board == BoardType::Duet3Mini_WiFi_ESP32;
+}
+
+#endif
+
+#if HAS_WIFI_NETWORKING
+
+const char *_ecv_array Platform::GetDefaultWiFiFirmwareName() const noexcept
+{
+#ifdef DUET3MINI_V04
+	return (HasESP32()) ? WIFI_FIRMWARE_FILE_ESP32 : WIFI_FIRMWARE_FILE_ESP8266;
+#else
+	return WIFI_FIRMWARE_FILE;
+#endif
 }
 
 #endif

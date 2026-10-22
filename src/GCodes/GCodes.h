@@ -111,6 +111,7 @@ public:
 	bool QueueFileToPrint(const char *_ecv_array fileName, const StringRef& reply) noexcept;	// Open a file of G Codes to run
 #endif
 	void AbortPrint(GCodeBuffer& gb) noexcept;									// Cancel any print in progress
+	void PauseSequenceAborted(GCodeBuffer& gb) noexcept;						// Settle pauseState to paused if a pause sequence is aborted before it commits
 	void HandleM114(GCodeBuffer& gb, const StringRef& s) const noexcept;		// Write where we are into a string
 	bool DoingFileMacro() const noexcept;										// Is a macro file being processed by any input channel?
 	bool GetMacroRestarted() const noexcept;									// Return true if the macro being executed by fileGCode was restarted
@@ -365,6 +366,7 @@ private:
 	void UnlockMovement(const GCodeBuffer& gb, MovementSystemNumber msNumber) noexcept;	// Unlock a particular movement system, if we own it
 #if SUPPORT_ASYNC_MOVES
 	void UnlockMovementFrom(const GCodeBuffer& gb, MovementSystemNumber firstMsNumber) noexcept;	// Release movement locks greater or equal to than the specified one
+	void UnlockMovementTakenBelow(const GCodeBuffer& gb, MovementSystemNumber msNumber) noexcept;	// Release movement locks below the specified one that were not held when the current macro started
 #endif
 	bool WaitForEndstopOrProbingMoveToFinish(GCodeBuffer& gb) noexcept;			// Wait for movement to stop after performing a move that may terminate early
 

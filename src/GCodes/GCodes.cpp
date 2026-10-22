@@ -438,7 +438,7 @@ void GCodes::Spin() noexcept
 
 #if defined(SERIAL_MAIN_DEVICE) && (!SAME5x || CORE_USES_TINYUSB)
 	// Read from USB into the input buffer and check for out-of-band urgent commands (M112/M122/M108)
-	usbInput->Spin();
+	usbInput->Spin(*UsbGCode());
 #endif
 
 	CheckTriggers();
@@ -1023,27 +1023,34 @@ bool GCodes::DoAsynchronousPause(GCodeBuffer& gb, PrintPausedReason reason, GCod
 	{
 		ms.pausedInMacro = false;
 
-		const bool movesSkipped = reprap.GetMove().PausePrint(ms);						// tell Move we wish to pause this queue
 		GCodeBuffer& fgb = *GetFileGCode(ms.GetNumber());
-		if (movesSkipped)
+		bool movesSkipped, waitingMoveSkipped;
 		{
-			// The PausePrint call has filled in the restore point with machine coordinates
-			ToolOffsetInverseTransform(ms, ms.GetPauseRestorePoint().moveCoords, ms.currentUserPosition);	// transform the returned coordinates to user coordinates
-			ms.ClearMove();
+			// Keep the Move task out until the waiting move has been discarded, else it can add that move to the ring after PausePrint has reset it
+			TaskCriticalSectionLocker lock;
+			movesSkipped = reprap.GetMove().PausePrint(ms);								// tell Move we wish to pause this queue
+			waitingMoveSkipped = !movesSkipped && ms.segmentsLeft != 0;
+			if (movesSkipped)
+			{
+				// The PausePrint call has filled in the restore point with machine coordinates
+				ToolOffsetInverseTransform(ms, ms.GetPauseRestorePoint().moveCoords, ms.currentUserPosition);	// transform the returned coordinates to user coordinates
+				ms.ClearMove();
+			}
+			else if (waitingMoveSkipped)
+			{
+				// We were not able to skip any moves, however we can skip the move that is waiting
+				ms.GetPauseRestorePoint().virtualExtruderPosition = ms.moveStartVirtualExtruderPosition;
+				ms.GetPauseRestorePoint().filePos = ms.filePos;
+				ms.GetPauseRestorePoint().originalFeedRate = ms.originalFeedRate;
+				ms.GetPauseRestorePoint().proportionDone = ms.GetProportionDone();
+				ms.GetPauseRestorePoint().initialUserC0 = ms.initialUserC0;
+				ms.GetPauseRestorePoint().initialUserC1 = ms.initialUserC1;
+				ToolOffsetInverseTransform(ms, ms.GetPauseRestorePoint().moveCoords, ms.currentUserPosition);	// transform the returned coordinates to user coordinates
+				ms.ClearMove();
+			}
 		}
-		else if (ms.segmentsLeft != 0)
-		{
-			// We were not able to skip any moves, however we can skip the move that is waiting
-			ms.GetPauseRestorePoint().virtualExtruderPosition = ms.moveStartVirtualExtruderPosition;
-			ms.GetPauseRestorePoint().filePos = ms.filePos;
-			ms.GetPauseRestorePoint().originalFeedRate = ms.originalFeedRate;
-			ms.GetPauseRestorePoint().proportionDone = ms.GetProportionDone();
-			ms.GetPauseRestorePoint().initialUserC0 = ms.initialUserC0;
-			ms.GetPauseRestorePoint().initialUserC1 = ms.initialUserC1;
-			ToolOffsetInverseTransform(ms, ms.GetPauseRestorePoint().moveCoords, ms.currentUserPosition);	// transform the returned coordinates to user coordinates
-			ms.ClearMove();
-		}
-		else
+
+		if (!movesSkipped && !waitingMoveSkipped)
 		{
 			// We were not able to skip any moves, and there is no move waiting
 			ms.GetPauseRestorePoint().originalFeedRate = fgb.LatestMachineState().feedRate;
@@ -1760,8 +1767,8 @@ bool GCodes::LockAllMovementSystemsAndWaitForStandstill(GCodeBuffer& gb) noexcep
 		}
 	}
 
-	// We failed to lock the ith movement system. To avoid possible deadlock we need to release any later locks that we have.
-	UnlockMovementFrom(gb, i + 1);
+	// We failed to lock the ith movement system. Release the lower ones we took, otherwise two channels each holding their own system deadlock waiting for the other
+	UnlockMovementTakenBelow(gb, i);
 	return false;
 }
 
@@ -2045,9 +2052,11 @@ bool GCodes::LoadExtrusionFromGCode(GCodeBuffer& gb, MovementState& ms) THROWS(G
 								rawExtruderTotalByDrive[extruder] += extrusionAmount;
 								rawExtruderTotal += extrusionAmount;
 							}
-							ms.coords[ExtruderToLogicalDrive(extruder)] = (ms.applyM220M221)
-																			? extrusionAmount * extrusionFactors[extruder]
-																			: extrusionAmount;
+							const float cookedExtrusionAmount = (ms.applyM220M221)
+																? extrusionAmount * extrusionFactors[extruder]
+																: extrusionAmount;
+							ms.coords[ExtruderToLogicalDrive(extruder)] = cookedExtrusionAmount;
+							cookedTotalExtrusion += cookedExtrusionAmount;
 							extrudersMoving.SetBit(extruder);
 #if SUPPORT_ASYNC_MOVES && !PREALLOCATE_TOOL_AXES
 							logicalDrivesMoving.SetBit(ExtruderToLogicalDrive(extruder));
@@ -2065,7 +2074,7 @@ bool GCodes::LoadExtrusionFromGCode(GCodeBuffer& gb, MovementState& ms) THROWS(G
 #if SUPPORT_ASYNC_MOVES && !PREALLOCATE_TOOL_AXES
 		AllocateAxes(gb, ms, logicalDrivesMoving, ParameterLettersBitmap());
 #endif
-		if (ms.moveType == 1 || ms.moveType == 4)
+		if ((ms.moveType == 1 || ms.moveType == 4) && cookedTotalExtrusion != 0.0)
 		{
 			// Enable extruder endstops for the extruders moving
 			// First calculate the extruder speeds so that stall detection endstops can be validated.
@@ -2272,6 +2281,15 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 	float initialUserPosition[MaxAxes];
 	memcpyf(initialUserPosition, ms.currentUserPosition, numVisibleAxes);
 
+	// Restore the state we have already changed, called before throwing to abandon the move.
+	// Only safe to call after LoadExtrusionFromGCode has set up moveStartVirtualExtruderPosition for this move
+	const auto abandonMove = [this, &ms, &initialUserPosition]() noexcept
+	{
+		memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);
+		memcpyf(ms.coords, ms.initialCoords, numVisibleAxes);
+		ms.latestVirtualExtruderPosition = ms.moveStartVirtualExtruderPosition;
+	};
+
 	AxesBitmap axesMentioned;
 	for (size_t axis = 0; axis < numVisibleAxes; axis++)
 	{
@@ -2333,7 +2351,15 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 		}
 	}
 
-	LoadFeedrateFromGCode(gb, ms);														// set up feedrate before we do the endstop calculations
+	try
+	{
+		LoadFeedrateFromGCode(gb, ms);													// set up feedrate before we do the endstop calculations
+	}
+	catch (const GCodeException&)
+	{
+		memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);			// undo the user position update because this move will not be executed
+		throw;
+	}
 
 	AxesBitmap realAxesMoving;															// we'll need this later but only if ms.moveType == 0
 	if (ms.moveType ==  0)
@@ -2373,6 +2399,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 
 		if (!doingManualBedProbe && CheckEnoughAxesHomed(realAxesMoving))
 		{
+			memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);	// undo the user position update because this move will not be executed
 			gb.ThrowGCodeException("insufficient axes homed");
 		}
 	}
@@ -2451,7 +2478,16 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 		ms.endstopsTriggered.Clear();
 	}
 
-	const bool hasExtrusion = LoadExtrusionFromGCode(gb, ms);								// for type 1 moves, this must be called after calling EnableAxisEndstops, because EnableExtruderEndstop assumes that
+	bool hasExtrusion;
+	try
+	{
+		hasExtrusion = LoadExtrusionFromGCode(gb, ms);										// for type 1 moves, this must be called after calling EnableAxisEndstops, because EnableExtruderEndstop assumes that
+	}
+	catch (const GCodeException&)
+	{
+		abandonMove();
+		throw;
+	}
 	if (hasExtrusion || axesMentioned.IsNonEmpty())											// if there is no movement at all, skip further processing and don't pass the move on the the Move system
 	{
 		if (ms.IsFirstMoveSincePrintingResumed())											// if this is the first move after skipping an object
@@ -2506,6 +2542,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 #if SUPPORT_KEEPOUT_ZONES
 			if (keepoutZone.DoesLineIntrude(ms.initialCoords, ms.coords))
 			{
+				abandonMove();
 				gb.ThrowGCodeException("straight move would enter keepout zone");
 			}
 #endif
@@ -2513,6 +2550,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 #if SUPPORT_ASYNC_MOVES
 			if (!collisionChecker.UpdatePositions(ms.coords, axesHomed))
 			{
+				abandonMove();
 				gb.ThrowGCodeException("potential collision detected");
 			}
 #endif
@@ -2538,6 +2576,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 			case LimitPositionResult::adjustedAndIntermediateUnreachable:
 				if (machineType != MachineType::fff)
 				{
+					abandonMove();
 					gb.ThrowGCodeException(TargetUnreachableText);				// it's a laser or CNC so this is a definite error
 				}
 				ToolOffsetInverseTransform(ms);									// make sure the limits are reflected in the user position
@@ -2564,6 +2603,7 @@ bool GCodes::DoStraightMove(GCodeBuffer& gb, bool isCoordinated) THROWS(GCodeExc
 						break;
 					}
 				}
+				abandonMove();
 				gb.ThrowGCodeException("target position not reachable from current position");		// we can't bring the move within limits, so this is a definite error
 				// no break
 
@@ -2849,6 +2889,10 @@ bool GCodes::DoArcMove(GCodeBuffer& gb, bool clockwise) THROWS(GCodeException)
 
 	memcpyf(ms.initialCoords, ms.coords, numVisibleAxes);
 
+	// Save the current position in case we have to abandon the move
+	float initialUserPosition[MaxAxes];
+	memcpyf(initialUserPosition, ms.currentUserPosition, numVisibleAxes);
+
 	// Set the new user position
 	ms.currentUserPosition[axis0] = newAxis0Pos;
 	ms.currentUserPosition[axis1] = newAxis1Pos;
@@ -2922,6 +2966,7 @@ bool GCodes::DoArcMove(GCodeBuffer& gb, bool clockwise) THROWS(GCodeException)
 
 	if (CheckEnoughAxesHomed(realAxesMoving))
 	{
+		memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);	// undo the user position update because this move will not be executed
 		gb.ThrowGCodeException("insufficient axes homed");
 	}
 
@@ -2961,6 +3006,8 @@ bool GCodes::DoArcMove(GCodeBuffer& gb, bool clockwise) THROWS(GCodeException)
 
 	if (reprap.GetMove().GetKinematics().LimitPosition(ms.coords, nullptr, numVisibleAxes, axesVirtuallyHomed, true, limitAxes) != LimitPositionResult::ok)
 	{
+		memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);
+		memcpyf(ms.coords, ms.initialCoords, numVisibleAxes);
 		gb.ThrowGCodeException(TargetUnreachableText);							// abandon the move
 	}
 
@@ -2984,13 +3031,35 @@ bool GCodes::DoArcMove(GCodeBuffer& gb, bool clockwise) THROWS(GCodeException)
 #if SUPPORT_KEEPOUT_ZONES
 	if (keepoutZone.DoesArcIntrude(ms.initialCoords, ms.coords, ms.arcCurrentAngle, finalTheta, ms.arcCentre, ms.arcRadius, axis0Mapping, axis1Mapping, clockwise, wholeCircle))
 	{
+		memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);
+		memcpyf(ms.coords, ms.initialCoords, numVisibleAxes);
 		gb.ThrowGCodeException("arc move would enter keepout zone");
 	}
 #endif
 
-	LoadFeedrateFromGCode(gb, ms);
+	try
+	{
+		LoadFeedrateFromGCode(gb, ms);
+	}
+	catch (const GCodeException&)
+	{
+		memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);			// undo the user position update because this move will not be executed
+		throw;
+	}
 
-	const bool hasExtrusion = LoadExtrusionFromGCode(gb, ms);
+	bool hasExtrusion;
+	try
+	{
+		hasExtrusion = LoadExtrusionFromGCode(gb, ms);
+	}
+	catch (const GCodeException&)
+	{
+		// The extruder position restore is safe here because LoadExtrusionFromGCode refreshes moveStartVirtualExtruderPosition before it can throw
+		memcpyf(ms.currentUserPosition, initialUserPosition, numVisibleAxes);
+		memcpyf(ms.coords, ms.initialCoords, numVisibleAxes);
+		ms.latestVirtualExtruderPosition = ms.moveStartVirtualExtruderPosition;
+		throw;
+	}
 	if (ms.IsFirstMoveSincePrintingResumed())
 	{
 		if (!LockCurrentMovementSystemAndWaitForStandstill(gb))		// update the user position from the machine position
@@ -3350,6 +3419,7 @@ void GCodes::NewMoveAvailable(MovementState& ms) noexcept
 // Cancel any macro or print in progress
 void GCodes::AbortPrint(GCodeBuffer& gb) noexcept
 {
+	PauseSequenceAborted(gb);					// if we are aborting a pause sequence before it committed, settle the pause first
 	(void)gb.AbortFile(true);					// stop executing any files or macros that this GCodeBuffer is running
 	if (gb.IsFileChannel())						// if the current command came from a file being printed
 	{
@@ -3362,6 +3432,29 @@ void GCodes::AbortPrint(GCodeBuffer& gb) noexcept
 #endif
 		StopPrint(nullptr, StopPrintReason::abort);
 		gb.Init();								// invalidate the file channel here as the other one may be still busy (possibly in a macro)
+	}
+}
+
+// When a pause sequence (pause.g / filament-change.g) is aborted, the stack frame that would have advanced pauseState from
+// pausing to paused is discarded with the rest of the aborted frames, leaving the machine stuck reporting "pausing" forever.
+// If this GCodeBuffer still holds such a frame while pauseState is pausing, commit the pause now so it settles to paused (resumable)
+// instead of hanging. The file-channel path in AbortPrint runs StopPrint afterwards, which resets to notPaused as before
+void GCodes::PauseSequenceAborted(GCodeBuffer& gb) noexcept
+{
+	if (pauseState != PauseState::pausing)
+	{
+		return;
+	}
+
+	for (const GCodeMachineState *_ecv_null ms = &gb.LatestMachineState(); ms != nullptr; ms = ms->GetPrevious())
+	{
+		const GCodeState state = ms->GetState();
+		if (state == GCodeState::pausing2 || state == GCodeState::eventPausing2 || state == GCodeState::filamentChangePause2)
+		{
+			pauseState = PauseState::paused;
+			reprap.StateUpdated();
+			return;
+		}
 	}
 }
 
@@ -4603,6 +4696,22 @@ void GCodes::StopPrint(GCodeBuffer *_ecv_null gbp, StopPrintReason reason) noexc
 			ms.currentTool->SetActualZHop(0.0);
 			ms.currentTool->SetRetracted(false);
 		}
+#if SUPPORT_ASYNC_MOVES
+		// A motion system other than the primary one cannot run any code after the job has ended, so if it kept its axes or its tool then the next job could not allocate them
+		if (&ms != &moveStates[0])
+		{
+			ms.ReleaseAllOwnedAxesAndExtruders();
+			if (ms.currentTool != nullptr)
+			{
+				if (!IsSimulating())
+				{
+					ms.currentTool->Standby();
+				}
+				ms.movementTool = ms.currentTool = nullptr;
+			}
+			ms.newToolNumber = -1;
+		}
+#endif
 	}
 
 	const char *_ecv_array _ecv_null printingFilename = reprap.GetPrintMonitor().GetPrintingFilename();
@@ -5283,7 +5392,7 @@ bool GCodes::LockAllMovement(const GCodeBuffer& gb) noexcept
 	{
 		if (!LockMovement(gb, i))
 		{
-			UnlockMovementFrom(gb, i + 1);			// release any higher locks we own to avoid deadlock
+			UnlockMovementTakenBelow(gb, i);		// release the lower locks we took to avoid deadlock
 			return false;
 		}
 	}
@@ -5297,6 +5406,19 @@ void GCodes::UnlockMovementFrom(const GCodeBuffer& gb, MovementSystemNumber msNu
 	{
 		UnlockMovement(gb, msNumber);
 		++msNumber;
+	}
+}
+
+// Release movement locks below the specified one that we took ourselves, keeping any that were held when the current macro started
+void GCodes::UnlockMovementTakenBelow(const GCodeBuffer& gb, MovementSystemNumber msNumber) noexcept
+{
+	const GCodeMachineState *_ecv_null const mc = gb.LatestMachineState().GetPrevious();
+	for (MovementSystemNumber i = 0; i < msNumber; i++)
+	{
+		if (mc == nullptr || !mc->lockedResources.IsBitSet(MoveResourceBase + i))
+		{
+			UnlockMovement(gb, i);
+		}
 	}
 }
 
@@ -5638,7 +5760,8 @@ bool GCodes::SyncWith(GCodeBuffer& thisGb, const GCodeBuffer& otherGb) noexcept
 			if (otherGb.IsLaterThan(thisGb))
 			{
 				// Other input channel has skipped this sync point
-				GetMovementState(thisGb).UpdateCoordinatesFromLastKnownEndpoints();
+				// Update the coordinates of our own movement system, not the commanded one: after M596 they can differ, and the commanded system may be executing moves commanded by the other input channel
+				moveStates[thisGb.GetOwnQueueNumber()].UpdateCoordinatesFromLastKnownEndpoints();
 				thisGb.syncState = GCodeBuffer::SyncState::running;
 				//debugPrintf("Channel %u changed state to running, %u\n", thisGb.GetChannel().ToBaseType(), __LINE__);
 				synced = true;
@@ -5648,7 +5771,7 @@ bool GCodes::SyncWith(GCodeBuffer& thisGb, const GCodeBuffer& otherGb) noexcept
 		}
 
 		// If we get here then the other input channel is also syncing, so it's safe to use the machine axis coordinates of the axes it owns to update our user coordinates
-		GetMovementState(thisGb).UpdateCoordinatesFromLastKnownEndpoints();
+		moveStates[thisGb.GetOwnQueueNumber()].UpdateCoordinatesFromLastKnownEndpoints();
 
 		// Now that we no longer need to read axis coordinates from the other motion system, flag that we have finished syncing
 		thisGb.syncState = GCodeBuffer::SyncState::synced;

@@ -284,8 +284,9 @@ void ExpressionParser::ParseInternal(ExpressionValue& val, bool evaluate, uint8_
 
 		case TypeCode::HeapArray:
 			{
-				ReadLocker lock(Heap::heapLock);				// must have a read lock on heapLock when calling GetNumElements or GetElement
-				if (!val.ahVal.GetElement(indexValue, val))		// if index was out of bounds
+				ReadLocker lock(Heap::heapLock);					// must have a read lock on heapLock when calling GetNumElements or GetElement
+				ExpressionValue elem;
+				if (!val.ahVal.GetElement(indexValue, elem))		// if index was out of bounds
 				{
 					if (evaluate)
 					{
@@ -295,6 +296,10 @@ void ExpressionParser::ParseInternal(ExpressionValue& val, bool evaluate, uint8_
 					{
 						val.SetNull(nullptr);
 					}
+				}
+				else
+				{
+					val = elem;
 				}
 			}
 			break;
@@ -887,14 +892,14 @@ void ExpressionParser::BalanceNumericTypes(ExpressionValue& val1, ExpressionValu
 	}
 }
 
-// Balance types v2 and v2 and store the min or max of them in v1
+// Balance types v1 and v2 and store the min or max of them in v1
 void ExpressionParser::EvaluateMinOrMax(ExpressionValue& v1, ExpressionValue& v2, bool evaluate, bool isMax) const THROWS(GCodeException)
 {
 	BalanceNumericTypes(v1, v2, evaluate);
 	if (v1.GetType() == TypeCode::Float)
 	{
 		v1.fVal = ((isMax) ? max<float> : min<float>)(v1.fVal, v2.fVal);
-		v1.param = max(v2.param, v2.param);
+		v1.param = max(v1.param, v2.param);
 	}
 	else
 	{
@@ -1489,39 +1494,53 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 	NamedConstant whichConstant(id.c_str());
 	if (whichConstant.IsValid())
 	{
+#if 1		// for now we don't allow 'exists' to be applied to named constants
 		if (context.WantExists())
 		{
 			ThrowParseException(InvalidExistsMessage);
 		}
+#endif
 
 		switch (whichConstant.RawValue())
 		{
 		case NamedConstant::_true:
 			rslt.SetBool(true);
-			return;
+			break;
 
 		case NamedConstant::_false:
 			rslt.SetBool(false);
-			return;
+			break;
 
 		case NamedConstant::_null:
+			if (context.WantExists())
+			{
+				rslt.SetBool(false);
+				return;
+			}
 			rslt.SetNull(nullptr);
-			return;
+			break;
 
 		case NamedConstant::pi:
 			rslt.SetFloat(Pi);
-			return;
+			break;
 
 		case NamedConstant::iterations:
 			{
 				int32_t v;
 				if (gb == nullptr || (v = gb->CurrentFileMachineState().GetIterations()) < 0)
 				{
+#if 0	// only needed if in future we allow 'exists' to be applied to named constants
+					if (applyExists && !applyLengthOperator)
+					{
+						rslt.SetBool(false);
+						return;
+					}
+#endif
 					ThrowParseException("'iterations' used when not inside a loop");
 				}
 				rslt.SetInt(v);
 			}
-			return;
+			break;
 
 		case NamedConstant::_result:
 			{
@@ -1554,11 +1573,11 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 					rslt.SetInt(res);
 				}
 			}
-			return;
+			break;
 
 		case NamedConstant::line:
 			rslt.SetInt(gb != nullptr ? (int32_t)gb->GetLineNumber() : 0);
-			return;
+			break;
 
 		case NamedConstant::input:
 			if (gb != nullptr)
@@ -1569,11 +1588,18 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 			{
 				rslt.SetNull(nullptr);
 			}
-			return;
+			break;
 
 		default:
 			THROW_INTERNAL_ERROR;
 		}
+
+		// Currently we don't have any named constants with array or string or bitmap type, but in case this changes in future we check here
+		if (applyLengthOperator)
+		{
+			ApplyLengthOperator(rslt, evaluate);
+		}
+		return;
 	}
 
 	// Check whether it is a function call
@@ -2146,6 +2172,11 @@ void ExpressionParser::ParseIdentifierExpression(ExpressionValue& rslt, bool eva
 			ThrowParseException("expected ')'");
 		}
 		AdvancePointer();
+
+		if (applyLengthOperator)
+		{
+			ApplyLengthOperator(rslt, evaluate);
+		}
 		return;
 	}
 
@@ -2228,6 +2259,7 @@ time_t ExpressionParser::ParseDateTime(const char *_ecv_array s) const THROWS(GC
 void ExpressionParser::GetVariableValue(ExpressionValue& rslt, const VariableSet *vars, const char *_ecv_array name, ObjectExplorationContext& context, bool isParameter, bool applyLengthOperator, bool wantExists) THROWS(GCodeException)
 {
 	const char *_ecv_array _ecv_null pos = strchr(name, '^');
+	const size_t nameLength = (pos != nullptr) ? (size_t)(pos - name) : strlen(name);
 	if (pos != nullptr)
 	{
 		// Indexing into a variable
@@ -2283,7 +2315,7 @@ void ExpressionParser::GetVariableValue(ExpressionValue& rslt, const VariableSet
 				}
 				ThrowParseException("Error indexing into nested arrays");
 			}
-			ThrowParseException("Cannot index into variable or parameter '%s' of non-array type", name);
+			ThrowVariableException("Cannot index into variable or parameter '%s' of non-array type", name, nameLength);
 		}
 		else if (wantExists)
 		{
@@ -2313,7 +2345,7 @@ void ExpressionParser::GetVariableValue(ExpressionValue& rslt, const VariableSet
 		// else fall through to throw error
 	}
 
-	ThrowParseException((isParameter) ? "unknown parameter '%s'" : "unknown variable '%s'", name);
+	ThrowVariableException(isParameter ? "unknown parameter '%s'" : "unknown variable '%s'", name, nameLength);
 }
 
 // Parse a quoted string, given that the current character is double-quote
@@ -2416,6 +2448,14 @@ void ExpressionParser::ThrowParseException(const char *_ecv_array str, const cha
 void ExpressionParser::ThrowParseException(const char *_ecv_array str, uint32_t param) const THROWS(GCodeException)
 {
 	throw GCodeException(gb, GetColumn(), str, param);
+}
+
+// The name passed to this function carries the '^' index markers that ParseIdentifierExpression appended, so report only the part before them
+void ExpressionParser::ThrowVariableException(const char *_ecv_array str, const char *_ecv_array name, size_t nameLength) const THROWS(GCodeException)
+{
+	String<StringLength50> shortName;
+	shortName.copy(name, nameLength);
+	ThrowParseException(str, shortName.c_str());
 }
 
 // Call this before making a recursive call, or before calling a function that needs a lot of stack from a recursive function

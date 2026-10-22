@@ -363,8 +363,9 @@ void FtpResponder::DoUpload() noexcept
 			GetPlatform().MessageF(UsbMessage, "Writing %u bytes of upload data\n", len);
 		}
 
+		const bool ok = fileBeingUploaded.Write(buffer, len);
 		dataSocket->Taken(len);
-		if (!fileBeingUploaded.Write(buffer, len))
+		if (!ok)
 		{
 			uploadError = true;
 			GetPlatform().Message(ErrorMessage, "FTP: could not write upload data\n");
@@ -378,6 +379,12 @@ void FtpResponder::DoUpload() noexcept
 	// Upload has finished if the connection is closed
 	if (!dataSocket->CanRead())
 	{
+		if (dataSocket->IsConnectionAborted())
+		{
+			uploadError = true;
+			GetPlatform().Message(ErrorMessage, "FTP: upload connection was reset\n");
+		}
+
 		dataSocket = nullptr;
 		responderState = ResponderState::pasvTransferComplete;
 

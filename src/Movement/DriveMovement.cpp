@@ -137,7 +137,20 @@ MoveSegment *_ecv_null DriveMovement::NewSegment(uint32_t now) noexcept
 		seg->SetExecuting();
 
 		// Calculate the movement parameters
-		netStepsThisSegment = (int32_t)(seg->GetLength() + distanceCarriedForwards);
+		const motioncalc_t endPosition = seg->GetLength() + distanceCarriedForwards;
+		netStepsThisSegment = (int32_t)endPosition;
+
+		// An axis that is about to stop must end on a whole step, but the segment lengths carry float rounding error.
+		// This must be corrected here as well as in CalcNextStepTimeFull because the remote drive and zero-step skip paths never get there
+		if (seg->GetNext() == nullptr && !segmentFlags.isExtruder)
+		{
+			const int32_t roundedSteps = lrintf(endPosition);
+			if (fabsm(endPosition - (motioncalc_t)roundedSteps) < (motioncalc_t)0.05)
+			{
+				seg->AdjustLength((motioncalc_t)roundedSteps - endPosition);
+				netStepsThisSegment = roundedSteps;
+			}
+		}
 
 #if SUPPORT_PHASE_STEPPING || SUPPORT_CLOSED_LOOP
 		if (IsPhaseStepEnabled())
@@ -307,13 +320,16 @@ static inline motioncalc_t fastLimSqrtm(motioncalc_t f) noexcept
 // Notify a step error. This always returns false so that CalcNextStepTimeFull can tail-chain to it.
 bool DriveMovement::LogStepError(uint8_t type, float info, const MoveSegment *seg) noexcept
 {
-	const StringRef& dbgRef = Platform::genericDebugBuffer.GetRef();
-	dbgRef.printf("Code %u move error: info=%.3g, seg: ", type, (double)info);
-	if (seg != nullptr)
+	if (Platform::genericDebugBuffer != nullptr)
 	{
-		seg->AppendDetails(dbgRef);
+		const StringRef& dbgRef = Platform::genericDebugBuffer->GetRef();
+		dbgRef.printf("Code %u move error: info=%.3g, seg: ", type, (double)info);
+		if (seg != nullptr)
+		{
+			seg->AppendDetails(dbgRef);
+		}
+		dbgRef.cat('\n');
 	}
-	dbgRef.cat('\n');
 	Platform::shouldTurnOffHeaters = true;
 	Platform::hasGenericDebug = true;
 	reprap.GetMove().StepErrorHalt();
@@ -616,8 +632,11 @@ bool DriveMovement::StopLogicalDrive(int32_t& netStepsTaken) noexcept
 
 	if (state != DMState::idle)
 	{
-		state = DMState::idle;
+		// DeactivateDM chooses the list to unlink from by looking at the state, so it must still be the motion
+		// state here. Clearing it first leaves a phase stepping DM to be searched for in activeDMs, where it is
+		// not, so it stays linked into phaseStepDMs for ever.
 		reprap.GetMove().DeactivateDM(this);
+		state = DMState::idle;
 		netStepsTaken = GetNetStepsTakenThisMove();
 		MoveSegment *seg = nullptr;
 		std::swap(seg, const_cast<MoveSegment*&>(segments));

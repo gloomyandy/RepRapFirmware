@@ -16,6 +16,10 @@
 #include <GCodes/GCodeBuffer/GCodeBuffer.h>
 #include <Movement/StepTimer.h>
 
+#if SUPPORT_ACCELEROMETERS
+# include <Accelerometers/Accelerometers.h>
+#endif
+
 ReadWriteLock ExpansionManager::boardsLock;
 
 #if SUPPORT_OBJECT_MODEL
@@ -178,6 +182,9 @@ void ExpansionManager::ProcessAnnouncement(CanMessageBuffer *buf, bool isNewForm
 			{
 				Event::AddEvent(EventType::expansion_reconnect, 0, src, 0, "");
 			}
+#if SUPPORT_ACCELEROMETERS
+			Accelerometers::RemoteBoardRestarted(src);
+#endif
 			board.hasVin = board.hasV12 = board.hasMcuTemp = false;
 			String<StringLength100> boardTypeAndFirmwareVersion;
 			if (isNewFormat)
@@ -249,7 +256,25 @@ void ExpansionManager::ProcessBoardStatusReport(const CanMessageBuffer *buf) noe
 	const CanMessageBoardStatus& msg = buf->msg.boardStatus;
 	if (msg.hasMovementDelay)
 	{
-		StepTimer::ProcessMovementDelayRequest(msg.movementDelay);
+		// Motion has slipped by the whole delay and it is never given back, but otherwise that shows up only as
+		// a number in the M122 hiccup line, which nobody reads until a print has already failed. Report it at
+		// 1s, 2s, 4s and so on, so that a slow leak leaves a growth trail without being able to spam.
+		const uint32_t totalDelay = StepTimer::ProcessMovementDelayRequest(msg.movementDelay);
+		static uint32_t nextMovementDelayToReport = StepTimer::MaxPlausibleMovementDelay;
+		if (totalDelay > nextMovementDelayToReport)
+		{
+			while (totalDelay > nextMovementDelayToReport)					// a single large jump must not warn again on each later report
+			{
+				if (nextMovementDelayToReport > std::numeric_limits<uint32_t>::max()/2)
+				{
+					nextMovementDelayToReport = std::numeric_limits<uint32_t>::max();	// doubling again would wrap to zero and spin here for ever
+					break;
+				}
+				nextMovementDelayToReport *= 2;
+			}
+			// The total includes our own hiccups, so name the request as well, otherwise this sends the reader after a board that only asked for a few ms
+			reprap.GetPlatform().MessageF(WarningMessage, "Movement delay has reached %.1fs, board %u asked for %.1fs\n", (double)totalDelay / (double)StepTimer::GetTickRate(), address, (double)msg.movementDelay / (double)StepTimer::GetTickRate());
+		}
 	}
 	else
 	{
@@ -427,6 +452,7 @@ void ExpansionManager::AddClosedLoopRun(CanAddress address, unsigned int numData
 void ExpansionManager::SaveAccelerometerOrientation(CanAddress address, uint8_t orientation) noexcept
 {
 	boards[address].accelerometerOrientation = orientation;
+	reprap.BoardsUpdated();
 }
 
 GCodeResult ExpansionManager::ResetRemote(uint32_t boardAddress, GCodeBuffer& gb, const StringRef& reply) THROWS(GCodeException)

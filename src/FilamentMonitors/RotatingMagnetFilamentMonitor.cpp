@@ -112,9 +112,15 @@ void RotatingMagnetFilamentMonitor::Reset() noexcept
 	synced = false;							// force a resync
 }
 
-bool RotatingMagnetFilamentMonitor::HaveCalibrationData() const noexcept
+// Return true if we have movement data collected over enough commanded extrusion, even if the filament didn't move
+bool RotatingMagnetFilamentMonitor::HaveMonitorData() const noexcept
 {
 	return magneticMonitorState != MagneticMonitorState::calibrating && totalExtrusionCommanded > 10.0;
+}
+
+bool RotatingMagnetFilamentMonitor::HaveCalibrationData() const noexcept
+{
+	return HaveMonitorData() && ConvertToPercent(totalMovementMeasured * mmPerRev/totalExtrusionCommanded) > 0;	// with no measured movement the sensitivity would be infinite
 }
 
 float RotatingMagnetFilamentMonitor::MeasuredSensitivity() const noexcept
@@ -228,6 +234,10 @@ GCodeResult RotatingMagnetFilamentMonitor::Configure(GCodeBuffer& gb, const Stri
 						ConvertToPercent(minMovementRatio * measuredMmPerRev),
 						ConvertToPercent(maxMovementRatio * measuredMmPerRev),
 						(double)totalExtrusionCommanded);
+				}
+				else if (HaveMonitorData())
+				{
+					reply.cat("filament not moving");
 				}
 				else
 				{
@@ -349,7 +359,7 @@ void RotatingMagnetFilamentMonitor::HandleIncomingData() noexcept
 		if (receivedPositionReport)
 		{
 			// We have a completed a position report
-			lastKnownPosition = sensorValue & TypeMagnetAngleMask;
+			lastKnownPosition = val & TypeMagnetAngleMask;
 			const uint16_t angleChange = (val - sensorValue) & TypeMagnetAngleMask;			// angle change in range 0..1023
 			const int32_t movement = (angleChange <= 512) ? (int32_t)angleChange : (int32_t)angleChange - 1024;
 			movementMeasuredSinceLastSync += (float)movement/1024;
@@ -654,6 +664,10 @@ GCodeResult RotatingMagnetFilamentMonitor::Configure(const CanMessageGenericPars
 						ConvertToPercent(minMovementRatio * measuredMmPerRev),
 						ConvertToPercent(maxMovementRatio * measuredMmPerRev),
 						(double)totalExtrusionCommanded);
+				}
+				else if (HaveMonitorData())
+				{
+					reply.cat("filament not moving");
 				}
 				else
 				{
