@@ -3794,7 +3794,9 @@ void GCodes::StartPrinting(bool fromStart) noexcept
 							reprap.GetPrintMonitor().GetPrintingFilename());
 	if (fromStart)
 	{
-		DoFileMacro(*FileGCode(), START_G, false, AsyncSystemMacroCode);		// get fileGCode to execute the start macro so that any M82/M83 codes will be executed in the correct context
+		// Get fileGCode to execute the start macro so that any M82/M83 codes will be executed in the correct context.
+		// When a job file starts another print, M32 is still executing on this channel and owns the macro, else the SBC resends it
+		DoFileMacro(*FileGCode(), START_G, false, FileGCode()->IsExecuting() ? SystemHelperMacroCode : AsyncSystemMacroCode);
 	}
 	else
 	{
@@ -4241,6 +4243,13 @@ void GCodes::HandleReplyPreserveResult(GCodeBuffer& gb, GCodeResult rslt, const 
 	// Deal with replies to the SBC
 	if (gb.LatestMachineState().lastCodeFromSbc)
 	{
+		if (reply[0] == 0 && gb.IsAbortRequested() && !gb.IsAbortAllRequested())
+		{
+			// The SBC resolves the code that requested a single file abort itself, so this reply is surplus. It may also overtake
+			// the abort request, in which case it completes the code that started the macro being aborted
+			return;
+		}
+
 		MessageType type = gb.GetResponseMessageType();
 		if (rslt == GCodeResult::notFinished || gb.HasJustStartedMacro() ||
 			(gb.LatestMachineState().waitingForAcknowledgement && gb.IsMessagePromptPending()))

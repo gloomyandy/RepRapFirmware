@@ -1015,7 +1015,7 @@ void ObjectModel::ReportItemAsJsonFull(OutputBuffer *buf, ObjectExplorationConte
 
 			case TypeCode::Duration:
 				{
-					unsigned int hours = val.uVal/3600,
+					const unsigned int hours = val.uVal/3600,
 						minutes = (val.uVal / 60) % 60,
 						seconds = val.uVal % 60;
 					buf->catf("%u:%02u:%02u", hours, minutes, seconds);
@@ -1421,6 +1421,10 @@ decrease(strlen(idString))	// recursion variant
 		}
 		if (*idString == 0)
 		{
+			if (context.WantArrayLength())
+			{
+				throw context.ConstructParseException("object is not an array");
+			}
 			return val;				// a null value can be compared to null
 		}
 		throw context.ConstructParseException("reached null object before end of selector string");
@@ -1594,6 +1598,10 @@ decrease(strlen(idString))	// recursion variant
 	default:
 		if (*idString == 0)
 		{
+			if (context.WantArrayLength())
+			{
+				throw context.ConstructParseException("object is not an array");
+			}
 			return val;
 		}
 		break;
